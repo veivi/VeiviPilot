@@ -14,14 +14,10 @@
 #include "Logging.h"
 #include "NVState.h"
 #include "PWMOutput.h"
+#include "PPM.h"
 #include <AP_HAL/AP_HAL.h>
 
 extern const AP_HAL::HAL& hal;
-
-uint32_t micros()
-{
-  return hal.scheduler->micros();
-}  
 
 //
 // HW config
@@ -51,8 +47,6 @@ struct HWTimer hwTimer4 =
 //
 
 #ifdef MEGAMINI
-
-// #include "PPM.h"
 
 #define ppmInputPin 48
 
@@ -380,7 +374,7 @@ ISR(PCINT2_vect)
 
   prevState = state;
   
-  uint32_t current = micros();
+  uint32_t current = hal.scheduler->micros();
   
   while(event) {
     uint8_t i = log2Table[event];
@@ -1562,8 +1556,8 @@ void configurationTask(float currentTime)
       pulseArmed = false;
     }
           
-    lastUpdate = micros();
-  } else if(micros() - lastUpdate > 1e6/3) {
+    lastUpdate = hal.scheduler->micros();
+  } else if(hal.scheduler->micros() - lastUpdate > 1e6/3) {
     if(switchState != switchStateLazy) {
       switchStateLazy = switchState;
         
@@ -2222,7 +2216,7 @@ void loop()
   while(1) {
     // Invoke scheduler
   
-    currentTime = micros();
+    uint32_t currentTime = hal.scheduler->micros();
     float currentTimeF = (float) currentTime / 1e6;
     
     if(!scheduler(currentTimeF))
