@@ -106,7 +106,7 @@ void loop()
         offset[2] = -(max[2]+min[2])/2;
 
         // display all to user
-        hal.console->printf("Heading: %.2f (%3d,%3d,%3d) i2c error: %u",
+        hal.console->printf("Heading vittu!!: %.2f (%3d,%3d,%3d) i2c error: %u",
 			    ToDeg(heading),
 			    (int)mag.x,
 			    (int)mag.y,
