@@ -26,6 +26,7 @@
 #include <AP_AHRS/AP_AHRS.h>
 #include "Console.h"
 
+/*
 const AP_HAL::HAL& hal = AP_HAL_BOARD_DRIVER;
 
 static Compass compass;
@@ -60,4 +61,4 @@ void loop()
     }
 }
 
-AP_HAL_MAIN();
+*/

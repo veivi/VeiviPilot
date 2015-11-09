@@ -40,10 +40,10 @@ extern "C" ISR(TIMER4_CAPT_vect) {
     if ( ISRRegistry::_registry[ISR_REGISTRY_TIMER4_CAPT] != NULL)
          ISRRegistry::_registry[ISR_REGISTRY_TIMER4_CAPT]();
 }
-
+/*
 extern "C" ISR(TIMER5_CAPT_vect) {
     if ( ISRRegistry::_registry[ISR_REGISTRY_TIMER5_CAPT] != NULL)
          ISRRegistry::_registry[ISR_REGISTRY_TIMER5_CAPT]();
 }
-
+*/
 #endif

@@ -1,3 +1,3 @@
 #include "Interrupt.h"
 
-uint8_t nestCount;
+uint8_t nestCount = 0;

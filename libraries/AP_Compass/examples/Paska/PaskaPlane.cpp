@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <math.h>
 #include <avr/interrupt.h>
 #include <avr/io.h>
@@ -16,14 +17,21 @@
 #include "PWMOutput.h"
 #include "PPM.h"
 #include <AP_HAL/AP_HAL.h>
+#include <AP_HAL/AP_HAL.h>
+#include <AP_HAL_AVR/AP_HAL_AVR.h>
+#include <AP_HAL_PX4/AP_HAL_PX4.h>
+#include <AP_HAL_Linux/AP_HAL_Linux.h>
+#include <AP_HAL_FLYMAPLE/AP_HAL_FLYMAPLE.h>
+#include <AP_HAL_Empty/AP_HAL_Empty.h>
+#include <AP_HAL_VRBRAIN/AP_HAL_VRBRAIN.h>
 
-extern const AP_HAL::HAL& hal;
+const AP_HAL::HAL& hal = AP_HAL_BOARD_DRIVER;
 
 //
 // HW config
 //
 
-// #define MEGAMINI
+#define MEGAMINI
 
 //
 // Comms settings
@@ -48,7 +56,7 @@ struct HWTimer hwTimer4 =
 
 #ifdef MEGAMINI
 
-#define ppmInputPin 48
+struct RxInputRecord ppmInput = { &ports[PortL], 1 }; 
 
 struct RxInputRecord aileInput, elevInput, switchInput, tuningKnobInput;
 
@@ -57,15 +65,10 @@ struct RxInputRecord *ppmInputs[] =
 
 #else
 
-#define aileRxPin	A8
-#define elevatorRxPin 	A9
-#define switchPin 	A11
-#define tuningKnobPin 	A13
-
-struct RxInputRecord aileInput = { aileRxPin }; 
-struct RxInputRecord elevInput = { elevatorRxPin };
-struct RxInputRecord switchInput = { switchPin };
-struct RxInputRecord tuningKnobInput = { tuningKnobPin };
+struct RxInputRecord aileInput = { &ports[PortK], 0 }; 
+struct RxInputRecord elevInput = { &ports[PortK], 1 };
+struct RxInputRecord switchInput = { &ports[PortK], 2 };
+struct RxInputRecord tuningKnobInput = { &ports[PortK], 3 };
 
 struct RxInputRecord *rxInputs[8] =
   { &aileInput, &elevInput, NULL, &switchInput, NULL, &tuningKnobInput };
@@ -147,9 +150,9 @@ bool cycleTimesValid;
 float cycleMin = -1.0, cycleMax = -1.0, cycleMean = -1.0, cycleCum = -1.0;
 const float tau = 0.1;
 float dynPressure, alpha, aileStick, elevStick, aileStickRaw, elevStickRaw;
-float controlCycleEnded;
+uint32_t controlCycleEnded;
 int initCount = 5;
-bool armed = false, talk = true;
+bool armed = false;
 float neutralStick = 0.0, neutralAlpha, targetAlpha;
 float switchValue, tuningKnobValue, rpmOutput;
 Controller elevController, aileController, pusher;
@@ -158,10 +161,9 @@ float acc,altitude,  heading, rollAngle, pitchAngle, rollRate, pitchRate;
 int cycleTimeCounter = 0;
 Median3Filter cycleTimeFilter;
 bool cycleTimesDone = false;
-float prevMeasurement;
+uint32_t prevMeasurement;
 float parameter;  
 NewI2C I2c = NewI2C();
-uint8_t nestCount;
 RunningAvgFilter alphaFilter;
 AlphaBuffer alphaBuffer, pressureBuffer;
 
@@ -354,7 +356,9 @@ void logAttitude(void)
   logGeneric(l_heading, heading);
 }
 
-ISR(BADISR_vect)
+
+/*
+extern "C" ISR(BADISR_vect)
 {
    sei();
    consoleNoteLn("PASKA KESKEYTYS.");
@@ -362,12 +366,13 @@ ISR(BADISR_vect)
    if(!armed)
      abort();
 }
+*/
 
-#ifndef ppmInputPin
+#ifndef MEGAMINI
 
 uint8_t log2Table[1<<8];
 
-ISR(PCINT2_vect)
+extern "C" ISR(PCINT2_vect)
 {
   static uint8_t prevState;
   uint8_t state = PINK, event = (state ^ prevState) & PCMSK2;
@@ -398,139 +403,6 @@ ISR(PCINT2_vect)
 }
 
 #endif
-
-void setup() {
-  // Serial comms
-
-  Serial.begin(BAUDRATE); 
-  consoleNoteLn("Project | Alpha"); 
-  
-  Serial1.begin(38400); 
-  
-  // Read the non-volatile state
-
-  readNVState();
-    
-  consoleNote("Current model is ");
-  consolePrintLn(stateRecord.model);
-  
-  // I2C
-  
-  I2c.begin();
-  I2c.setSpeed(true);
-  I2c.pullup(true);
-  I2c.timeOut(2+EXT_EEPROM_LATENCY/1000);
-
-  // Param record
-  
-  readParams();
-
-  for(int i = 0; i < MAX_MODELS; i++) {
-    consoleNote("MODEL ");
-    consolePrintLn(i);
-    printParams(&paramRecord[i]);    
-  }
-
-  // Set I2C speed
-  
-  TWBR = max(paramRecord[stateRecord.model].clk_24L256,
-              paramRecord[stateRecord.model].clk_5048B);
-              
-  // RC input
-  
-#ifdef ppmInputPin
-
-  consoleNoteLn("Initializing PPM receiver");
-  
-  pinMode(ppmInputPin, INPUT_PULLUP);  
-  ppmInputInit(ppmInputs, sizeof(ppmInputs)/sizeof(struct RxInputRecord*));
-  
-#else
-  consoleNoteLn("Initializing individual PWM inputs");
-
-  pinMode(elevatorRxPin, INPUT_PULLUP);
-  pinMode(aileRxPin, INPUT_PULLUP);
-  pinMode(switchPin, INPUT_PULLUP);
-  pinMode(tuningKnobPin, INPUT_PULLUP);
-  
-  for(int i = 1; i < (1<<8); i++) {
-    int j = 7;
-    while(((1<<j) & i) == 0 && j > 0)
-      j--;
-    log2Table[i] = j;
-  }
-
-  FORBID;
-
-  PCMSK2 = 0;
-  
-  for(int i = 0; i < 8; i++) {
-    if(rxInputs[i]) {
-       rxInputs[i]->index = i;
-       PCMSK2 |= 1<<i;
-    }
-  }
-  
-  PCICR |= 1<<PCIE2;
-
-  PERMIT;
-
-#endif
-
-  // RPM sensor int control
-
-#ifdef rpmPin
-  pinMode(rpmPin, INPUT_PULLUP);  
-  rpmMeasure(stateRecord.logRPM);
-#dndif
-
-#endif
-
-  // Servos
-
-  consoleNoteLn("Initializing servos");
-
-#ifndef SOFT_PWM
-
-  pwmOutputInitList(pwmOutput, sizeof(pwmOutput)/sizeof(struct PWMOutput));
-
-#else
-
-  aileServo.attach(aileServoPin);
-  elevatorServo.attach(elevatorServoPin);
-  flapServo.attach(flapServoPin);
-  gearServo.attach(gearServoPin);
-  brakeServo.attach(brakeServoPin);
-
-#endif
-
-  //
-  
-  alphaFilter.setWindowLen(-1);
-
-  // Misc sensors
-  
-  consoleNote("Initializing sensors...");
-  
-  initSensors();
-
-  calibratingG = 512;
-  calibratingB = 200;
-
-  consolePrintLn(" done");
-  
-  // Configuration input
-
-#ifdef buttonPin
-  pinMode(buttonPin, INPUT_PULLUP);
-#endif
-  // LED output
-  
-  LEDPIN_PINMODE;
-  STABLEPIN_PINMODE;
-  POWERPIN_PINMODE;
-  BUZZERPIN_PINMODE;
-}
 
 bool readSwitch() {
   return decodePWM(switchValue) < 0.0;
@@ -1128,15 +1000,15 @@ void executeCommand(const char *cmdBuf, int cmdBufLen)
       
     consoleNoteLn("Cycle time (ms)");
     consoleNote("  median     = ");
-    consolePrintLn(controlCycle * 1000.0);
+    consolePrintLn(controlCycle);
     consoleNote("  min        = ");
-    consolePrintLn(cycleMin * 1000.0);
+    consolePrintLn(cycleMin);
     consoleNote("  max        = ");
-    consolePrintLn(cycleMax * 1000.0);
+    consolePrintLn(cycleMax);
     consoleNote("  mean       = ");
-    consolePrintLn(cycleMean * 1000.0);
+    consolePrintLn(cycleMean);
     consoleNote("  cum. value = ");
-    consolePrintLn(cycleCum * 1000.0);
+    consolePrintLn(cycleCum);
     consoleNote("Warning flags :");
     if(pciWarn)
       consolePrint(" SPURIOUS_PCINT");
@@ -1267,12 +1139,12 @@ void annexCode() {}
 #define LED_TICK 100
 
 struct Task {
-  float period;
-  float lastExecuted;
-  void (*code)(float time);
+  int period;
+  uint32_t lastExecuted;
+  void (*code)(uint32_t time);
 };
 
-void cacheTask(float currentTime)
+void cacheTask(uint32_t currentMillis)
 {
   cacheFlush();
 }
@@ -1288,12 +1160,12 @@ void logStartCallback()
   logRPM();
 }
 
-void logSaveTask(float currentTime)
+void logSaveTask(uint32_t currentMillis)
 {
   logSave(logStartCallback);
 }
 
-void alphaTask(float currentTime)
+void alphaTask(uint32_t currentMillis)
 {
   int16_t raw = 0;
   static int failCount = 0;
@@ -1302,7 +1174,7 @@ void alphaTask(float currentTime)
     alphaBuffer.input((float) raw / (1L<<(8*sizeof(raw))));
 }
 
-void airspeedReadTask(float currentTime)
+void airspeedReadTask(uint32_t currentMillis)
 {
   int16_t raw = 0;
   static int failCount = 0;
@@ -1311,7 +1183,7 @@ void airspeedReadTask(float currentTime)
     pressureBuffer.input((float) raw);
 }
 
-void airspeedUpdateTask(float currentTime)
+void airspeedUpdateTask(uint32_t currentMillis)
 {
   const float pascalsPerPSI_c = 6894.7573, range_c = 2*1.1;
   const float factor_c = pascalsPerPSI_c * range_c / (1L<<(8*sizeof(uint16_t)));
@@ -1331,7 +1203,7 @@ float applyNullZone(float value)
   return 0.0;
 }
 
-void receiverTask(float currentTime)
+void receiverTask(uint32_t currentMillis)
 {
   if(inputValid(&aileInput)) {
     aileStickRaw = decodePWM(inputValue(&aileInput));
@@ -1354,33 +1226,34 @@ void receiverTask(float currentTime)
     tuningKnobValue = inputValue(&tuningKnobInput);
 }
 
-void sensorTask(float currentTime)
+void sensorTask(uint32_t currentMillis)
 {
   // Altitude
     
-  Baro_update();
-  getEstimatedAltitude();
+  //  Baro_update();
+  //  getEstimatedAltitude();
 
-  altitude = (float) alt.EstAlt / 100;
+  //  altitude = (float) alt.EstAlt / 100;
 
   // Attitude
 
-  computeIMU();
-
+  //  computeIMU();
+  /*
   acc = (float) imu.accSmooth[2] / (1<<9);
   rollRate = (float) imu.gyroData[0] * 2000 / (1<<13) / 360;
   pitchRate = (float) -imu.gyroData[1] * 2000 / (1<<13) / 360;
   rollAngle = (float) att.angle[0] / 10;
   pitchAngle = (float) -att.angle[1] / 10;
   heading = (float) att.heading;
+  */
 }
 
 const int numPoles = 4;
 
-void rpmTask(float currentTime)
+void rpmTask(uint32_t currentMillis)
 {
 #if defined(rpmPin)
-  static float prev;
+  static uint32_t prev;
 
   FORBID;
   
@@ -1389,21 +1262,21 @@ void rpmTask(float currentTime)
   
   PERMIT;
   
-  float delta = currentTime - prev;
+  uint32_t delta = currentMillis - prev;
   
-  prev = currentTime;
+  prev = currentMillis;
   
   if(prev > 0)
-    rpmOutput = 2.0*60*count/numPoles/delta;
+    rpmOutput = 1000*2.0*60*count/numPoles/delta;
 #endif
 }
 
-void alphaLogTask(float currentTime)
+void alphaLogTask(uint32_t currentMillis)
 {
   logAlpha();  
 }
 
-void controlLogTask(float currentTime)
+void controlLogTask(uint32_t currentMillis)
 {
   logAttitude();
   logInput();
@@ -1412,7 +1285,7 @@ void controlLogTask(float currentTime)
   logRPM();
 }
 
-void positionLogTask(float currentTime)
+void positionLogTask(uint32_t currentMillis)
 {
   logPosition();
 }
@@ -1451,16 +1324,16 @@ int compareFloat(const void *a, const void *b)
 
 float ppmFreq;
 
-void measurementTask(float currentTime)
+void measurementTask(uint32_t currentMillis)
 {
   FORBID;
-  ppmFreq = ppmFrames / (currentTime - prevMeasurement);
+  ppmFreq = 1000.0 * ppmFrames / (currentMillis - prevMeasurement);
   ppmFrames = 0;
   PERMIT;
 
-  logBandWidth = logBytesCum / (currentTime - prevMeasurement);
+  logBandWidth = 1000.0 * logBytesCum / (currentMillis - prevMeasurement);
   logBytesCum = 0;
-  prevMeasurement = currentTime;
+  prevMeasurement = currentMillis;
   
   if(cycleTimesDone)
     return;
@@ -1468,7 +1341,7 @@ void measurementTask(float currentTime)
   if(cycleTimeCounter > 5) {
     controlCycle = cycleTimeFilter.output();
     consoleNote("Effective cycle time is ");
-    consolePrintLn(controlCycle*1000);
+    consolePrintLn(controlCycle);
     cycleTimesDone = true;
     return;
   }
@@ -1478,11 +1351,11 @@ void measurementTask(float currentTime)
     controlCycle = cycleTimeStore[cycleTimeWindow/2];
     
     consoleNote("Cycle time (min, median, max) = ");
-    consolePrint(cycleTimeStore[0]*1000);
+    consolePrint(cycleTimeStore[0]);
     consolePrint(", ");
-    consolePrint(controlCycle*1000);
+    consolePrint(controlCycle);
     consolePrint(", ");
-    consolePrintLn(cycleTimeStore[cycleTimeWindow-1]*1000);
+    consolePrintLn(cycleTimeStore[cycleTimeWindow-1]);
     
     float sum = 0;
     for(int i = 0; i < cycleTimeWindow; i++)
@@ -1506,7 +1379,7 @@ float testGainLinear(float start, float stop)
   return start + parameter*(stop - start);
 }
 
-void configurationTask(float currentTime)
+void configurationTask(uint32_t currentMillis)
 {   
   static bool pulseArmed = false, pulsePolarity = false;
   static int pulseCount = 0; 
@@ -1784,7 +1657,7 @@ void configurationTask(float currentTime)
 #endif
 }
 
-void loopTask(float currentTime)
+void loopTask(uint32_t currentMillis)
 {
   if(looping) {
     consolePrint("alpha = ");
@@ -1836,9 +1709,9 @@ const int serialBufLen = 1<<7;
 char serialBuf[serialBufLen];
 int serialBufIndex = 0;
 
-void communicationTask(float currentTime)
+void communicationTask(uint32_t currentMillis)
 {
-  int len = 0;
+  /*  int len = 0;
   bool dirty = false;
        
   while((len = Serial.available()) > 0) {
@@ -1867,7 +1740,7 @@ void communicationTask(float currentTime)
 
     controlCycleEnded = -1.0;
   }    
-}
+  */}
 
 const int gpsBufLen = 1<<7, gpsMaxParam = 1<<5;
 char gpsBuf[gpsBufLen], gpsMsg[gpsBufLen], gpsParam[gpsMaxParam+1];
@@ -1968,8 +1841,9 @@ void gpsInput(const char *buf, int len)
   }
 }
 
-void gpsTask(float currentTime)
+void gpsTask(uint32_t currentMillis)
 {
+  /*
   int len = 0;
   bool dirty = false;
        
@@ -1999,16 +1873,17 @@ void gpsTask(float currentTime)
       gpsBufIndex = 0;
     }        
   }
+  */
 }
 
-void controlTask(float currentTime)
+void controlTask(uint32_t currentMillis)
 {
   // Cycle time bookkeeping 
   
   if(controlCycleEnded > 0.0)
-    cycleTimeMonitor(currentTime - controlCycleEnded);
+    cycleTimeMonitor(currentMillis - controlCycleEnded);
 
-  controlCycleEnded = currentTime;
+  controlCycleEnded = currentMillis;
   
   // Alpha input
   
@@ -2045,7 +1920,7 @@ void controlTask(float currentTime)
       } else
         targetRate = min(targetRate, (maxAlpha - alpha) * autoAlphaP);
       
-      elevController.input(targetRate - pitchRate, controlCycle);
+      elevController.input(targetRate - pitchRate, controlCycle / 1000.0);
     } else {
       elevController.reset(elevStick, 0.0);
     }
@@ -2061,7 +1936,7 @@ void controlTask(float currentTime)
     
     // Pusher
 
-    pusher.input((maxAlpha - alpha)*paramRecord[stateRecord.model].o_P - pitchRate, controlCycle);
+    pusher.input((maxAlpha - alpha)*paramRecord[stateRecord.model].o_P - pitchRate, controlCycle / 1000.0);
 
     if(!mode.sensorFailSafe && !alphaFailed)
       elevOutput = min(elevOutput, pusher.output());
@@ -2100,7 +1975,7 @@ void controlTask(float currentTime)
         targetRate = clamp(targetRate, (-maxBank - rollAngle) / 90, (maxBank - rollAngle) / 90);
       }
       
-      aileController.input(targetRate - rollRate, controlCycle);
+      aileController.input(targetRate - rollRate, controlCycle / 1000.0);
       aileOutput = aileController.output();
     }
  
@@ -2113,7 +1988,7 @@ void controlTask(float currentTime)
   } 
 }
 
-void actuatorTask(float currentTime)
+void actuatorTask(uint32_t currentMillis)
 {
   // Actuators
  
@@ -2134,7 +2009,7 @@ void actuatorTask(float currentTime)
   }
 }
 
-void trimTask(float currentTime)
+void trimTask(uint32_t currentMillis)
 {
   if(mode.autoTrim && abs(rollAngle) < 30) {
     neutralAlpha += clamp((targetAlpha - neutralAlpha)/2/TRIM_HZ,
@@ -2150,57 +2025,63 @@ void backgroundTask(long durationMicros)
   logInitialized = logInit(durationMicros);
   
   if(logInitialized)
-    delayMicroseconds(durationMicros);
+    hal.scheduler->delay(durationMicros);
 }
 
-void blinkTask(float currentTime)
+void blinkTask(uint32_t currentMillis)
 {
   float ledRatio = testMode ? 0.0 : !logInitialized ? 1.0 : (mode.sensorFailSafe || !armed) ? 0.5 : alpha > 0.0 ? 0.90 : 0.10;
   static int tick = 0;
   
   tick = (tick + 1) % (LED_TICK/LED_HZ);
-    
+
+  /*
   if(tick < ledRatio*LED_TICK/LED_HZ) {
     STABLEPIN_ON;
   } else {
     STABLEPIN_OFF;
   }
+  */
 }
 
+#define PERIOD(f) ((uint32_t) (1000.0/(f)))
+
 struct Task taskList[] = {
-  { 1.0/100, 0, communicationTask },
-//  { 1.0/100, 0, gpsTask },
-  { 1.0/ALPHA_HZ, 0, alphaTask },
-  { 1.0/30/2, 0, airspeedReadTask },
-  { 1.0/30, 0, airspeedUpdateTask },
-  { 1.0/LED_TICK, 0, blinkTask },
-  { 1.0/CONTROL_HZ, 0, receiverTask },
-  { 1.0/CONTROL_HZ, 0, sensorTask },
-  { 1.0/CONTROL_HZ, 0, controlTask },
-  { 1.0/ACTUATOR_HZ, 0, actuatorTask },
-  { 1.0/TRIM_HZ, 0, trimTask },
-  { 1.0/50, 0, configurationTask },
-  { 1.0/4, 0, cacheTask },
-  { 1.0/10, 0, rpmTask },
-  { 1.0/45, 0, alphaLogTask },
-  { 1.0/15, 0, controlLogTask },
-  { 1.0/2, 0, positionLogTask },
-  { 1.0/2, 0, logSaveTask },
-  { 1.0, 0, measurementTask },
-  { 1.0/10, 0, loopTask },
+  { PERIOD(100), 0, communicationTask },
+//  { PERIOD(100), 0, gpsTask },
+  { PERIOD(ALPHA_HZ), 0, alphaTask },
+  { PERIOD(30/2), 0, airspeedReadTask },
+  { PERIOD(30), 0, airspeedUpdateTask },
+  { PERIOD(LED_TICK), 0, blinkTask },
+  { PERIOD(CONTROL_HZ), 0, receiverTask },
+  { PERIOD(CONTROL_HZ), 0, sensorTask },
+  { PERIOD(CONTROL_HZ), 0, controlTask },
+  { PERIOD(ACTUATOR_HZ), 0, actuatorTask },
+  { PERIOD(TRIM_HZ), 0, trimTask },
+  { PERIOD(50), 0, configurationTask },
+  { PERIOD(4), 0, cacheTask },
+  { PERIOD(10), 0, rpmTask },
+  { PERIOD(45), 0, alphaLogTask },
+  { PERIOD(15), 0, controlLogTask },
+  { PERIOD(2), 0, positionLogTask },
+  { PERIOD(2), 0, logSaveTask },
+  { PERIOD(1), 0, measurementTask },
+  { PERIOD(10), 0, loopTask },
   { 0, 0, NULL } };
 
-int scheduler(float currentTime)
+int scheduler(uint32_t currentMillis)
 {
   struct Task *task = taskList;
+
+  //  consoleNotefLn("scheduler(%d)", currentMillis);
   
   while(task->code) {
-    if(task->lastExecuted + task->period < currentTime
-      || task->lastExecuted > currentTime) {
-      task->code(currentTime);
-      task->lastExecuted = currentTime;
+    if(task->lastExecuted + task->period < currentMillis
+      || task->lastExecuted > currentMillis) {
+      task->code(currentMillis);
+      task->lastExecuted = currentMillis;
       
-      if(task->period > 0.0)
+      if(task->period > 0)
         // Staggered execution for all but the critical tasks
         return 1;
     }
@@ -2211,17 +2092,151 @@ int scheduler(float currentTime)
   return 0;
 }
 
+void setup() {
+  // Serial comms
+
+  //  Serial.begin(BAUDRATE); 
+  consoleNoteLn("Project | Alpha"); 
+  
+  //  Serial1.begin(38400); 
+  
+  // Read the non-volatile state
+
+  readNVState();
+    
+  consoleNote("Current model is ");
+  consolePrintLn(stateRecord.model);
+  
+  // I2C
+  
+  I2c.begin();
+  I2c.setSpeed(true);
+  I2c.pullup(true);
+  I2c.timeOut(2+EXT_EEPROM_LATENCY/1000);
+
+  // Param record
+  
+  readParams();
+
+  for(int i = 0; i < MAX_MODELS; i++) {
+    consoleNote("MODEL ");
+    consolePrintLn(i);
+    printParams(&paramRecord[i]);    
+  }
+
+  // Set I2C speed
+  
+  TWBR = max(paramRecord[stateRecord.model].clk_24L256,
+              paramRecord[stateRecord.model].clk_5048B);
+              
+  // RC input
+  
+#ifdef MEGAMINI
+
+  consoleNoteLn("Initializing PPM receiver");
+  /*
+  rxInputInit(&ppmInput);
+  ppmInputInit(ppmInputs, sizeof(ppmInputs)/sizeof(struct RxInputRecord*));
+  */
+#else
+  
+  consoleNoteLn("Initializing individual PWM inputs");
+
+  rxInputInit(&elevInput);
+  rxInputInit(&aileInput);
+  rxInputInit(&switchInput);
+  rxInputInit(&tuningKnobInput);
+  
+  for(int i = 1; i < (1<<8); i++) {
+    int j = 7;
+    while(((1<<j) & i) == 0 && j > 0)
+      j--;
+    log2Table[i] = j;
+  }
+
+  FORBID;
+
+  PCMSK2 = 0;
+  
+  for(int i = 0; i < 8; i++) {
+    if(rxInputs[i]) {
+       PCMSK2 |= 1<<rxInputs[i]->index;
+    }
+  }
+  
+  PCICR |= 1<<PCIE2;
+
+  PERMIT;
+
+#endif
+
+  // RPM sensor int control
+
+#ifdef rpmPin
+  pinMode(rpmPin, INPUT_PULLUP);  
+  rpmMeasure(stateRecord.logRPM);
+#dndif
+
+#endif
+
+  // Servos
+
+  consoleNoteLn("Initializing servos");
+
+#ifndef SOFT_PWM
+
+  pwmOutputInitList(pwmOutput, sizeof(pwmOutput)/sizeof(struct PWMOutput));
+
+#else
+
+  aileServo.attach(aileServoPin);
+  elevatorServo.attach(elevatorServoPin);
+  flapServo.attach(flapServoPin);
+  gearServo.attach(gearServoPin);
+  brakeServo.attach(brakeServoPin);
+
+#endif
+
+  //
+  
+  alphaFilter.setWindowLen(-1);
+
+  // Misc sensors
+  
+  consoleNote("Initializing sensors...");
+  
+  //  initSensors();
+
+  //  calibratingG = 512;
+  //  calibratingB = 200;
+
+  consolePrintLn(" done");
+  
+  // Configuration input
+
+#ifdef buttonPin
+  pinMode(buttonPin, INPUT_PULLUP);
+#endif
+  // LED output
+
+  /*
+  LEDPIN_PINMODE;
+  STABLEPIN_PINMODE;
+  POWERPIN_PINMODE;
+  BUZZERPIN_PINMODE;
+  */
+}
+
 void loop() 
 {
-  while(1) {
-    // Invoke scheduler
+  // Invoke scheduler
   
-    uint32_t currentTime = hal.scheduler->micros();
-    float currentTimeF = (float) currentTime / 1e6;
+  uint32_t currentTime = hal.scheduler->millis();
     
-    if(!scheduler(currentTimeF))
-      // Idle
+  if(!scheduler(currentTime))
+    // Idle
       
-      backgroundTask(250);
-  }
+    backgroundTask(1);
 }
+
+AP_HAL_MAIN();

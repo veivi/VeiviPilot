@@ -2,6 +2,7 @@
 #include "Interrupt.h"
 #include "Filter.h"
 #include <AP_HAL/AP_HAL.h>
+#include <avr/interrupt.h>
 
 extern const AP_HAL::HAL& hal;
 
@@ -47,35 +48,35 @@ static void handlePPMInput(const uint16_t *pulse, int numCh)
      }
   }
 }
-/*
-ISR(TIMER5_CAPT_vect) {
-    static uint16_t icr5_prev;
-    static uint8_t  channel_ctr;
 
-    const uint16_t icr5_current = ICR5;
-    uint16_t pulse_width;
+extern "C" ISR(TIMER5_CAPT_vect)
+{
+  static uint16_t icr5_prev;
+  static uint8_t  channel_ctr;
+
+  const uint16_t icr5_current = ICR5;
+  uint16_t pulse_width;
     
-    if (icr5_current < icr5_prev) {
-        pulse_width =  0x10000L + icr5_current - icr5_prev;
-    } else {
-        pulse_width = icr5_current - icr5_prev;
-    }
+  if (icr5_current < icr5_prev) {
+    pulse_width =  0x10000L + icr5_current - icr5_prev;
+  } else {
+    pulse_width = icr5_current - icr5_prev;
+  }
 
-    if (pulse_width > AVR_RC_INPUT_MIN_SYNC_PULSE_WIDTH*2) {
-        // sync pulse
+  if (pulse_width > AVR_RC_INPUT_MIN_SYNC_PULSE_WIDTH*2) {
+    // sync pulse
 	
-        if( channel_ctr < AVR_RC_INPUT_MIN_CHANNELS )
-	   ppmWarnShort = true;
-	else
-           handlePPMInput(_pulse_capt, channel_ctr);
+    if( channel_ctr < AVR_RC_INPUT_MIN_CHANNELS )
+      ppmWarnShort = true;
+    else
+      handlePPMInput(_pulse_capt, channel_ctr);
  
-        channel_ctr = 0;
-    } else if (channel_ctr < numInputs)
-      	_pulse_capt[channel_ctr++] = pulse_width;
+    channel_ctr = 0;
+  } else if (channel_ctr < numInputs)
+    _pulse_capt[channel_ctr++] = pulse_width;
 
-    icr5_prev = icr5_current;
+  icr5_prev = icr5_current;
 }
-*/
 
 void ppmInputInit(struct RxInputRecord *inputs[], int num)
 {
