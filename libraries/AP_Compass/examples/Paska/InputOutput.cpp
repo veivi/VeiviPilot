@@ -3,15 +3,23 @@
 
 const struct PortDescriptor portTable[] = {
   [PortA] = { &PINA, &PORTA, &DDRA },
-  [PortB] = { &PINB, &PORTB, &DDRB },
+  [PortB] = { &PINB, &PORTB, &DDRB, &PCMSK0, 0 },
   [PortC] = { &PINC, &PORTC, &DDRC },
   [PortD] = { &PIND, &PORTD, &DDRD },
   [PortE] = { &PINE, &PORTE, &DDRE },
   [PortF] = { &PINF, &PORTF, &DDRF },
   [PortG] = { &PING, &PORTG, &DDRG },
   [PortH] = { &PINH, &PORTH, &DDRH },
-  [PortK] = { &PINK, &PORTK, &DDRK },
+  [PortK] = { &PINK, &PORTK, &DDRK, &PCMSK2, 2 },
   [PortL] = { &PINL, &PORTL, &DDRL }
+};
+
+const portName_t pcIntPort[] = {
+  PortB, PortF, PortK
+};
+
+const uint8_t pcIntMask[] = {
+  1<<PCIE0, 1<<PCIE1, 1<<PCIE2
 };
 
 void pinOutputEnable(struct PinDescriptor *pin, bool output)

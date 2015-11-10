@@ -73,7 +73,8 @@ struct RxInputRecord tuningKnobInput = { { PortK, 3 } };
 struct RxInputRecord *rxInputs[] =
   { &aileInput, &elevInput, &switchInput, &tuningKnobInput, NULL };
 
-struct RxInputRecord *rxInputIndex[8];
+struct RxInputRecord *rxInputIndex0[8], *rxInputIndex1[8], *rxInputIndex2[8];
+struct RxInputRecord **rxInputIndexList[] = { rxInputIndex0, rxInputIndex1, rxInputIndex2 };
 
 #endif
 
@@ -85,24 +86,25 @@ struct RxInputRecord *rxInputIndex[8];
 
 struct PWMOutput pwmOutput[] = {
   { { PortB, 6 }, &hwTimer1, COMnB },
-       { { PortB, 5 }, &hwTimer1, COMnA },
-       { { PortH, 5 }, &hwTimer4, COMnC },
-       { { PortH, 4 }, &hwTimer4, COMnB },
-       { { PortH, 3 }, &hwTimer4, COMnA },
-       { { PortE, 5 }, &hwTimer3, COMnC },
-       { { PortE, 4 }, &hwTimer3, COMnB },
-       { { PortE, 3 }, &hwTimer3, COMnA }
+  { { PortB, 5 }, &hwTimer1, COMnA },
+  { { PortH, 5 }, &hwTimer4, COMnC },
+  { { PortH, 4 }, &hwTimer4, COMnB },
+  { { PortH, 3 }, &hwTimer4, COMnA },
+  { { PortE, 5 }, &hwTimer3, COMnC },
+  { { PortE, 4 }, &hwTimer3, COMnB },
+  { { PortE, 3 }, &hwTimer3, COMnA }
 };
 
 #else
 
 struct PWMOutput pwmOutput[] = {
-       { { PortE, 4 }, &hwTimer3, COMnB },
-       { { PortE, 5 }, &hwTimer3, COMnC },
-       { { PortE, 3 }, &hwTimer3, COMnA },
-       { { PortH, 3 }, &hwTimer4, COMnA },
-       { { PortH, 4 }, &hwTimer4, COMnB },
-       { { PortH, 5 }, &hwTimer4, COMnC } };
+  { { PortE, 4 }, &hwTimer3, COMnB },
+  { { PortE, 5 }, &hwTimer3, COMnC },
+  { { PortE, 3 }, &hwTimer3, COMnA },
+  { { PortH, 3 }, &hwTimer4, COMnA },
+  { { PortH, 4 }, &hwTimer4, COMnB },
+  { { PortH, 5 }, &hwTimer4, COMnC }
+};
 
 #endif
 
@@ -375,12 +377,21 @@ extern "C" ISR(BADISR_vect)
 
 uint8_t log2Table[1<<8];
 
-extern "C" ISR(PCINT2_vect)
+extern "C" void genericPCInt(uint8_t num)
 {
-  static uint8_t prevState;
-  uint8_t state = PINK, event = (state ^ prevState) & PCMSK2;
+  const struct PortDescriptor *port = &portTable[pcIntPort[num]];
 
-  prevState = state;
+  if(!port || !port->mask) {
+    sei();
+    consoleNoteLn("PASKA PCI.");
+    if(!armed)
+      abort();
+  }
+
+  static uint8_t prevState[3];
+  uint8_t state = *port->pin, event = (state ^ prevState[num]) & *port->mask;
+
+  prevState[num] = state;
   
   uint32_t current = hal.scheduler->micros();
   
@@ -388,22 +399,26 @@ extern "C" ISR(PCINT2_vect)
     uint8_t i = log2Table[event];
     uint8_t mask = 1U<<i;
   
-    if(!rxInputIndex[i]) {
+    if(!rxInputIndexList[num][i]) {
       pciWarn = true;
-    } else if(rxInputIndex[i]->freqOnly) {
-      rxInputIndex[i]->pulseCount += (state & mask) ? 1 : 0;
+    } else if(rxInputIndexList[num][i]->freqOnly) {
+      rxInputIndexList[num][i]->pulseCount += (state & mask) ? 1 : 0;
     } else if(state & mask) {
-      rxInputIndex[i]->pulseStart = current;
-    } else if(rxInputIndex[i]->pulseStart > 0) {
-      uint32_t width = current - rxInputIndex[i]->pulseStart;
-      rxInputIndex[i]->pulseWidthAcc += width;
-      rxInputIndex[i]->pulseCount++;      
-      rxInputIndex[i]->alive = true;
+      rxInputIndexList[num][i]->pulseStart = current;
+    } else if(rxInputIndexList[num][i]->pulseStart > 0) {
+      uint32_t width = current - rxInputIndexList[num][i]->pulseStart;
+      rxInputIndexList[num][i]->pulseWidthAcc += width;
+      rxInputIndexList[num][i]->pulseCount++;      
+      rxInputIndexList[num][i]->alive = true;
     }
     
     event &= ~mask;
   }
 }
+
+extern "C" ISR(PCINT0_vect) { genericPCInt(0); }
+extern "C" ISR(PCINT1_vect) { genericPCInt(1); }
+extern "C" ISR(PCINT2_vect) { genericPCInt(2); }
 
 #endif
 
@@ -2157,18 +2172,20 @@ void setup() {
     log2Table[i] = j;
   }
 
-  FORBID;
-
-  PCMSK2 = 0;
+  PCMSK0 = PCMSK1 = PCMSK2 = 0;
 
   for(int i = 0; rxInputs[i]; i++) {
-    rxInputIndex[rxInputs[i]->pin.index] = rxInputs[i];
-    PCMSK2 |= 1<<rxInputs[i]->pin.index;
-  }
-  
-  PCICR |= 1<<PCIE2;
+    const struct PortDescriptor *port = &portTable[rxInputs[i]->pin.port];
 
-  PERMIT;
+    if(port->mask) {
+      FORBID;
+      rxInputIndexList[port->pci][rxInputs[i]->pin.index] = rxInputs[i];
+      *port->mask |= 1<<rxInputs[i]->pin.index;
+      PCICR |= pcIntMask[port->pci];
+      PERMIT;
+    } else
+      consoleNoteLn("PASKA PCI-PORTTI");
+  }
 
 #endif
 
