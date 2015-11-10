@@ -1,21 +1,10 @@
 #ifndef RXINPUT_H
 #define RXINPUT_H
 
-#include <stdint.h>
+#include "InputOutput.h"
 
-//
-
-typedef enum { PortA, PortB, PortC, PortD, PortE, PortF, PortG, PortH, PortK, PortL } portName_t;
-
-struct PortDescriptor {
-  volatile uint8_t *pin, *port, *ddr;
-};
-
-extern const struct PortDescriptor ports[];
-  
 struct RxInputRecord {
-  const struct PortDescriptor *port;
-  uint8_t index;
+  struct PinDescriptor pin;
   bool freqOnly, alive;
   uint32_t pulseStart;
   uint32_t pulseCount;

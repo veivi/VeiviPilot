@@ -31,7 +31,7 @@ const AP_HAL::HAL& hal = AP_HAL_BOARD_DRIVER;
 // HW config
 //
 
-#define MEGAMINI
+// #define MEGAMINI
 
 //
 // Comms settings
@@ -56,7 +56,7 @@ struct HWTimer hwTimer4 =
 
 #ifdef MEGAMINI
 
-struct RxInputRecord ppmInput = { &ports[PortL], 1 }; 
+struct RxInputRecord ppmInput = { { PortL, 1 } }; 
 
 struct RxInputRecord aileInput, elevInput, switchInput, tuningKnobInput;
 
@@ -65,10 +65,10 @@ struct RxInputRecord *ppmInputs[] =
 
 #else
 
-struct RxInputRecord aileInput = { &ports[PortK], 0 }; 
-struct RxInputRecord elevInput = { &ports[PortK], 1 };
-struct RxInputRecord switchInput = { &ports[PortK], 2 };
-struct RxInputRecord tuningKnobInput = { &ports[PortK], 3 };
+struct RxInputRecord aileInput = { { PortK, 0 } }; 
+struct RxInputRecord elevInput = { { PortK, 1 } };
+struct RxInputRecord switchInput = { { PortK, 2 } };
+struct RxInputRecord tuningKnobInput = { { PortK, 3 } };
 
 struct RxInputRecord *rxInputs[8] =
   { &aileInput, &elevInput, NULL, &switchInput, NULL, &tuningKnobInput };
@@ -82,24 +82,25 @@ struct RxInputRecord *rxInputs[8] =
 #ifdef MEGAMINI
 
 struct PWMOutput pwmOutput[] = {
-       { 12, &hwTimer1, COMnB },
-       { 11, &hwTimer1, COMnA },
-       { 8, &hwTimer4, COMnC },
-       { 7, &hwTimer4, COMnB },
-       { 6, &hwTimer4, COMnA },
-       { 3, &hwTimer3, COMnC },
-       { 2, &hwTimer3, COMnB },
-       { 5, &hwTimer3, COMnA } };
+  { { PortB, 6 }, &hwTimer1, COMnB },
+       { { PortB, 5 }, &hwTimer1, COMnA },
+       { { PortH, 5 }, &hwTimer4, COMnC },
+       { { PortH, 4 }, &hwTimer4, COMnB },
+       { { PortH, 3 }, &hwTimer4, COMnA },
+       { { PortE, 5 }, &hwTimer3, COMnC },
+       { { PortE, 4 }, &hwTimer3, COMnB },
+       { { PortE, 3 }, &hwTimer3, COMnA }
+};
 
 #else
 
 struct PWMOutput pwmOutput[] = {
-       { 2, &hwTimer3, COMnB },
-       { 3, &hwTimer3, COMnC },
-       { 5, &hwTimer3, COMnA },
-       { 6, &hwTimer4, COMnA },
-       { 7, &hwTimer4, COMnB },
-       { 8, &hwTimer4, COMnC } };
+       { { PortE, 4 }, &hwTimer3, COMnB },
+       { { PortE, 5 }, &hwTimer3, COMnC },
+       { { PortE, 3 }, &hwTimer3, COMnA },
+       { { PortH, 3 }, &hwTimer4, COMnA },
+       { { PortH, 4 }, &hwTimer4, COMnB },
+       { { PortH, 5 }, &hwTimer4, COMnC } };
 
 #endif
 
@@ -2134,10 +2135,10 @@ void setup() {
 #ifdef MEGAMINI
 
   consoleNoteLn("Initializing PPM receiver");
-  /*
+
   rxInputInit(&ppmInput);
   ppmInputInit(ppmInputs, sizeof(ppmInputs)/sizeof(struct RxInputRecord*));
-  */
+
 #else
   
   consoleNoteLn("Initializing individual PWM inputs");
@@ -2160,7 +2161,7 @@ void setup() {
   
   for(int i = 0; i < 8; i++) {
     if(rxInputs[i]) {
-       PCMSK2 |= 1<<rxInputs[i]->index;
+       PCMSK2 |= 1<<rxInputs[i]->pin.index;
     }
   }
   

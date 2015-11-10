@@ -8,10 +8,6 @@ static const uint8_t outputModeMask[3] = { 1<<COM1A1, 1<<COM1B1, 1<<COM1C1 };
 
 #define OUTPUT 1
 
-void pinMode(uint8_t pin, int mode)
-{
-} 
-
 void pwmTimerInit(struct HWTimer *timer)
 {
    if(timer->initDone)
@@ -47,8 +43,8 @@ void pwmDisable(struct PWMOutput *output)
 void pwmOutputInit(struct PWMOutput *output)
 {
    pwmTimerInit(output->timer);
-   pinMode(output->pin, OUTPUT);
    pwmEnable(output);
+   configureOutput(&output->pin);
 }
 
 void pwmOutputInitList(struct PWMOutput output[], int num)

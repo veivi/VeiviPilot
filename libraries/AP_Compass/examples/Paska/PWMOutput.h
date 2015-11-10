@@ -1,4 +1,4 @@
-#include <stdint.h>
+#include "InputOutput.h"
 
 #define RC_OUTPUT_MIN_PULSEWIDTH 400
 #define RC_OUTPUT_MAX_PULSEWIDTH 2100
@@ -13,7 +13,7 @@ struct HWTimer {
 };
 
 struct PWMOutput {
-  int pin;
+  struct PinDescriptor pin;
   struct HWTimer *timer;
   PWM_Ch_t pwmCh; // COMnA / COMnB / COMnC
 };
