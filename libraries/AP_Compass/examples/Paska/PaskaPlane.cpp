@@ -70,8 +70,10 @@ struct RxInputRecord elevInput = { { PortK, 1 } };
 struct RxInputRecord switchInput = { { PortK, 2 } };
 struct RxInputRecord tuningKnobInput = { { PortK, 3 } };
 
-struct RxInputRecord *rxInputs[8] =
-  { &aileInput, &elevInput, NULL, &switchInput, NULL, &tuningKnobInput };
+struct RxInputRecord *rxInputs[] =
+  { &aileInput, &elevInput, &switchInput, &tuningKnobInput, NULL };
+
+struct RxInputRecord *rxInputIndex[8];
 
 #endif
 
@@ -386,17 +388,17 @@ extern "C" ISR(PCINT2_vect)
     uint8_t i = log2Table[event];
     uint8_t mask = 1U<<i;
   
-    if(!rxInputs[i]) {
+    if(!rxInputIndex[i]) {
       pciWarn = true;
-    } else if(rxInputs[i]->freqOnly) {
-      rxInputs[i]->pulseCount += (state & mask) ? 1 : 0;
+    } else if(rxInputIndex[i]->freqOnly) {
+      rxInputIndex[i]->pulseCount += (state & mask) ? 1 : 0;
     } else if(state & mask) {
-      rxInputs[i]->pulseStart = current;
-    } else if(rxInputs[i]->pulseStart > 0) {
-      uint32_t width = current - rxInputs[i]->pulseStart;
-      rxInputs[i]->pulseWidthAcc += width;
-      rxInputs[i]->pulseCount++;      
-      rxInputs[i]->alive = true;
+      rxInputIndex[i]->pulseStart = current;
+    } else if(rxInputIndex[i]->pulseStart > 0) {
+      uint32_t width = current - rxInputIndex[i]->pulseStart;
+      rxInputIndex[i]->pulseWidthAcc += width;
+      rxInputIndex[i]->pulseCount++;      
+      rxInputIndex[i]->alive = true;
     }
     
     event &= ~mask;
@@ -2158,11 +2160,10 @@ void setup() {
   FORBID;
 
   PCMSK2 = 0;
-  
-  for(int i = 0; i < 8; i++) {
-    if(rxInputs[i]) {
-       PCMSK2 |= 1<<rxInputs[i]->pin.index;
-    }
+
+  for(int i = 0; rxInputs[i]; i++) {
+    rxInputIndex[rxInputs[i]->pin.index] = rxInputs[i];
+    PCMSK2 |= 1<<rxInputs[i]->pin.index;
   }
   
   PCICR |= 1<<PCIE2;
