@@ -7,10 +7,6 @@ float decodePWM(float pulse) {
   return (pulse - 1500)/500.0/txRange;
 }
 
-void rxInputInit(const struct RxInputRecord *input)
-{
-}
-
 bool inputValid(struct RxInputRecord *record)
 {
   return record->pulseCount > 0;

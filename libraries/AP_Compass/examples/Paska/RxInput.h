@@ -11,7 +11,6 @@ struct RxInputRecord {
   uint32_t pulseWidthAcc;
 };
   
-void rxInputInit(const struct RxInputRecord *inputs);
 bool inputValid(struct RxInputRecord *record);
 float inputValue(struct RxInputRecord *record);
 float decodePWM(float pulse);
