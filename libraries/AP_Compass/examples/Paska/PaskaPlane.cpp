@@ -361,8 +361,6 @@ void logAttitude(void)
   logGeneric(l_heading, heading);
 }
 
-
-/*
 extern "C" ISR(BADISR_vect)
 {
    sei();
@@ -371,7 +369,6 @@ extern "C" ISR(BADISR_vect)
    if(!armed)
      abort();
 }
-*/
 
 #ifndef MEGAMINI
 
