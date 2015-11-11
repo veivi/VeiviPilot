@@ -465,9 +465,9 @@ void logDumpBinary(void)
 }
 */
 
-bool logInit(long maxDuration)
+bool logInit(uint32_t maxDuration)
 {
-  long current = hal.scheduler->micros();
+  uint32_t current = hal.scheduler->micros();
   static int32_t endPtr = -1, searchPtr = 0;
   static bool endFound = false;
   uint32_t eepromSize = 0;

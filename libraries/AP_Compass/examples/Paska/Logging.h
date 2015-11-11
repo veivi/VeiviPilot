@@ -31,7 +31,7 @@ typedef enum {  l_alpha,
 
 extern bool logEnabled;
 
-bool logInit(long);
+bool logInit(uint32_t);
 void logClear(void);
 void logDump(int ch);
 void logDumpBinary(void);

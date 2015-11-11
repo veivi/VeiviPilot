@@ -49,7 +49,7 @@ void Controller::reset(float value, float err) {
 }
 
 void Controller::input(float err, float d) {
-  if(d < 0.001) {
+  if(d < 1.0e-3) {
     warn = true;
     consolePrintLn("Controller delta less than 1 ms, iteration ignored");
     return;

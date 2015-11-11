@@ -1093,12 +1093,12 @@ void annexCode() {}
 #define LED_TICK 100
 
 struct Task {
-  int period;
+  uint32_t period;
   uint32_t lastExecuted;
   void (*code)(uint32_t time);
 };
 
-void cacheTask(uint32_t currentMillis)
+void cacheTask(uint32_t currentMicros)
 {
   cacheFlush();
 }
@@ -1114,12 +1114,12 @@ void logStartCallback()
   logRPM();
 }
 
-void logSaveTask(uint32_t currentMillis)
+void logSaveTask(uint32_t currentMicros)
 {
   logSave(logStartCallback);
 }
 
-void alphaTask(uint32_t currentMillis)
+void alphaTask(uint32_t currentMicros)
 {
   int16_t raw = 0;
   static int failCount = 0;
@@ -1128,7 +1128,7 @@ void alphaTask(uint32_t currentMillis)
     alphaBuffer.input((float) raw / (1L<<(8*sizeof(raw))));
 }
 
-void airspeedReadTask(uint32_t currentMillis)
+void airspeedReadTask(uint32_t currentMicros)
 {
   int16_t raw = 0;
   static int failCount = 0;
@@ -1137,7 +1137,7 @@ void airspeedReadTask(uint32_t currentMillis)
     pressureBuffer.input((float) raw);
 }
 
-void airspeedUpdateTask(uint32_t currentMillis)
+void airspeedUpdateTask(uint32_t currentMicros)
 {
   const float pascalsPerPSI_c = 6894.7573, range_c = 2*1.1;
   const float factor_c = pascalsPerPSI_c * range_c / (1L<<(8*sizeof(uint16_t)));
@@ -1157,7 +1157,7 @@ float applyNullZone(float value)
   return 0.0;
 }
 
-void receiverTask(uint32_t currentMillis)
+void receiverTask(uint32_t currentMicros)
 {
   if(inputValid(&aileInput)) {
     aileStickRaw = decodePWM(inputValue(&aileInput));
@@ -1180,7 +1180,7 @@ void receiverTask(uint32_t currentMillis)
     tuningKnobValue = inputValue(&tuningKnobInput);
 }
 
-void sensorTask(uint32_t currentMillis)
+void sensorTask(uint32_t currentMicros)
 {
   // Altitude
     
@@ -1204,7 +1204,7 @@ void sensorTask(uint32_t currentMillis)
 
 const int numPoles = 4;
 
-void rpmTask(uint32_t currentMillis)
+void rpmTask(uint32_t currentMicros)
 {
 #if defined(rpmPin)
   static uint32_t prev;
@@ -1216,21 +1216,21 @@ void rpmTask(uint32_t currentMillis)
   
   PERMIT;
   
-  uint32_t delta = currentMillis - prev;
+  uint32_t delta = currentMicros - prev;
   
-  prev = currentMillis;
+  prev = currentMicros;
   
   if(prev > 0)
-    rpmOutput = 1000*2.0*60*count/numPoles/delta;
+    rpmOutput = 1.0e6*2.0*60*count/numPoles/delta;
 #endif
 }
 
-void alphaLogTask(uint32_t currentMillis)
+void alphaLogTask(uint32_t currentMicros)
 {
   logAlpha();  
 }
 
-void controlLogTask(uint32_t currentMillis)
+void controlLogTask(uint32_t currentMicros)
 {
   logAttitude();
   logInput();
@@ -1239,7 +1239,7 @@ void controlLogTask(uint32_t currentMillis)
   logRPM();
 }
 
-void positionLogTask(uint32_t currentMillis)
+void positionLogTask(uint32_t currentMicros)
 {
   logPosition();
 }
@@ -1278,16 +1278,16 @@ int compareFloat(const void *a, const void *b)
 
 float ppmFreq;
 
-void measurementTask(uint32_t currentMillis)
+void measurementTask(uint32_t currentMicros)
 {
   FORBID;
-  ppmFreq = 1000.0 * ppmFrames / (currentMillis - prevMeasurement);
+  ppmFreq = 1.0e6 * ppmFrames / (currentMicros - prevMeasurement);
   ppmFrames = 0;
   PERMIT;
 
-  logBandWidth = 1000.0 * logBytesCum / (currentMillis - prevMeasurement);
+  logBandWidth = 1.0e6 * logBytesCum / (currentMicros - prevMeasurement);
   logBytesCum = 0;
-  prevMeasurement = currentMillis;
+  prevMeasurement = currentMicros;
   
   if(cycleTimesDone)
     return;
@@ -1333,7 +1333,7 @@ float testGainLinear(float start, float stop)
   return start + parameter*(stop - start);
 }
 
-void configurationTask(uint32_t currentMillis)
+void configurationTask(uint32_t currentMicros)
 {   
   static bool pulseArmed = false, pulsePolarity = false;
   static int pulseCount = 0; 
@@ -1384,7 +1384,7 @@ void configurationTask(uint32_t currentMillis)
     }
           
     lastUpdate = hal.scheduler->micros();
-  } else if(hal.scheduler->micros() - lastUpdate > 1e6/3) {
+  } else if(hal.scheduler->micros() - lastUpdate > 1.0e6/3) {
     if(switchState != switchStateLazy) {
       switchStateLazy = switchState;
         
@@ -1611,7 +1611,7 @@ void configurationTask(uint32_t currentMillis)
 #endif
 }
 
-void loopTask(uint32_t currentMillis)
+void loopTask(uint32_t currentMicros)
 {
   if(looping) {
     consolePrint("alpha = ");
@@ -1663,7 +1663,7 @@ const int serialBufLen = 1<<7;
 char serialBuf[serialBufLen];
 int serialBufIndex = 0;
 
-void communicationTask(uint32_t currentMillis)
+void communicationTask(uint32_t currentMicros)
 {
   /*  int len = 0;
   bool dirty = false;
@@ -1795,7 +1795,7 @@ void gpsInput(const char *buf, int len)
   }
 }
 
-void gpsTask(uint32_t currentMillis)
+void gpsTask(uint32_t currentMicros)
 {
   /*
   int len = 0;
@@ -1830,14 +1830,14 @@ void gpsTask(uint32_t currentMillis)
   */
 }
 
-void controlTask(uint32_t currentMillis)
+void controlTask(uint32_t currentMicros)
 {
   // Cycle time bookkeeping 
   
   if(controlCycleEnded > 0.0)
-    cycleTimeMonitor(currentMillis - controlCycleEnded);
+    cycleTimeMonitor((currentMicros - controlCycleEnded)/1.0e3);
 
-  controlCycleEnded = currentMillis;
+  controlCycleEnded = currentMicros;
   
   // Alpha input
   
@@ -1942,7 +1942,7 @@ void controlTask(uint32_t currentMillis)
   } 
 }
 
-void actuatorTask(uint32_t currentMillis)
+void actuatorTask(uint32_t currentMicros)
 {
   // Actuators
  
@@ -1963,7 +1963,7 @@ void actuatorTask(uint32_t currentMillis)
   }
 }
 
-void trimTask(uint32_t currentMillis)
+void trimTask(uint32_t currentMicros)
 {
   if(mode.autoTrim && abs(rollAngle) < 30) {
     neutralAlpha += clamp((targetAlpha - neutralAlpha)/2/TRIM_HZ,
@@ -1972,17 +1972,17 @@ void trimTask(uint32_t currentMillis)
   }
 }
 
-bool logInitialized;
+bool logInitialized = false;
 
-void backgroundTask(long durationMicros)
-{
-  logInitialized = logInit(durationMicros);
-  
-  if(logInitialized)
-    hal.scheduler->delay(durationMicros);
+void backgroundTask(uint32_t durationMicros)
+{ 
+  if(!logInitialized)
+    logInitialized = logInit(durationMicros);
+  else
+    hal.scheduler->delay(1);
 }
 
-void blinkTask(uint32_t currentMillis)
+void blinkTask(uint32_t currentMicros)
 {
   float ledRatio = testMode ? 0.0 : !logInitialized ? 1.0 : (mode.sensorFailSafe || !armed) ? 0.5 : alpha > 0.0 ? 0.90 : 0.10;
   static int tick = 0;
@@ -1998,7 +1998,7 @@ void blinkTask(uint32_t currentMillis)
   */
 }
 
-#define PERIOD(f) ((uint32_t) (1000.0/(f)))
+#define PERIOD(f) ((uint32_t) (1.0e6/(f)))
 
 struct Task taskList[] = {
   { PERIOD(100), 0, communicationTask },
@@ -2023,17 +2023,15 @@ struct Task taskList[] = {
   { PERIOD(10), 0, loopTask },
   { 0, 0, NULL } };
 
-int scheduler(uint32_t currentMillis)
+int scheduler(uint32_t currentMicros)
 {
   struct Task *task = taskList;
-
-  //  consoleNotefLn("scheduler(%d)", currentMillis);
   
   while(task->code) {
-    if(task->lastExecuted + task->period < currentMillis
-      || task->lastExecuted > currentMillis) {
-      task->code(currentMillis);
-      task->lastExecuted = currentMillis;
+    if(task->lastExecuted + task->period < currentMicros
+      || task->lastExecuted > currentMicros) {
+      task->code(currentMicros);
+      task->lastExecuted = currentMicros;
       
       if(task->period > 0)
         // Staggered execution for all but the critical tasks
@@ -2042,6 +2040,8 @@ int scheduler(uint32_t currentMillis)
     
     task++;
   }
+
+  // Nothing to do right now
   
   return 0;
 }
@@ -2164,12 +2164,12 @@ void loop()
 {
   // Invoke scheduler
   
-  uint32_t currentTime = hal.scheduler->millis();
+  uint32_t currentTime = hal.scheduler->micros();
     
   if(!scheduler(currentTime))
     // Idle
       
-    backgroundTask(1);
+    backgroundTask(100);
 }
 
 AP_HAL_MAIN();
