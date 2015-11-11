@@ -56,10 +56,8 @@ struct HWTimer hwTimer4 =
 
 #ifdef MEGAMINI
 
-struct RxInputRecord ppmInput = { { PortL, 1 } }; 
-
+struct PinDescription ppmInputPin = { PortL, 1 }; 
 struct RxInputRecord aileInput, elevInput, switchInput, tuningKnobInput;
-
 struct RxInputRecord *ppmInputs[] = 
 { &aileInput, &elevInput, NULL, NULL, &switchInput, &tuningKnobInput };
 
@@ -69,9 +67,6 @@ struct RxInputRecord aileInput = { { PortK, 0 } };
 struct RxInputRecord elevInput = { { PortK, 1 } };
 struct RxInputRecord switchInput = { { PortK, 2 } };
 struct RxInputRecord tuningKnobInput = { { PortK, 3 } };
-
-struct RxInputRecord *rxInputs[] =
-  { &aileInput, &elevInput, &switchInput, &tuningKnobInput, NULL };
 
 #endif
 
@@ -114,6 +109,24 @@ struct PWMOutput pwmOutput[] = {
 #define flapHandle     &pwmOutput[2]
 #define gearHandle     &pwmOutput[3]
 #define brakeHandle    &pwmOutput[4]
+
+//
+// Periodic task stuff
+//
+
+#define CONTROL_HZ 100
+#define ALPHA_HZ (CONTROL_HZ*6)
+#define ACTUATOR_HZ CONTROL_HZ
+#define TRIM_HZ 10
+#define LED_HZ 3
+#define LED_TICK 100
+
+struct Task {
+  void (*code)(uint32_t time);
+  uint32_t period, lastExecuted;
+};
+
+#define HZ_TO_PERIOD(f) ((uint32_t) (1.0e6/(f)))
 
 struct ModeRecord {
   bool sensorFailSafe;
@@ -616,6 +629,7 @@ void executeCommand(const char *cmdBuf, int cmdBufLen)
     
   case c_disarm:
     armed = false;
+    consoleNoteLn("We're DISARMED");
     break;
     
   case c_talk:
@@ -1083,20 +1097,6 @@ void executeCommandSeries(const char *buffer, int len)
   }
 }
 
-void annexCode() {} 
-
-#define CONTROL_HZ 100
-#define ALPHA_HZ (CONTROL_HZ*6)
-#define ACTUATOR_HZ CONTROL_HZ/2
-#define TRIM_HZ 10
-#define LED_HZ 3
-#define LED_TICK 100
-
-struct Task {
-  void (*code)(uint32_t time);
-  uint32_t period, lastExecuted;
-};
-
 void cacheTask(uint32_t currentMicros)
 {
   cacheFlush();
@@ -1498,11 +1498,19 @@ void configurationTask(uint32_t currentMicros)
   // Default controller settings
      
   elevController.setPID(
-    paramRecord[stateRecord.model].i_Kp, paramRecord[stateRecord.model].i_Ki, paramRecord[stateRecord.model].i_Kd);
+    paramRecord[stateRecord.model].i_Kp,
+    paramRecord[stateRecord.model].i_Ki,
+    paramRecord[stateRecord.model].i_Kd);
+  
   pusher.setPID(
-    paramRecord[stateRecord.model].i_Kp, paramRecord[stateRecord.model].i_Ki, paramRecord[stateRecord.model].i_Kd);
+    paramRecord[stateRecord.model].i_Kp,
+    paramRecord[stateRecord.model].i_Ki,
+    paramRecord[stateRecord.model].i_Kd);
+  
   aileController.setPID(
-    paramRecord[stateRecord.model].s_Kp, paramRecord[stateRecord.model].s_Ki, paramRecord[stateRecord.model].s_Kd);
+    paramRecord[stateRecord.model].s_Kp,
+    paramRecord[stateRecord.model].s_Ki,
+    paramRecord[stateRecord.model].s_Kd);
 
   autoAlphaP = paramRecord[stateRecord.model].o_P;
   maxAlpha = paramRecord[stateRecord.model].alphaMax;
@@ -1941,24 +1949,31 @@ void controlTask(uint32_t currentMicros)
   } 
 }
 
+#define NEUTRAL 1500
+#define RANGE 500
+
 void actuatorTask(uint32_t currentMicros)
 {
   // Actuators
  
   if(armed) {
-    pwmOutputWrite(aileHandle, 1500 + 500*clamp(paramRecord[stateRecord.model].aileDefl*aileOutput 
-      + paramRecord[stateRecord.model].aileNeutral, -1, 1));
+    pwmOutputWrite(aileHandle, NEUTRAL
+		   + RANGE*clamp(paramRecord[stateRecord.model].aileDefl*aileOutput 
+				 + paramRecord[stateRecord.model].aileNeutral, -1, 1));
 
-    pwmOutputWrite(elevatorHandle, 1500 + 500*clamp(paramRecord[stateRecord.model].elevDefl*elevOutput 
-      + paramRecord[stateRecord.model].elevNeutral, -1, 1));
+    pwmOutputWrite(elevatorHandle, NEUTRAL
+		   + RANGE*clamp(paramRecord[stateRecord.model].elevDefl*elevOutput 
+				 + paramRecord[stateRecord.model].elevNeutral, -1, 1));
                               
-    pwmOutputWrite(flapHandle, 1500 + 500*(clamp(paramRecord[stateRecord.model].flapNeutral 
-                        + flapOutput*paramRecord[stateRecord.model].flapStep, -1, 1)));                              
+    pwmOutputWrite(flapHandle, NEUTRAL
+		   + RANGE*clamp(paramRecord[stateRecord.model].flapNeutral 
+				  + flapOutput*paramRecord[stateRecord.model].flapStep, -1, 1));                              
 
-    pwmOutputWrite(gearHandle, 1500 - 500*(gearOutput*2-1));
+    pwmOutputWrite(gearHandle, NEUTRAL - RANGE*(gearOutput*2-1));
 
-    pwmOutputWrite(brakeHandle, 1500 + 500*clamp(paramRecord[stateRecord.model].brakeNeutral + 
-                                paramRecord[stateRecord.model].brakeDefl*brakeOutput, -1, 1));                        
+    pwmOutputWrite(brakeHandle, NEUTRAL
+		   + RANGE*clamp(paramRecord[stateRecord.model].brakeNeutral + 
+				 paramRecord[stateRecord.model].brakeDefl*brakeOutput, -1, 1));                        
   }
 }
 
@@ -1996,8 +2011,6 @@ void blinkTask(uint32_t currentMicros)
   }
   */
 }
-
-#define HZ_TO_PERIOD(f) ((uint32_t) (1.0e6/(f)))
 
 struct Task taskList[] = {
   { communicationTask,
@@ -2107,7 +2120,7 @@ void setup() {
 
   consoleNoteLn("Initializing PPM receiver");
 
-  configureInput(&ppmInput.pin, true);
+  configureInput(ppmInputPin, true);
   ppmInputInit(ppmInputs, sizeof(ppmInputs)/sizeof(struct RxInputRecord*));
 
 #else
