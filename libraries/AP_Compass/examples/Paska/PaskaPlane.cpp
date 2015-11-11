@@ -26,6 +26,7 @@
 #include <AP_HAL_VRBRAIN/AP_HAL_VRBRAIN.h>
 
 const AP_HAL::HAL& hal = AP_HAL_BOARD_DRIVER;
+AP_HAL::BetterStream* cliSerial;
 
 //
 // HW config
@@ -879,7 +880,7 @@ void executeCommand(const char *cmdBuf, int cmdBufLen)
     
   case c_dumpz:
     consoleNoteLn("Compressed log contents:");
-    logDumpBinary();
+    //    logDumpBinary();
     break;
     
   case c_backup:
@@ -1626,15 +1627,15 @@ void loopTask(uint32_t currentMicros)
 /*    consolePrint(" IAS = ");
     consolePrint(sqrt(2*dynPressure));
 */
-
+/*
     consolePrint(" ppmFreq = ");
     consolePrint(ppmFreq);
     consolePrint(" aileStick = ");
     consolePrint(aileStick);
     consolePrint(" elevStick = ");
     consolePrint(elevStick);
-    
-/*
+*/    
+
     consolePrint(" roll = ");
     consolePrint(rollAngle);
     consolePrint(" (rate = ");
@@ -1643,26 +1644,28 @@ void loopTask(uint32_t currentMicros)
     consolePrint(pitchAngle);
     consolePrint(" (rate = ");
     consolePrint(pitchRate);
-*/
+
     /*
     consolePrint(") rpm = ");
     consolePrint(readRPM());
     */
 /*    consolePrint(" heading = ");
     consolePrint(heading);
-*/    consolePrint(" alt(GPS) = ");
+*/
+    /*consolePrint(" alt(GPS) = ");
     consolePrint(altitude);
     consolePrint(" m (");
     consolePrint(gpsFix.altitude);
     consolePrint(" m) speed = ");
     consolePrint(gpsFix.speed);
-/*    consolePrint(" target = ");
+    consolePrint(" target = ");
     consolePrint(targetAlpha*360);
     consolePrint(" trim = ");
     consolePrint(neutralAlpha*360);
-*/    consolePrint(" testGain = ");
-    consolePrint(testGain);
-    consolePrintLn("");
+*/
+    //    consolePrint(" testGain = ");
+    // consolePrint(testGain);
+    consolePrint("\r");
   }
 }
 
@@ -1672,28 +1675,32 @@ int serialBufIndex = 0;
 
 void communicationTask(uint32_t currentMicros)
 {
-  /*  int len = 0;
+  int len = 0;
   bool dirty = false;
        
-  while((len = Serial.available()) > 0) {
+  while((len = cliSerial->available()) > 0) {
     dirty = true;
     
     int spaceLeft = serialBufLen - serialBufIndex;
     
     if(len > spaceLeft) {
       for(int i = 0; i < len - spaceLeft; i++)
-        Serial.read();
+        cliSerial->read();
     }
     
     len = min(len, spaceLeft);
-    Serial.readBytes(&serialBuf[serialBufIndex], len);
-    serialBufIndex += len;
+
+    while(len > 0) {
+      serialBuf[serialBufIndex++] = cliSerial->read();
+      len--;
+    }
   }
 
   if(dirty && serialBufIndex > 0 && serialBuf[serialBufIndex-1] == '\n') {
     if(looping) {
       looping = false;
-      rpmMeasure(stateRecord.logRPM);
+      consoleNoteLn("");
+      //      rpmMeasure(stateRecord.logRPM);
     }
 
     executeCommandSeries(serialBuf, serialBufIndex-1);
@@ -1701,7 +1708,7 @@ void communicationTask(uint32_t currentMicros)
 
     controlCycleEnded = -1.0;
   }    
-  */}
+}
 
 const int gpsBufLen = 1<<7, gpsMaxParam = 1<<5;
 char gpsBuf[gpsBufLen], gpsMsg[gpsBufLen], gpsParam[gpsMaxParam+1];
@@ -2080,7 +2087,8 @@ int scheduler(uint32_t currentMicros)
 void setup() {
   // Serial comms
 
-  //  Serial.begin(BAUDRATE); 
+  cliSerial = hal.console;
+    
   consoleNoteLn("Project | Alpha"); 
   
   //  Serial1.begin(38400); 

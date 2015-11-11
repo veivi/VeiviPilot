@@ -72,12 +72,16 @@ void consolePrint(const char *s)
 
 void consolePrint(float v, int p)
 {
-  if(talk)
+  if(talk) {
 #ifdef ARDUINO
     Serial.print(v, p);
 #else
-  hal.console->printf("%f", (double) v);
+    char fmt[10];
+    strcpy(fmt, "%. f");
+    fmt[2] = '0' + p;
+    hal.console->printf(fmt, (double) v);
 #endif
+  }
 }
 
 void consolePrint(float v)
@@ -87,11 +91,7 @@ void consolePrint(float v)
 
 void consolePrint(double v, int p)
 {
-#ifdef ARDUINO
-    Serial.print(v, p);
-#else
-    hal.console->printf("%f", v);
-#endif
+  consolePrint((float) v, p);
 }
 
 void consolePrint(double v)

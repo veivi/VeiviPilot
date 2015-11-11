@@ -271,7 +271,7 @@ void logDump(int ch)
 
     for(ch = 0; ch < l_channels; ch++) {
       if(ch > 0) 
-          consolePrint("; ");
+          consolePrintLn("; ");
 
       consolePrint("fdr_");
       consolePrint(stateRecord.logStamp);
@@ -295,7 +295,7 @@ void logDump(int ch)
       consolePrint("\"");
       
       if(ch < l_channels-1)
-        consolePrint(", ");
+        consolePrintLn(", ");
     }
     
     consolePrintLn(" }");
