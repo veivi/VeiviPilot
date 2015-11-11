@@ -73,9 +73,6 @@ struct RxInputRecord tuningKnobInput = { { PortK, 3 } };
 struct RxInputRecord *rxInputs[] =
   { &aileInput, &elevInput, &switchInput, &tuningKnobInput, NULL };
 
-struct RxInputRecord *rxInputIndex0[8], *rxInputIndex1[8], *rxInputIndex2[8];
-struct RxInputRecord **rxInputIndexList[] = { rxInputIndex0, rxInputIndex1, rxInputIndex2 };
-
 #endif
 
 //
@@ -144,7 +141,7 @@ struct GPSFix gpsFix;
 bool testMode = false;
 float testGain = 0;
 bool calibrate, switchState = false, switchStateLazy = false, echoEnabled = true;
-bool iasFailed = false, iasWarn = false, alphaFailed = false, alphaWarn = false, pciWarn = false;
+bool iasFailed = false, iasWarn = false, alphaFailed = false, alphaWarn = false;
 bool calibrateStart = false, calibrateStop = false;
 float controlCycle = 5.0;
 bool rxElevatorAlive = true, rxAileronAlive = true, rpmAlive = 0;
@@ -360,64 +357,6 @@ void logAttitude(void)
   logGeneric(l_pitchrate, pitchRate*360);
   logGeneric(l_heading, heading);
 }
-
-extern "C" ISR(BADISR_vect)
-{
-   sei();
-   consoleNoteLn("PASKA KESKEYTYS.");
-
-   if(!armed)
-     abort();
-}
-
-#ifndef MEGAMINI
-
-uint8_t log2Table[1<<8];
-
-extern "C" void genericPCInt(uint8_t num)
-{
-  const struct PortDescriptor *port = &portTable[pcIntPort[num]];
-
-  if(!port || !port->mask) {
-    sei();
-    consoleNoteLn("PASKA PCI.");
-    if(!armed)
-      abort();
-  }
-
-  static uint8_t prevState[3];
-  uint8_t state = *port->pin, event = (state ^ prevState[num]) & *port->mask;
-
-  prevState[num] = state;
-  
-  uint32_t current = hal.scheduler->micros();
-  
-  while(event) {
-    uint8_t i = log2Table[event];
-    uint8_t mask = 1U<<i;
-  
-    if(!rxInputIndexList[num][i]) {
-      pciWarn = true;
-    } else if(rxInputIndexList[num][i]->freqOnly) {
-      rxInputIndexList[num][i]->pulseCount += (state & mask) ? 1 : 0;
-    } else if(state & mask) {
-      rxInputIndexList[num][i]->pulseStart = current;
-    } else if(rxInputIndexList[num][i]->pulseStart > 0) {
-      uint32_t width = current - rxInputIndexList[num][i]->pulseStart;
-      rxInputIndexList[num][i]->pulseWidthAcc += width;
-      rxInputIndexList[num][i]->pulseCount++;      
-      rxInputIndexList[num][i]->alive = true;
-    }
-    
-    event &= ~mask;
-  }
-}
-
-extern "C" ISR(PCINT0_vect) { genericPCInt(0); }
-extern "C" ISR(PCINT1_vect) { genericPCInt(1); }
-extern "C" ISR(PCINT2_vect) { genericPCInt(2); }
-
-#endif
 
 bool readSwitch() {
   return decodePWM(switchValue) < 0.0;
@@ -2150,7 +2089,7 @@ void setup() {
 
   consoleNoteLn("Initializing PPM receiver");
 
-  rxInputInit(&ppmInput);
+  configureInput(&ppmInput.pin, true);
   ppmInputInit(ppmInputs, sizeof(ppmInputs)/sizeof(struct RxInputRecord*));
 
 #else
@@ -2160,29 +2099,7 @@ void setup() {
   rxInputInit(&elevInput);
   rxInputInit(&aileInput);
   rxInputInit(&switchInput);
-  rxInputInit(&tuningKnobInput);
-  
-  for(int i = 1; i < (1<<8); i++) {
-    int j = 7;
-    while(((1<<j) & i) == 0 && j > 0)
-      j--;
-    log2Table[i] = j;
-  }
-
-  PCMSK0 = PCMSK1 = PCMSK2 = 0;
-
-  for(int i = 0; rxInputs[i]; i++) {
-    const struct PortDescriptor *port = &portTable[rxInputs[i]->pin.port];
-
-    if(port->mask) {
-      FORBID;
-      rxInputIndexList[port->pci][rxInputs[i]->pin.index] = rxInputs[i];
-      *port->mask |= 1<<rxInputs[i]->pin.index;
-      PCICR |= pcIntMask[port->pci];
-      PERMIT;
-    } else
-      consoleNoteLn("PASKA PCI-PORTTI");
-  }
+  rxInputInit(&tuningKnobInput);  
 
 #endif
 
