@@ -1093,9 +1093,8 @@ void annexCode() {}
 #define LED_TICK 100
 
 struct Task {
-  uint32_t period;
-  uint32_t lastExecuted;
   void (*code)(uint32_t time);
+  uint32_t period, lastExecuted;
 };
 
 void cacheTask(uint32_t currentMicros)
@@ -1998,30 +1997,49 @@ void blinkTask(uint32_t currentMicros)
   */
 }
 
-#define PERIOD(f) ((uint32_t) (1.0e6/(f)))
+#define HZ_TO_PERIOD(f) ((uint32_t) (1.0e6/(f)))
 
 struct Task taskList[] = {
-  { PERIOD(100), 0, communicationTask },
-//  { PERIOD(100), 0, gpsTask },
-  { PERIOD(ALPHA_HZ), 0, alphaTask },
-  { PERIOD(30/2), 0, airspeedReadTask },
-  { PERIOD(30), 0, airspeedUpdateTask },
-  { PERIOD(LED_TICK), 0, blinkTask },
-  { PERIOD(CONTROL_HZ), 0, receiverTask },
-  { PERIOD(CONTROL_HZ), 0, sensorTask },
-  { PERIOD(CONTROL_HZ), 0, controlTask },
-  { PERIOD(ACTUATOR_HZ), 0, actuatorTask },
-  { PERIOD(TRIM_HZ), 0, trimTask },
-  { PERIOD(50), 0, configurationTask },
-  { PERIOD(4), 0, cacheTask },
-  { PERIOD(10), 0, rpmTask },
-  { PERIOD(45), 0, alphaLogTask },
-  { PERIOD(15), 0, controlLogTask },
-  { PERIOD(2), 0, positionLogTask },
-  { PERIOD(2), 0, logSaveTask },
-  { PERIOD(1), 0, measurementTask },
-  { PERIOD(10), 0, loopTask },
-  { 0, 0, NULL } };
+  { communicationTask,
+    HZ_TO_PERIOD(100) },
+  //  { gpsTask, HZ_TO_PERIOD(100) },
+  { alphaTask,
+    HZ_TO_PERIOD(ALPHA_HZ) },
+  { airspeedReadTask,
+    HZ_TO_PERIOD(30/2) },
+  { airspeedUpdateTask,
+    HZ_TO_PERIOD(30) },
+  { blinkTask,
+    HZ_TO_PERIOD(LED_TICK) },
+  { receiverTask,
+    HZ_TO_PERIOD(CONTROL_HZ) },
+  { sensorTask,
+    HZ_TO_PERIOD(CONTROL_HZ) },
+  { controlTask,
+    HZ_TO_PERIOD(CONTROL_HZ) },
+  { actuatorTask,
+    HZ_TO_PERIOD(ACTUATOR_HZ) },
+  { trimTask,
+    HZ_TO_PERIOD(TRIM_HZ) },
+  { configurationTask,
+    HZ_TO_PERIOD(50) },
+  { cacheTask,
+    HZ_TO_PERIOD(4) },
+  { rpmTask,
+    HZ_TO_PERIOD(10) },
+  { alphaLogTask,
+    HZ_TO_PERIOD(45) },
+  { controlLogTask,
+    HZ_TO_PERIOD(15) },
+  { positionLogTask,
+    HZ_TO_PERIOD(2) },
+  { logSaveTask,
+    HZ_TO_PERIOD(2) },
+  { measurementTask,
+    HZ_TO_PERIOD(1) },
+  { loopTask,
+    HZ_TO_PERIOD(10) },
+  { NULL } };
 
 int scheduler(uint32_t currentMicros)
 {
