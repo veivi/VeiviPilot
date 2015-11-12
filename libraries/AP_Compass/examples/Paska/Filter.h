@@ -3,9 +3,10 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <AP_Math/AP_Math.h>
 
-#define max(a,b) ((a) > (b) ? (a) : (b))
-#define min(a,b) ((a) < (b) ? (a) : (b))
+// #define max(a,b) ((a) > (b) ? (a) : (b))
+// #define min(a,b) ((a) < (b) ? (a) : (b))
 // #define abs(a) ((a) < 0 ? -(a) : (a))
 
 const int windowLenMax = 8;

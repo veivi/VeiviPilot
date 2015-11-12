@@ -17,22 +17,20 @@
 #include "PWMOutput.h"
 #include "PPM.h"
 #include <AP_HAL/AP_HAL.h>
-#include <AP_HAL/AP_HAL.h>
 #include <AP_HAL_AVR/AP_HAL_AVR.h>
-#include <AP_HAL_PX4/AP_HAL_PX4.h>
-#include <AP_HAL_Linux/AP_HAL_Linux.h>
-#include <AP_HAL_FLYMAPLE/AP_HAL_FLYMAPLE.h>
-#include <AP_HAL_Empty/AP_HAL_Empty.h>
-#include <AP_HAL_VRBRAIN/AP_HAL_VRBRAIN.h>
+#include <AP_InertialSensor/AP_InertialSensor.h>
 
 const AP_HAL::HAL& hal = AP_HAL_BOARD_DRIVER;
 AP_HAL::BetterStream* cliSerial;
+
+AP_InertialSensor ins;
+// AP_AHRS_DCM ahrs {ins, barometer, gps};
 
 //
 // HW config
 //
 
-// #define MEGAMINI
+#define MEGAMINI
 
 //
 // Comms settings
@@ -57,7 +55,7 @@ struct HWTimer hwTimer4 =
 
 #ifdef MEGAMINI
 
-struct PinDescription ppmInputPin = { PortL, 1 }; 
+struct PinDescriptor ppmInputPin = { PortL, 1 }; 
 struct RxInputRecord aileInput, elevInput, switchInput, tuningKnobInput;
 struct RxInputRecord *ppmInputs[] = 
 { &aileInput, &elevInput, NULL, NULL, &switchInput, &tuningKnobInput };
@@ -1191,11 +1189,15 @@ void sensorTask(uint32_t currentMicros)
 
   // Attitude
 
-  //  computeIMU();
+  ins.update();
+
+  Vector3f gyro = ins.get_gyro();
+  
+  rollRate = -gyro.x * 180/PI / 360;
+  pitchRate = -gyro.y * 180/PI / 360;
+
   /*
   acc = (float) imu.accSmooth[2] / (1<<9);
-  rollRate = (float) imu.gyroData[0] * 2000 / (1<<13) / 360;
-  pitchRate = (float) -imu.gyroData[1] * 2000 / (1<<13) / 360;
   rollAngle = (float) att.angle[0] / 10;
   pitchAngle = (float) -att.angle[1] / 10;
   heading = (float) att.heading;
@@ -1637,16 +1639,17 @@ void loopTask(uint32_t currentMicros)
 */    
 
     consolePrint(" roll = ");
-    consolePrint(rollAngle);
+    consolePrint(rollAngle, 2);
     consolePrint(" (rate = ");
-    consolePrint(rollRate);
+    consolePrint(rollRate*360, 1);
     consolePrint(") pitch = ");
-    consolePrint(pitchAngle);
+    consolePrint(pitchAngle, 2);
     consolePrint(" (rate = ");
-    consolePrint(pitchRate);
+    consolePrint(pitchRate*360, 1);
+    consolePrint(")");
 
     /*
-    consolePrint(") rpm = ");
+    consolePrint(" rpm = ");
     consolePrint(readRPM());
     */
 /*    consolePrint(" heading = ");
@@ -1665,7 +1668,7 @@ void loopTask(uint32_t currentMicros)
 */
     //    consolePrint(" testGain = ");
     // consolePrint(testGain);
-    consolePrint("\r");
+    consolePrint("      \r");
   }
 }
 
@@ -2092,6 +2095,10 @@ void setup() {
   consoleNoteLn("Project | Alpha"); 
   
   //  Serial1.begin(38400); 
+
+  // HAL
+
+  hal.init(0, NULL);
   
   // Read the non-volatile state
 
@@ -2128,7 +2135,7 @@ void setup() {
 
   consoleNoteLn("Initializing PPM receiver");
 
-  configureInput(ppmInputPin, true);
+  configureInput(&ppmInputPin, true);
   ppmInputInit(ppmInputs, sizeof(ppmInputs)/sizeof(struct RxInputRecord*));
 
 #else
@@ -2175,12 +2182,9 @@ void setup() {
 
   // Misc sensors
   
-  consoleNote("Initializing sensors...");
-  
-  //  initSensors();
+  consoleNote("Initializing sensors... ");
 
-  //  calibratingG = 512;
-  //  calibratingB = 200;
+  ins.init(AP_InertialSensor::COLD_START, AP_InertialSensor::RATE_100HZ);
 
   consolePrintLn(" done");
   
