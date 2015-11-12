@@ -544,8 +544,8 @@ int indexOf(const char *s, const char c)
 void executeCommand(const char *cmdBuf, int cmdBufLen)
 {
   if(echoEnabled) {
-    consoleNote("% ");
-    consolePrintLn(cmdBuf);  
+    consolePrint("\r");
+    consoleNotefLn("%% %s          ", cmdBuf);  
   }
   
   const int maxParams = 8;

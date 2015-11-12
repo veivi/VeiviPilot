@@ -114,7 +114,7 @@ void consolePrint(long v)
 #ifdef ARDUINO
     Serial.print(v);
 #else
-    hal.console->printf("%d", v);
+    hal.console->printf("%ld", v);
 #endif
 }
 
@@ -123,7 +123,7 @@ void consolePrint(unsigned long v)
 #ifdef ARDUINO
     Serial.print(v);
 #else
-    hal.console->printf("%d", v);
+    hal.console->printf("%lu", v);
 #endif
 }
 

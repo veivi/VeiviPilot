@@ -1,6 +1,7 @@
 #include "Logging.h"
 #include "NVState.h"
 #include "Filter.h"
+#include <stdarg.h>
 #include <AP_HAL/AP_HAL.h>
 
 extern const AP_HAL::HAL& hal;
@@ -229,6 +230,11 @@ static void logPrintValue(float v)
     col++;
   }
 
+  if(col > 72) {
+    consolePrintLn("");
+    col = 0;
+  }
+  
   if(av < 0.001) {
     col++;
     consolePrint(0);
@@ -242,11 +248,42 @@ static void logPrintValue(float v)
       + (av >= 1000.0 ? 1 : 0) + (av >= 10000.0 ? 1 : 0);
   }
 
+  first = false;
+}
+
+static void logPrintString(const char *s)
+{  
+  if(!first) {
+    consolePrint(",");
+    col++;
+  }
+
   if(col > 72) {
     consolePrintLn("");
     col = 0;
   }
-  
+
+  consolePrintf("\"%s\"", s);
+  col += strlen(s) + 2;
+
+  first = false;
+}
+
+static void logPrintVariableName(int stamp, const char *name)
+{  
+  if(!first) {
+    consolePrint(";");
+    col++;
+  }
+
+  if(col > 72) {
+    consolePrintLn("");
+    col = 0;
+  }
+
+  consolePrintf("fdr_%d_%s", stamp, name);
+  col += 4 + 3 + 1 + strlen(name);
+
   first = false;
 }
 
@@ -269,15 +306,10 @@ void logDump(int ch)
     consolePrint(stateRecord.logStamp);
     consolePrint("_matrix = [ ");
 
-    for(ch = 0; ch < l_channels; ch++) {
-      if(ch > 0) 
-          consolePrintLn("; ");
+    logPrintValue();
 
-      consolePrint("fdr_");
-      consolePrint(stateRecord.logStamp);
-      consolePrint("_");
-      consolePrint(logChannels[ch].name);
-    }
+    for(ch = 0; ch < l_channels; ch++)
+      logPrintVariableName(stateRecord.logStamp, logChannels[ch].name);
     
     consolePrint(" ]\n");
 
@@ -289,14 +321,10 @@ void logDump(int ch)
     consolePrint(stateRecord.logStamp);
     consolePrint("_matrix, ");
     
-    for(ch = 0; ch < l_channels; ch++) {
-      consolePrint("\"");
-      consolePrint(logChannels[ch].name);
-      consolePrint("\"");
-      
-      if(ch < l_channels-1)
-        consolePrintLn(", ");
-    }
+    logPrintValue();
+
+    for(ch = 0; ch < l_channels; ch++)
+      logPrintString(logChannels[ch].name);
     
     consolePrintLn(" }");
     
