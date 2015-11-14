@@ -25,16 +25,17 @@ struct ParamRecord {
 
 struct NVStateRecord {
   uint16_t crc;
+  int paramPartition, logPartition;
   int logStamp;
   int model;
   bool logRPM;
   int testChannel;
 };
 
-extern struct ParamRecord paramRecord[];
+extern struct ParamRecord paramRecord;
 extern struct NVStateRecord stateRecord;
 
-void readParams(void);
+void setModel(int model);
 void storeParams(void);
 void readNVState(void);
 void storeNVState(void);

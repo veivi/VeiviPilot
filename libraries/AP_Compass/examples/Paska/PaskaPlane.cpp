@@ -156,7 +156,6 @@ float testGain = 0;
 bool calibrate, switchState = false, switchStateLazy = false, echoEnabled = true;
 bool iasFailed = false, iasWarn = false, alphaFailed = false, alphaWarn = false;
 bool calibrateStart = false, calibrateStop = false;
-float controlCycle = 5.0;
 bool rxElevatorAlive = true, rxAileronAlive = true, rpmAlive = 0;
 const int cycleTimeWindow = 31;
 float cycleTimeStore[cycleTimeWindow];
@@ -181,6 +180,7 @@ float parameter;
 NewI2C I2c = NewI2C();
 RunningAvgFilter alphaFilter;
 AlphaBuffer alphaBuffer, pressureBuffer;
+float controlCycle = 10.0e-3;
 
 float elevOutput = 0, aileOutput = 0, flapOutput = 0, gearOutput = 1, brakeOutput = 0;
 
@@ -188,7 +188,7 @@ float elevOutput = 0, aileOutput = 0, flapOutput = 0, gearOutput = 1, brakeOutpu
 struct RxInputRecord rpmInput = { rpmPin };
 #endif
 
-#define minAlpha paramRecord[stateRecord.model].alphaMin
+#define minAlpha paramRecord.alphaMin
 
 void printParams(struct ParamRecord *p)
 {
@@ -421,7 +421,7 @@ bool readAlpha_5048B(int16_t *result) {
   // The value is good, use it
 
   if(result)
-    *result = (int16_t) (raw - paramRecord[stateRecord.model].alphaRef);
+    *result = (int16_t) (raw - paramRecord.alphaRef);
   
   return true;
 }
@@ -648,20 +648,20 @@ void executeCommand(const char *cmdBuf, int cmdBufLen)
     
   case c_stabilizer_pid:
     if(numParams > 0)
-      paramRecord[stateRecord.model].s_Kp = param[0];
+      paramRecord.s_Kp = param[0];
     if(numParams > 1)
-      paramRecord[stateRecord.model].s_Ki = param[1];
+      paramRecord.s_Ki = param[1];
     if(numParams > 2)
-      paramRecord[stateRecord.model].s_Kd = param[2];
+      paramRecord.s_Kd = param[2];
 
-    aileController.setPID(paramRecord[stateRecord.model].s_Kp, paramRecord[stateRecord.model].s_Ki, paramRecord[stateRecord.model].s_Kd);
+    aileController.setPID(paramRecord.s_Kp, paramRecord.s_Ki, paramRecord.s_Kd);
 
     consoleNote("Stabilizer P = ");
-    consolePrint(paramRecord[stateRecord.model].s_Kp);
+    consolePrint(paramRecord.s_Kp);
     consolePrint(", I = ");
-    consolePrint(paramRecord[stateRecord.model].s_Ki);
+    consolePrint(paramRecord.s_Ki);
     consolePrint(", D = ");
-    consolePrintLn(paramRecord[stateRecord.model].s_Kd);    
+    consolePrintLn(paramRecord.s_Kd);    
     break;
     
   case c_stabilizer_pid_zn:
@@ -673,16 +673,16 @@ void executeCommand(const char *cmdBuf, int cmdBufLen)
     
       aileController.setZieglerNicholsPID(param[0], param[1]);
 
-      paramRecord[stateRecord.model].s_Kp = aileController.getP();
-      paramRecord[stateRecord.model].s_Ki = aileController.getI();
-      paramRecord[stateRecord.model].s_Kd = aileController.getD();
+      paramRecord.s_Kp = aileController.getP();
+      paramRecord.s_Ki = aileController.getI();
+      paramRecord.s_Kd = aileController.getD();
 
       consoleNote("  Resulting P = ");
-      consolePrint(paramRecord[stateRecord.model].s_Kp);
+      consolePrint(paramRecord.s_Kp);
       consolePrint(", I = ");
-      consolePrint(paramRecord[stateRecord.model].s_Ki);
+      consolePrint(paramRecord.s_Ki);
       consolePrint(", D = ");
-      consolePrintLn(paramRecord[stateRecord.model].s_Kd);
+      consolePrintLn(paramRecord.s_Kd);
     } else {
       float Ku, Tu;
       aileController.getZieglerNicholsPID(&Ku, &Tu);
@@ -704,36 +704,36 @@ void executeCommand(const char *cmdBuf, int cmdBufLen)
     
       aileController.setZieglerNicholsPI(param[0], param[1]);
 
-      paramRecord[stateRecord.model].s_Kp = aileController.getP();
-      paramRecord[stateRecord.model].s_Ki = aileController.getI();
-      paramRecord[stateRecord.model].s_Kd = aileController.getD();
+      paramRecord.s_Kp = aileController.getP();
+      paramRecord.s_Ki = aileController.getI();
+      paramRecord.s_Kd = aileController.getD();
 
       consoleNote("  Resulting P = ");
-      consolePrint(paramRecord[stateRecord.model].s_Kp);
+      consolePrint(paramRecord.s_Kp);
       consolePrint(", I = ");
-      consolePrint(paramRecord[stateRecord.model].s_Ki);
+      consolePrint(paramRecord.s_Ki);
       consolePrint(", D = ");
-      consolePrintLn(paramRecord[stateRecord.model].s_Kd);
+      consolePrintLn(paramRecord.s_Kd);
     }
     break;
     
   case c_inner_pid:
     if(numParams > 0)
-      paramRecord[stateRecord.model].i_Kp = param[0];
+      paramRecord.i_Kp = param[0];
     if(numParams > 1)
-      paramRecord[stateRecord.model].i_Ki = param[1];
+      paramRecord.i_Ki = param[1];
     if(numParams > 2)
-      paramRecord[stateRecord.model].i_Kd = param[2];
+      paramRecord.i_Kd = param[2];
 
     consoleNote("Autostick/Pusher inner P = ");
-    consolePrint(paramRecord[stateRecord.model].i_Kp);
+    consolePrint(paramRecord.i_Kp);
     consolePrint(", I = ");
-    consolePrint(paramRecord[stateRecord.model].i_Ki);
+    consolePrint(paramRecord.i_Ki);
     consolePrint(", D = ");
-    consolePrintLn(paramRecord[stateRecord.model].i_Kd);
+    consolePrintLn(paramRecord.i_Kd);
     
-    elevController.setPID(paramRecord[stateRecord.model].i_Kp, paramRecord[stateRecord.model].i_Ki, paramRecord[stateRecord.model].i_Kd);
-    pusher.setPID(paramRecord[stateRecord.model].i_Kp, paramRecord[stateRecord.model].i_Ki, paramRecord[stateRecord.model].i_Kd);
+    elevController.setPID(paramRecord.i_Kp, paramRecord.i_Ki, paramRecord.i_Kd);
+    pusher.setPID(paramRecord.i_Kp, paramRecord.i_Ki, paramRecord.i_Kd);
     break;
     
   case c_inner_pid_zn:
@@ -746,16 +746,16 @@ void executeCommand(const char *cmdBuf, int cmdBufLen)
       elevController.setZieglerNicholsPID(param[0], param[1]);
       pusher.setZieglerNicholsPID(param[0], param[1]);
 
-      paramRecord[stateRecord.model].i_Kp = elevController.getP();
-      paramRecord[stateRecord.model].i_Ki = elevController.getI();
-      paramRecord[stateRecord.model].i_Kd = elevController.getD();
+      paramRecord.i_Kp = elevController.getP();
+      paramRecord.i_Ki = elevController.getI();
+      paramRecord.i_Kd = elevController.getD();
 
       consoleNote("  Resulting P = ");
-      consolePrint(paramRecord[stateRecord.model].i_Kp);
+      consolePrint(paramRecord.i_Kp);
       consolePrint(", I = ");
-      consolePrint(paramRecord[stateRecord.model].i_Ki);
+      consolePrint(paramRecord.i_Ki);
       consolePrint(", D = ");
-      consolePrintLn(paramRecord[stateRecord.model].i_Kd);
+      consolePrintLn(paramRecord.i_Kd);
     } else {
       float Ku, Tu;
       elevController.getZieglerNicholsPID(&Ku, &Tu);
@@ -778,84 +778,84 @@ void executeCommand(const char *cmdBuf, int cmdBufLen)
       elevController.setZieglerNicholsPI(param[0], param[1]);
       pusher.setZieglerNicholsPI(param[0], param[1]);
 
-      paramRecord[stateRecord.model].i_Kp = elevController.getP();
-      paramRecord[stateRecord.model].i_Ki = elevController.getI();
-      paramRecord[stateRecord.model].i_Kd = elevController.getD();
+      paramRecord.i_Kp = elevController.getP();
+      paramRecord.i_Ki = elevController.getI();
+      paramRecord.i_Kd = elevController.getD();
 
       consoleNote("  Resulting P = ");
-      consolePrint(paramRecord[stateRecord.model].i_Kp);
+      consolePrint(paramRecord.i_Kp);
       consolePrint(", I = ");
-      consolePrint(paramRecord[stateRecord.model].i_Ki);
+      consolePrint(paramRecord.i_Ki);
       consolePrint(", D = ");
-      consolePrintLn(paramRecord[stateRecord.model].i_Kd);
+      consolePrintLn(paramRecord.i_Kd);
     }
     break;
     
   case c_outer_p:
     if(numParams > 0)
-      autoAlphaP = paramRecord[stateRecord.model].o_P = param[0];
+      autoAlphaP = paramRecord.o_P = param[0];
 
     consoleNote("Autostick outer P = ");
-    consolePrintLn(paramRecord[stateRecord.model].o_P);
+    consolePrintLn(paramRecord.o_P);
     break;
     
   case c_edefl:
     if(numParams > 0)
-      paramRecord[stateRecord.model].elevDefl = param[0] / 90.0;
+      paramRecord.elevDefl = param[0] / 90.0;
     break;
     
   case c_adefl:
     if(numParams > 0)
-      paramRecord[stateRecord.model].aileDefl = param[0] / 90.0;
+      paramRecord.aileDefl = param[0] / 90.0;
     break;
     
   case c_bdefl:
     if(numParams > 0)
-      paramRecord[stateRecord.model].brakeDefl = param[0] / 90.0;
+      paramRecord.brakeDefl = param[0] / 90.0;
     break;
     
   case c_ezero:
     if(numParams > 0)
-      paramRecord[stateRecord.model].elevZero = param[0] / 90.0;
+      paramRecord.elevZero = param[0] / 90.0;
     break;
     
   case c_azero:
     if(numParams > 0)
-      paramRecord[stateRecord.model].aileZero = param[0] / 90.0;
+      paramRecord.aileZero = param[0] / 90.0;
     break;
     
   case c_flapneutral:
     if(numParams > 0)
-      paramRecord[stateRecord.model].flapNeutral = param[0] / 90.0;
+      paramRecord.flapNeutral = param[0] / 90.0;
     break;
     
   case c_flapstep:
     if(numParams > 0)
-      paramRecord[stateRecord.model].flapStep = param[0] / 90.0;
+      paramRecord.flapStep = param[0] / 90.0;
     break;
     
   case c_min:
     if(numParams > 0)
-      paramRecord[stateRecord.model].alphaMin = param[0]/360.0;
+      paramRecord.alphaMin = param[0]/360.0;
     break;
 
   case c_max:
     if(numParams > 0)
-      maxAlpha = paramRecord[stateRecord.model].alphaMax = param[0]/360.0;
+      maxAlpha = paramRecord.alphaMax = param[0]/360.0;
     break;
 
   case c_zero:
-    paramRecord[stateRecord.model].alphaRef += (int16_t) ((1L<<16) * alpha);
+    paramRecord.alphaRef += (int16_t) ((1L<<16) * alpha);
     break;
 
   case c_5048b_ref:
     if(numParams > 0)
-      paramRecord[stateRecord.model].alphaRef = (int16_t) param[0];
+      paramRecord.alphaRef = (int16_t) param[0];
     break;
 
   case c_alpha:
     if(numParams > 0)
-      paramRecord[stateRecord.model].alphaRef += (int16_t) ((1L<<16) * (alpha - (float) param[0] / 360));
+      paramRecord.alphaRef += (int16_t) ((1L<<16) * (alpha - (float) param[0] / 360));
     break;
 
   case c_loop:
@@ -884,19 +884,17 @@ void executeCommand(const char *cmdBuf, int cmdBufLen)
     
   case c_backup:
     consoleNoteLn("Param backup");
-    for(int i = 0; i < MAX_MODELS; i++) {
-      consolePrintLn("//");
-      consoleNote("MODEL ");
-      consolePrintLn(i);
-      consolePrintLn("//");
-      consolePrintLn("");
-      consolePrint("echo 0; model ");
-      consolePrint(i);
-      consolePrint("; ");
-      dumpParams(&paramRecord[i]);
-      consolePrintLn("; echo 1; store");
-      consolePrintLn("");
-    }
+    consolePrintLn("//");
+    consoleNote("MODEL ");
+    consolePrintLn(stateRecord.model);
+    consolePrintLn("//");
+    consolePrintLn("");
+    consolePrint("echo 0; model ");
+    consolePrint(stateRecord.model);
+    consolePrint("; ");
+    dumpParams(&paramRecord);
+    consolePrintLn("; echo 1; store");
+    consolePrintLn("");
     break;
 
   case c_stamp:
@@ -918,9 +916,7 @@ void executeCommand(const char *cmdBuf, int cmdBufLen)
     } else { 
       if(param[0] > MAX_MODELS-1)
         param[0] = MAX_MODELS-1;
-      consoleNote("Model set to ");
-      consolePrintLn(param[0]);  
-      stateRecord.model = param[0];
+      setModel(param[0]);
       storeNVState();
     }
     break;
@@ -968,15 +964,15 @@ void executeCommand(const char *cmdBuf, int cmdBufLen)
       
     consoleNoteLn("Cycle time (ms)");
     consoleNote("  median     = ");
-    consolePrintLn(controlCycle);
+    consolePrintLn(controlCycle*1e3);
     consoleNote("  min        = ");
-    consolePrintLn(cycleMin);
+    consolePrintLn(cycleMin*1e3);
     consoleNote("  max        = ");
-    consolePrintLn(cycleMax);
+    consolePrintLn(cycleMax*1e3);
     consoleNote("  mean       = ");
-    consolePrintLn(cycleMean);
+    consolePrintLn(cycleMean*1e3);
     consoleNote("  cum. value = ");
-    consolePrintLn(cycleCum);
+    consolePrintLn(cycleCum*1e3);
     consoleNote("Warning flags :");
     if(pciWarn)
       consolePrint(" SPURIOUS_PCINT");
@@ -1012,11 +1008,11 @@ void executeCommand(const char *cmdBuf, int cmdBufLen)
     break;
     
   case c_5048b_addr:
-    paramRecord[stateRecord.model].i2c_5048B = param[0];
+    paramRecord.i2c_5048B = param[0];
     break;
     
   case c_24l256_addr:
-    paramRecord[stateRecord.model].i2c_24L256 = param[0];
+    paramRecord.i2c_24L256 = param[0];
     break;
     
   case c_5048b_read:
@@ -1040,32 +1036,32 @@ void executeCommand(const char *cmdBuf, int cmdBufLen)
       consoleNote("SETTINGS (MODEL ");
       consolePrint(stateRecord.model);
       consolePrintLn(")");
-      printParams(&paramRecord[stateRecord.model]);
+      printParams(&paramRecord);
       break;
   
   case c_5048b_clk:
-    paramRecord[stateRecord.model].clk_5048B = param[0];
+    paramRecord.clk_5048B = param[0];
     break;
     
   case c_24l256_clk:
-    paramRecord[stateRecord.model].clk_24L256 = param[0];
+    paramRecord.clk_24L256 = param[0];
     break;
     
   case c_center:
-    paramRecord[stateRecord.model].elevZero = elevStickRaw;
-    paramRecord[stateRecord.model].aileZero = aileStickRaw;
+    paramRecord.elevZero = elevStickRaw;
+    paramRecord.aileZero = aileStickRaw;
     break;
     
   case c_eneutral:
-    paramRecord[stateRecord.model].elevNeutral = param[0]/90.0;
+    paramRecord.elevNeutral = param[0]/90.0;
     break;
     
   case c_aneutral:
-    paramRecord[stateRecord.model].aileNeutral = param[0]/90.0;
+    paramRecord.aileNeutral = param[0]/90.0;
     break;
     
   case c_bneutral:
-    paramRecord[stateRecord.model].brakeNeutral = param[0]/90.0;
+    paramRecord.brakeNeutral = param[0]/90.0;
     break;
     
   default:
@@ -1160,12 +1156,12 @@ void receiverTask(uint32_t currentMicros)
 {
   if(inputValid(&aileInput)) {
     aileStickRaw = decodePWM(inputValue(&aileInput));
-    aileStick = applyNullZone(clamp(aileStickRaw - paramRecord[stateRecord.model].aileZero, -1, 1));
+    aileStick = applyNullZone(clamp(aileStickRaw - paramRecord.aileZero, -1, 1));
   }
   
   if(inputValid(&elevInput)) {
     elevStickRaw = decodePWM(inputValue(&elevInput));
-    elevStick = clamp(elevStickRaw - paramRecord[stateRecord.model].elevZero, -1, 1);
+    elevStick = clamp(elevStickRaw - paramRecord.elevZero, -1, 1);
 
     if(mode.autoStick) {
       elevStick = applyNullZone(elevStick - neutralStick);
@@ -1298,7 +1294,7 @@ void measurementTask(uint32_t currentMicros)
   if(cycleTimeCounter > 5) {
     controlCycle = cycleTimeFilter.output();
     consoleNote("Effective cycle time is ");
-    consolePrintLn(controlCycle);
+    consolePrintLn(controlCycle*1e3);
     cycleTimesDone = true;
     return;
   }
@@ -1308,11 +1304,11 @@ void measurementTask(uint32_t currentMicros)
     controlCycle = cycleTimeStore[cycleTimeWindow/2];
     
     consoleNote("Cycle time (min, median, max) = ");
-    consolePrint(cycleTimeStore[0]);
+    consolePrint(cycleTimeStore[0]*1e3);
     consolePrint(", ");
-    consolePrint(controlCycle);
+    consolePrint(controlCycle*1e3);
     consolePrint(", ");
-    consolePrintLn(cycleTimeStore[cycleTimeWindow-1]);
+    consolePrintLn(cycleTimeStore[cycleTimeWindow-1]*1e3);
     
     float sum = 0;
     for(int i = 0; i < cycleTimeWindow; i++)
@@ -1502,22 +1498,22 @@ void configurationTask(uint32_t currentMicros)
   // Default controller settings
      
   elevController.setPID(
-    paramRecord[stateRecord.model].i_Kp,
-    paramRecord[stateRecord.model].i_Ki,
-    paramRecord[stateRecord.model].i_Kd);
+    paramRecord.i_Kp,
+    paramRecord.i_Ki,
+    paramRecord.i_Kd);
   
   pusher.setPID(
-    paramRecord[stateRecord.model].i_Kp,
-    paramRecord[stateRecord.model].i_Ki,
-    paramRecord[stateRecord.model].i_Kd);
+    paramRecord.i_Kp,
+    paramRecord.i_Ki,
+    paramRecord.i_Kd);
   
   aileController.setPID(
-    paramRecord[stateRecord.model].s_Kp,
-    paramRecord[stateRecord.model].s_Ki,
-    paramRecord[stateRecord.model].s_Kd);
+    paramRecord.s_Kp,
+    paramRecord.s_Ki,
+    paramRecord.s_Kd);
 
-  autoAlphaP = paramRecord[stateRecord.model].o_P;
-  maxAlpha = paramRecord[stateRecord.model].alphaMax;
+  autoAlphaP = paramRecord.o_P;
+  maxAlpha = paramRecord.alphaMax;
  
   // Then apply test modes
   
@@ -1841,7 +1837,7 @@ void controlTask(uint32_t currentMicros)
   // Cycle time bookkeeping 
   
   if(controlCycleEnded > 0.0)
-    cycleTimeMonitor((currentMicros - controlCycleEnded)/1.0e3);
+    cycleTimeMonitor((currentMicros - controlCycleEnded)/1.0e6);
 
   controlCycleEnded = currentMicros;
   
@@ -1850,13 +1846,13 @@ void controlTask(uint32_t currentMicros)
   alpha = alphaBuffer.output();
   
   if(calibrateStart) {
-    paramRecord[stateRecord.model].elevZero += elevStick;
-    paramRecord[stateRecord.model].aileZero += aileStick;
-    paramRecord[stateRecord.model].elevNeutral = paramRecord[stateRecord.model].aileNeutral = 0.0;
+    paramRecord.elevZero += elevStick;
+    paramRecord.aileZero += aileStick;
+    paramRecord.elevNeutral = paramRecord.aileNeutral = 0.0;
     calibrateStart = false;
   } else if(calibrateStop) {       
-    paramRecord[stateRecord.model].elevNeutral = elevStick;
-    paramRecord[stateRecord.model].aileNeutral = aileStick;
+    paramRecord.elevNeutral = elevStick;
+    paramRecord.aileNeutral = aileStick;
     calibrateStop = false;
   } else if(calibrate) {
     elevOutput = elevStick;
@@ -1880,7 +1876,7 @@ void controlTask(uint32_t currentMicros)
       } else
         targetRate = min(targetRate, (maxAlpha - alpha) * autoAlphaP);
       
-      elevController.input(targetRate - pitchRate, controlCycle / 1.0e3);
+      elevController.input(targetRate - pitchRate, controlCycle);
     } else {
       elevController.reset(elevStick, 0.0);
     }
@@ -1896,7 +1892,7 @@ void controlTask(uint32_t currentMicros)
     
     // Pusher
 
-    pusher.input((maxAlpha - alpha)*paramRecord[stateRecord.model].o_P - pitchRate, controlCycle / 1.0e3);
+    pusher.input((maxAlpha - alpha)*paramRecord.o_P - pitchRate, controlCycle);
 
     if(!mode.sensorFailSafe && !alphaFailed)
       elevOutput = min(elevOutput, pusher.output());
@@ -1932,10 +1928,11 @@ void controlTask(uint32_t currentMicros)
       else if(mode.bankLimiter) {
         // No leveling but limit bank
                 
-        targetRate = clamp(targetRate, (-maxBank - rollAngle) / 90, (maxBank - rollAngle) / 90);
+        targetRate = clamp(targetRate,
+			   (-maxBank - rollAngle) / 90, (maxBank - rollAngle) / 90);
       }
       
-      aileController.input(targetRate - rollRate, controlCycle / 1.0e3);
+      aileController.input(targetRate - rollRate, controlCycle);
       aileOutput = aileController.output();
     }
  
@@ -1957,22 +1954,22 @@ void actuatorTask(uint32_t currentMicros)
  
   if(armed) {
     pwmOutputWrite(aileHandle, NEUTRAL
-		   + RANGE*clamp(paramRecord[stateRecord.model].aileDefl*aileOutput 
-				 + paramRecord[stateRecord.model].aileNeutral, -1, 1));
+		   + RANGE*clamp(paramRecord.aileDefl*aileOutput 
+				 + paramRecord.aileNeutral, -1, 1));
 
     pwmOutputWrite(elevatorHandle, NEUTRAL
-		   + RANGE*clamp(paramRecord[stateRecord.model].elevDefl*elevOutput 
-				 + paramRecord[stateRecord.model].elevNeutral, -1, 1));
+		   + RANGE*clamp(paramRecord.elevDefl*elevOutput 
+				 + paramRecord.elevNeutral, -1, 1));
                               
     pwmOutputWrite(flapHandle, NEUTRAL
-		   + RANGE*clamp(paramRecord[stateRecord.model].flapNeutral 
-				  + flapOutput*paramRecord[stateRecord.model].flapStep, -1, 1));                              
+		   + RANGE*clamp(paramRecord.flapNeutral 
+				  + flapOutput*paramRecord.flapStep, -1, 1));                              
 
     pwmOutputWrite(gearHandle, NEUTRAL - RANGE*(gearOutput*2-1));
 
     pwmOutputWrite(brakeHandle, NEUTRAL
-		   + RANGE*clamp(paramRecord[stateRecord.model].brakeNeutral + 
-				 paramRecord[stateRecord.model].brakeDefl*brakeOutput, -1, 1));                        
+		   + RANGE*clamp(paramRecord.brakeNeutral + 
+				 paramRecord.brakeDefl*brakeOutput, -1, 1));                        
   }
 }
 
@@ -2105,18 +2102,16 @@ void setup() {
 
   // Param record
   
-  readParams();
+  setModel(stateRecord.model);
 
-  for(int i = 0; i < MAX_MODELS; i++) {
-    consoleNote("MODEL ");
-    consolePrintLn(i);
-    printParams(&paramRecord[i]);    
-  }
+  consoleNote("MODEL ");
+  consolePrintLn(stateRecord.model);
+  printParams(&paramRecord);    
 
   // Set I2C speed
   
-  TWBR = max(paramRecord[stateRecord.model].clk_24L256,
-              paramRecord[stateRecord.model].clk_5048B);
+  TWBR = max(paramRecord.clk_24L256,
+              paramRecord.clk_5048B);
               
   // RC input
   
