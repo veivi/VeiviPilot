@@ -1,8 +1,7 @@
 #include <stdint.h>
 #include "NewI2C.h"
 
-#define EXT_EEPROM_SIZE (1L<<17)
-#define EXT_EEPROM_LATENCY 5000
+#define EXT_EEPROM_LATENCY 6000
 
 extern int logBytesCum;
 extern float logBandWidth;
