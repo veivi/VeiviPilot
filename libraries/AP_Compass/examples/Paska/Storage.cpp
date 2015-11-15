@@ -137,7 +137,7 @@ void cacheWrite(uint32_t addr, const uint8_t *value, int size)
     cacheWriteLine(addr, value, size);
 }
 
-void cacheRead(uint32_t addr, uint8_t *value, int size) 
+void cacheReadLine(uint32_t addr, uint8_t *value, int size) 
 {
   if(cacheModified || !cacheHit(addr))
     cacheAlloc(addr);
@@ -154,3 +154,13 @@ void cacheRead(uint32_t addr, uint8_t *value, int size)
     value[i] = cacheData[(addr & ~PAGE_MASK) + i];  
 }
 
+void cacheRead(uint32_t addr, uint8_t *value, int size) 
+{
+  if(CACHE_TAG(addr) != CACHE_TAG(addr+size-1)) {
+    uint32_t split = CACHE_TAG(addr+size-1);
+    
+    cacheReadLine(addr, value, split - addr);
+    cacheReadLine(split, &value[split - addr], size - (split - addr));
+  } else
+    cacheReadLine(addr, value, size);
+}

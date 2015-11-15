@@ -7,22 +7,22 @@
 struct NVStateRecord stateRecord;
 struct ParamRecord paramRecord;
 
-const int stateOffset = 0;
-const int paramOffset = (stateRecord.paramPartition+stateRecord.model*sizeof(paramRecord));
+#define stateOffset 0
+#define paramOffset (stateRecord.paramPartition+stateRecord.model*sizeof(paramRecord))
 
 struct ParamRecord paramDefaults = {
       0,
       64, 0x50, 
       12, 12,
       0,
-      -25.0/90, -50.0/90,
+      -45.0/90, -45.0/90,
       0, 0, 0, 0,
       -3.0/360,  12.0/360,  0,
-      0.65, 0.35, 0.04, 35.0, 
-      0.5, 1.2, 0.01,
+      0.51, 4.64, 0.014, 10.0, 
+      0.48, 4.36, 0.013,
       2,
        0.5, -0.3,
-      -15.0/90, -50.0/90 };
+      -45.0/90, -45.0/90 };
 
 struct NVStateRecord stateDefaults = { 0, 128, 1024, 400, 0, false, 0 };
 

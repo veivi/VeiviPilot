@@ -542,10 +542,8 @@ int indexOf(const char *s, const char c)
     
 void executeCommand(const char *cmdBuf, int cmdBufLen)
 {
-  if(echoEnabled) {
-    consolePrint("\r");
-    consoleNotefLn("%% %s          ", cmdBuf);  
-  }
+  if(echoEnabled)
+    consolePrintf("\r// %% %s          \n", cmdBuf);  
   
   const int maxParams = 8;
 
@@ -1073,6 +1071,7 @@ void executeCommand(const char *cmdBuf, int cmdBufLen)
 void executeCommandSeries(const char *buffer, int len)
 {
   int index = 0;
+  bool nothing = true;
     
   while(index < len) {
     cmdBufLen = 0;
@@ -1086,11 +1085,16 @@ void executeCommandSeries(const char *buffer, int len)
         
     cmdBuf[cmdBufLen] = '\0';
     
-    if(cmdBufLen > 0)
+    if(cmdBufLen > 0) {
       executeCommand(cmdBuf, cmdBufLen);
+      nothing = false;
+    }
 
     index++;    
   }
+
+  if(nothing)
+    consolePrintLn("// %");
 }
 
 void cacheTask(uint32_t currentMicros)
@@ -1664,11 +1668,8 @@ int serialBufIndex = 0;
 void communicationTask(uint32_t currentMicros)
 {
   int len = 0;
-  bool dirty = false;
        
-  while((len = cliSerial->available()) > 0) {
-    dirty = true;
-    
+  while((len = cliSerial->available()) > 0) {    
     int spaceLeft = serialBufLen - serialBufIndex;
     
     if(len > spaceLeft) {
@@ -1679,23 +1680,28 @@ void communicationTask(uint32_t currentMicros)
     len = min(len, spaceLeft);
 
     while(len > 0) {
-      serialBuf[serialBufIndex++] = cliSerial->read();
+      char c =  cliSerial->read();
+      
+      if(c == '\n') {
+	looping = false;
+	executeCommandSeries(serialBuf, serialBufIndex);
+	serialBufIndex = 0;
+	controlCycleEnded = -1.0;
+
+      } else if(c == '\b') {
+	if(serialBufIndex > 0) {
+	  consolePrint("\b \b");
+	  serialBufIndex--;
+	}
+	
+      } else {
+	consolePrintf("%c", c);
+	serialBuf[serialBufIndex++] = c;
+      }
+      
       len--;
     }
   }
-
-  if(dirty && serialBufIndex > 0 && serialBuf[serialBufIndex-1] == '\n') {
-    if(looping) {
-      looping = false;
-      consoleNoteLn("");
-      //      rpmMeasure(stateRecord.logRPM);
-    }
-
-    executeCommandSeries(serialBuf, serialBufIndex-1);
-    serialBufIndex = 0;
-
-    controlCycleEnded = -1.0;
-  }    
 }
 
 const int gpsBufLen = 1<<7, gpsMaxParam = 1<<5;

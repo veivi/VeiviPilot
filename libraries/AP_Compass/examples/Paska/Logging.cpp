@@ -62,7 +62,9 @@ logState_t logState;
 int32_t logPtr, logLen, logSize;
 uint16_t logEndStamp;
 bool logEnabled = false;
-  
+
+#define logOffset stateRecord.logPartition
+
 static bool logReady(void)
 {
   if(logState == stop_c || logState == run_c)
@@ -76,8 +78,14 @@ static void logWrite(int32_t index, const uint16_t *value, int count)
 {
   if(logSize < 1)
     return;
-    
-  cacheWrite(index*sizeof(uint16_t), (const uint8_t*) value, count*sizeof(uint16_t));
+
+  if(index+count > logSize) {
+    int32_t p = logSize - index;
+    cacheWrite(logOffset + index*sizeof(uint16_t), (const uint8_t*) value, p*sizeof(uint16_t));
+    cacheWrite(logOffset, (const uint8_t*) &value[p], (count-p)*sizeof(uint16_t));
+  } else
+    cacheWrite(logOffset + index*sizeof(uint16_t), (const uint8_t*) value, count*sizeof(uint16_t));
+  
   logLen = -1L;
 }
 
@@ -93,7 +101,7 @@ static uint16_t logRead(int32_t index)
     
   uint16_t entry = 0;
   
-  cacheRead(index*sizeof(entry), (uint8_t*) &entry, sizeof(entry));
+  cacheRead(logOffset + index*sizeof(entry), (uint8_t*) &entry, sizeof(entry));
   
   return entry;
 }
@@ -509,7 +517,7 @@ bool logInit(uint32_t maxDuration)
       eepromSize += 1<<10;
     
     if(!readEEPROM(eepromSize-1, &dummy, 1)) {
-      logSize = eepromSize/sizeof(uint16_t);
+      logSize = (eepromSize - logOffset)/sizeof(uint16_t);
 
       consoleNote("Inferred log size = ");
       consolePrint(logSize/(1<<10));
