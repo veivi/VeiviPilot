@@ -26,6 +26,7 @@ const AP_HAL::HAL& hal = AP_HAL_BOARD_DRIVER;
 AP_HAL::BetterStream* cliSerial;
 
 AP_InertialSensor ins;
+
 // AP_AHRS_DCM ahrs {ins,  barometer, gps};
 
 //
@@ -53,6 +54,16 @@ const struct HWTimer hwTimer4 =
 
 const struct HWTimer *hwTimers[] = 
   { &hwTimer1, &hwTimer3, &hwTimer4 };
+
+//
+// LED control
+//
+
+const struct PinDescriptor led[] = {{ PortA, 3 }, { PortA, 4 }, { PortA, 5 }};
+
+#define GREEN_LED led[0]
+#define BLUE_LED led[1]
+#define RED_LED led[2]
 
 //
 // RC input
@@ -2009,13 +2020,7 @@ void blinkTask(uint32_t currentMicros)
   
   tick = (tick + 1) % (LED_TICK/LED_HZ);
 
-  /*
-  if(tick < ledRatio*LED_TICK/LED_HZ) {
-    STABLEPIN_ON;
-  } else {
-    STABLEPIN_OFF;
-  }
-  */
+  setPinState(&RED_LED, tick < ledRatio*LED_TICK/LED_HZ ? 0 : 1);
 }
 
 struct Task taskList[] = {
@@ -2173,12 +2178,13 @@ void setup() {
   
   // LED output
 
-  /*
-  LEDPIN_PINMODE;
-  STABLEPIN_PINMODE;
-  POWERPIN_PINMODE;
-  BUZZERPIN_PINMODE;
-  */
+  configureOutput(&RED_LED);
+  configureOutput(&GREEN_LED);
+  configureOutput(&BLUE_LED);
+
+  setPinState(&RED_LED, 1);
+  setPinState(&GREEN_LED, 1);
+  setPinState(&BLUE_LED, 1);
 }
 
 void loop() 
