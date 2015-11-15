@@ -36,12 +36,6 @@ AP_InertialSensor ins;
 #define MEGAMINI
 
 //
-// Comms settings
-//
-
-#define BAUDRATE 115200
-
-//
 // HW timer declarations
 //
 
