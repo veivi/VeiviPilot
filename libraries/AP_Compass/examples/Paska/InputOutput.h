@@ -20,11 +20,11 @@ struct PinDescriptor {
 extern const portName_t pcIntPort[];
 extern const uint8_t pcIntMask[];
 
-void pinOutputEnable(struct PinDescriptor *pin, bool output);
-void setPinState(struct PinDescriptor *pin, uint8_t state);
-uint8_t getPinState(struct PinDescriptor *pin);  
-void configureInput(struct PinDescriptor *pin, bool pullup);
-void configureOutput(struct PinDescriptor *pin);
+void pinOutputEnable(const struct PinDescriptor *pin, bool output);
+void setPinState(const struct PinDescriptor *pin, uint8_t state);
+uint8_t getPinState(const struct PinDescriptor *pin);  
+void configureInput(const struct PinDescriptor *pin, bool pullup);
+void configureOutput(const struct PinDescriptor *pin);
 
 #endif
 

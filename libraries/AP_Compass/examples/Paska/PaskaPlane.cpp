@@ -16,6 +16,7 @@
 #include "NVState.h"
 #include "PWMOutput.h"
 #include "PPM.h"
+#include <AP_Progmem/AP_Progmem.h>
 #include <AP_HAL/AP_HAL.h>
 #include <AP_HAL_AVR/AP_HAL_AVR.h>
 #include <AP_InertialSensor/AP_InertialSensor.h>
@@ -43,12 +44,15 @@ AP_InertialSensor ins;
 // HW timer declarations
 //
 
-struct HWTimer hwTimer1 =
+const struct HWTimer hwTimer1 =
        { &TCCR1A, &TCCR1B, &ICR1, { &OCR1A, &OCR1B, &OCR1C } };
-struct HWTimer hwTimer3 =
+const struct HWTimer hwTimer3 =
        { &TCCR3A, &TCCR3B, &ICR3, { &OCR3A, &OCR3B, &OCR3C } };
-struct HWTimer hwTimer4 =
+const struct HWTimer hwTimer4 =
        { &TCCR4A, &TCCR4B, &ICR4, { &OCR4A, &OCR4B, &OCR4C } };
+
+const struct HWTimer *hwTimers[] = 
+  { &hwTimer1, &hwTimer3, &hwTimer4 };
 
 //
 // RC input
@@ -76,7 +80,7 @@ struct RxInputRecord tuningKnobInput = { { PortK, 3 } };
 
 #ifdef MEGAMINI
 
-struct PWMOutput pwmOutput[] = {
+const struct PWMOutput pwmOutput[] = {
   { { PortB, 6 }, &hwTimer1, COMnB },
   { { PortB, 5 }, &hwTimer1, COMnA },
   { { PortH, 5 }, &hwTimer4, COMnC },
@@ -89,7 +93,7 @@ struct PWMOutput pwmOutput[] = {
 
 #else
 
-struct PWMOutput pwmOutput[] = {
+const struct PWMOutput pwmOutput[] = {
   { { PortE, 4 }, &hwTimer3, COMnB },
   { { PortE, 5 }, &hwTimer3, COMnC },
   { { PortE, 3 }, &hwTimer3, COMnA },
@@ -2152,6 +2156,7 @@ void setup() {
 
   consoleNoteLn("Initializing servos");
 
+  pwmTimerInit(hwTimers, sizeof(hwTimers)/sizeof(struct HWTimer*));
   pwmOutputInitList(pwmOutput, sizeof(pwmOutput)/sizeof(struct PWMOutput));
 
   //
@@ -2164,7 +2169,7 @@ void setup() {
 
   ins.init(AP_InertialSensor::COLD_START, AP_InertialSensor::RATE_100HZ);
 
-  consolePrintLn(" done");
+  consoleNoteLn("  done");
   
   // LED output
 

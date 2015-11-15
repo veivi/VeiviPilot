@@ -22,7 +22,7 @@ const uint8_t pcIntMask[] = {
   1<<PCIE0, 1<<PCIE1, 1<<PCIE2
 };
 
-void pinOutputEnable(struct PinDescriptor *pin, bool output)
+void pinOutputEnable(const struct PinDescriptor *pin, bool output)
 {
   if(output)
     *(portTable[pin->port].ddr) |= 1<<(pin->index);
@@ -30,7 +30,7 @@ void pinOutputEnable(struct PinDescriptor *pin, bool output)
     *(portTable[pin->port].ddr) &= ~(1<<(pin->index));
 }  
 
-void setPinState(struct PinDescriptor *pin, uint8_t state)
+void setPinState(const struct PinDescriptor *pin, uint8_t state)
 {
   if(state > 0)
     *(portTable[pin->port].port) |= 1<<(pin->index);
@@ -38,18 +38,18 @@ void setPinState(struct PinDescriptor *pin, uint8_t state)
     *(portTable[pin->port].port) &= ~(1<<(pin->index));
 }
 
-uint8_t getPinState(struct PinDescriptor *pin)
+uint8_t getPinState(const struct PinDescriptor *pin)
 {
   return (*(portTable[pin->port].pin)>>(pin->index)) & 1;
 }
 
-void configureInput(struct PinDescriptor *pin, bool pullup)
+void configureInput(const struct PinDescriptor *pin, bool pullup)
 {
   pinOutputEnable(pin, false);
   setPinState(pin, pullup ? 1 : 0);
 }
 
-void configureOutput(struct PinDescriptor *pin)
+void configureOutput(const struct PinDescriptor *pin)
 {
   pinOutputEnable(pin, true);
 }

@@ -9,20 +9,19 @@ struct HWTimer {
   volatile uint8_t *TCCRA, *TCCRB;
   volatile uint16_t *ICR;
   volatile uint16_t *OCR[3]; // 0... 2 = A ... C
-  bool initDone;
 };
 
 struct PWMOutput {
   struct PinDescriptor pin;
-  struct HWTimer *timer;
+  const struct HWTimer *timer;
   PWM_Ch_t pwmCh; // COMnA / COMnB / COMnC
 };
 
-void pwmTimerInit(struct HWTimer *timer);
-void pwmEnable(struct PWMOutput *output);
-void pwmDisable(struct PWMOutput *output);
-void pwmOutputInit(struct PWMOutput *output);
-void pwmOutputInitList(struct PWMOutput output[], int num);
-void pwmOutputWrite(struct PWMOutput *output, uint16_t value);
+void pwmTimerInit(const struct HWTimer *timer[], int num);
+void pwmEnable(const struct PWMOutput *output);
+void pwmDisable(const struct PWMOutput *output);
+void pwmOutputInit(const struct PWMOutput *output);
+void pwmOutputInitList(const struct PWMOutput output[], int num);
+void pwmOutputWrite(const struct PWMOutput *output, uint16_t value);
 
 

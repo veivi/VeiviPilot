@@ -8,46 +8,42 @@ static const uint8_t outputModeMask[3] = { 1<<COM1A1, 1<<COM1B1, 1<<COM1C1 };
 
 #define OUTPUT 1
 
-void pwmTimerInit(struct HWTimer *timer)
+void pwmTimerInit(const struct HWTimer *timer[], int num)
 {
-   if(timer->initDone)
-      return;
-      
-   // WGM, prescaling
+  for(int i = 0; i < num; i++) { 
+    // WGM, prescaling
    
-   *(timer->TCCRA) = 1<<WGM11;
-   *(timer->TCCRB) = (1<<WGM13) | (1<<WGM12) | (1<<CS11);
+    *(timer[i]->TCCRA) = 1<<WGM11;
+    *(timer[i]->TCCRB) = (1<<WGM13) | (1<<WGM12) | (1<<CS11);
 
    // PWM frequency
    
-   *(timer->ICR) = TIMER_HZ/PWM_HZ - 1;
+   *(timer[i]->ICR) = TIMER_HZ/PWM_HZ - 1;
 
    // Output set to nil by default
 
    for(int i = 0; i < 3; i++)
-      *(timer->OCR[i]) = 0xFFFF;
-
-   timer->initDone = true;
+      *(timer[i]->OCR[i]) = 0xFFFF;
+  }
 }
 
-void pwmEnable(struct PWMOutput *output)
+void pwmEnable(const struct PWMOutput *output)
 {
    *(output->timer->TCCRA) |= outputModeMask[output->pwmCh];
 }
 
-void pwmDisable(struct PWMOutput *output)
+void pwmDisable(const struct PWMOutput *output)
 {
    *(output->timer->TCCRA) &= ~outputModeMask[output->pwmCh];
 }
 
-void pwmOutputInit(struct PWMOutput *output)
+void pwmOutputInit(const struct PWMOutput *output)
 {
-   pwmTimerInit(output->timer);
    pwmEnable(output);
    configureOutput(&output->pin);
 }
 
-void pwmOutputInitList(struct PWMOutput output[], int num)
+void pwmOutputInitList(const struct PWMOutput output[], int num)
 {
    for(int i = 0; i < num; i++)
       pwmOutputInit(&output[i]);
@@ -61,7 +57,7 @@ uint16_t constrain_period(uint16_t p) {
     else return p;
 }
 
-void pwmOutputWrite(struct PWMOutput *output, uint16_t value)
+void pwmOutputWrite(const struct PWMOutput *output, uint16_t value)
 {
    *(output->timer->OCR[output->pwmCh]) = constrain_period(value) << 1;
 }
