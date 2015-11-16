@@ -19,13 +19,30 @@ void consoleNoteLn(const char *s)
   newline();
 }
 
+void consoleNote_P(const prog_char_t *s)
+{
+  consolePrint("// ");
+  consolePrint_P(s);
+}
+
+void consoleNoteLn_P(const prog_char_t *s)
+{
+  consoleNote_P(s);
+  newline();
+}
+
+void consolevNotef(const char *s, va_list argp)
+{
+  consolePrint("// ");
+  consolevPrintf(s, argp);
+}
+
 void consoleNotef(const char *s, ...)
 {
   va_list argp;
 
   va_start(argp, s);
-  consolePrint("// ");
-  consolevPrintf(s, argp);
+  consolevNotef(s, argp);
   va_end(argp);
 }
 
@@ -34,8 +51,7 @@ void consoleNotefLn(const char *s, ...)
   va_list argp;
 
   va_start(argp, s);
-  consolePrint("// ");
-  consolevPrintf(s, argp);
+  consolevNotef(s, argp);
   va_end(argp);
   
   newline();
@@ -48,6 +64,17 @@ void consolePrintf(const char *s, ...)
   va_start(argp, s);
   consolevPrintf(s, argp);
   va_end(argp);
+}
+
+void consolePrintfLn(const char *s, ...)
+{
+  va_list argp;
+
+  va_start(argp, s);
+  consolevPrintf(s, argp);
+  va_end(argp);
+
+  newline();
 }
 
 void consolevPrintf(const char *s, va_list argp)
@@ -67,6 +94,16 @@ void consolePrint(const char *s)
     Serial.print(s);
 #else
     hal.console->printf("%s", s);
+#endif
+}
+
+void consolePrint_P(const prog_char_t *s)
+{
+  if(talk)
+#ifdef ARDUINO
+    Serial.print(s);
+#else
+    hal.console->printf_P(s);
 #endif
 }
 

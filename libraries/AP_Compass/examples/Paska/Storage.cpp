@@ -4,9 +4,8 @@
 
 extern const AP_HAL::HAL& hal;
 
-#define EXT_EEPROM_PAGE (1L<<7)
+#define EXT_EEPROM_PAGE (1L<<6)
 #define PAGE_MASK ~(EXT_EEPROM_PAGE-1)
-
 #define EEPROM_I2C_ADDR 80
 
 extern NewI2C I2c;

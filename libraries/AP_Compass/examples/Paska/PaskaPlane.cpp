@@ -17,17 +17,21 @@
 #include "PWMOutput.h"
 #include "PPM.h"
 #include <AP_Progmem/AP_Progmem.h>
+#include <AP_BoardConfig/AP_BoardConfig.h>
 #include <AP_HAL/AP_HAL.h>
 #include <AP_HAL_AVR/AP_HAL_AVR.h>
 #include <AP_InertialSensor/AP_InertialSensor.h>
 #include <AP_AHRS/AP_AHRS.h>
 
+AP_BoardConfig BoardConfig;
+
 const AP_HAL::HAL& hal = AP_HAL_BOARD_DRIVER;
 AP_HAL::BetterStream* cliSerial;
 
+AP_Baro barometer;
 AP_InertialSensor ins;
-
-// AP_AHRS_DCM ahrs {ins,  barometer, gps};
+AP_GPS gps;
+AP_AHRS_DCM ahrs {ins,  barometer, gps};
 
 //
 // HW config
@@ -50,7 +54,7 @@ const struct HWTimer *hwTimers[] =
   { &hwTimer1, &hwTimer3, &hwTimer4 };
 
 //
-// LED control
+// LED output
 //
 
 const struct PinDescriptor led[] = {{ PortA, 3 }, { PortA, 4 }, { PortA, 5 }};
@@ -201,76 +205,87 @@ struct RxInputRecord rpmInput = { rpmPin };
 
 void printParams(struct ParamRecord *p)
 {
-  consoleNote("  24L256 addr = ");
+  consoleNote_P(PSTR("  24L256 addr = "));
   consolePrint(p->i2c_24L256);
-  consolePrint(" clk div = ");
+  consolePrint_P(PSTR(" clk div = "));
   consolePrintLn(p->clk_24L256);
-  consoleNote("  AS5048B addr = ");
+  consoleNote_P(PSTR("  AS5048B addr = "));
   consolePrint(p->i2c_5048B);
-  consolePrint(" ref = ");
+  consolePrint_P(PSTR(" ref = "));
   consolePrint(p->alphaRef);
-  consolePrint(" clk div = ");
+  consolePrint_P(PSTR(" clk div = "));
   consolePrintLn(p->clk_5048B);
-  consoleNoteLn("  Autostick/pusher");
-  consoleNote("    Inner P = ");
+  consoleNoteLn_P(PSTR("  Autostick/pusher"));
+  consoleNote_P(PSTR("    Inner P = "));
   consolePrint(p->i_Kp, 4);
-  consolePrint(" I = ");
-  consolePrint(p->i_Ki, 4);;
-  consolePrint(" D = ");
+  consolePrint_P(PSTR(" I = "));
+  consolePrint(p->i_Ki, 4);
+  consolePrint_P(PSTR(" D = "));
   consolePrint(p->i_Kd, 4);
-  consolePrint(" Outer P = ");
+  consolePrint_P(PSTR(" Outer P = "));
   consolePrintLn(p->o_P, 4);
-  consoleNoteLn("  Stabilizer");
-  consoleNote("    P = ");
+  consoleNoteLn_P(PSTR("  Stabilizer"));
+  consoleNote_P(PSTR("    P = "));
   consolePrint(p->s_Kp, 4);
-  consolePrint(" I = ");
+  consolePrint_P(PSTR(" I = "));
   consolePrint(p->s_Ki, 4);
-  consolePrint(" D = ");
+  consolePrint_P(PSTR(" D = "));
   consolePrintLn(p->s_Kd, 4);
-  consoleNote("  Alpha min = ");
+  consoleNote_P(PSTR("  Alpha min = "));
   consolePrint(p->alphaMin*360);
-  consolePrint("  max = ");
+  consolePrint_P(PSTR("  max = "));
   consolePrintLn(p->alphaMax*360);
-  consoleNoteLn("  Elevator");
-  consoleNote("    deflection = ");
+  consoleNoteLn_P(PSTR("  Elevator"));
+  consoleNote_P(PSTR("    deflection = "));
   consolePrint(p->elevDefl*90);
-  consolePrint(" neutral = ");
+  consolePrint_P(PSTR(" neutral = "));
   consolePrintLn(p->elevNeutral*90);
-  consoleNoteLn("  Aileron");
-  consoleNote("    deflection = ");
+  consoleNoteLn_P(PSTR("  Aileron"));
+  consoleNote_P(PSTR("    deflection = "));
   consolePrint(p->aileDefl*90);
-  consolePrint(" neutral = ");
+  consolePrint_P(PSTR(" neutral = "));
   consolePrintLn(p->aileNeutral*90);
 }
 
 void dumpParams(struct ParamRecord *p)
 {
-  consolePrint("24l256_addr ");
+  consolePrint_P(PSTR("24l256_addr "));
   consolePrint(p->i2c_24L256);
-  consolePrint("; 24l256_clk ");
+  consolePrint_P(PSTR("; 24l256_clk "));
   consolePrint(p->clk_24L256);
-  consolePrint("; 5048b_addr ");
+  consolePrint_P(PSTR("; 5048b_addr "));
   consolePrint(p->i2c_5048B);
-  consolePrint("; 5048b_clk ");
+  consolePrint_P(PSTR("; 5048b_clk "));
   consolePrint(p->clk_5048B);
-  consolePrint("; 5048b_ref ");
+  consolePrint_P(PSTR("; 5048b_ref "));
   consolePrint(p->alphaRef);
-  consolePrint("; inner_pid "); consolePrint(p->i_Kp, 4); consolePrint(" "); consolePrint(p->i_Ki, 4);  consolePrint(" "); consolePrint(p->i_Kd, 4);
-  consolePrint("; outer_p "); consolePrint(p->o_P);
-  consolePrint("; stabilizer_pid "); consolePrint(p->s_Kp, 4); consolePrint(" "); consolePrint(p->s_Ki, 4);  consolePrint(" "); consolePrint(p->s_Kd, 4);
-  consolePrint("; min "); consolePrint(p->alphaMin*360);
-  consolePrint("; max "); consolePrint(p->alphaMax*360);
-  consolePrint("; edefl "); consolePrint(p->elevDefl*90);
-  consolePrint("; eneutral "); consolePrint(p->elevNeutral*90);
-  consolePrint("; ezero "); consolePrint(p->elevZero*90);
-  consolePrint("; adefl "); consolePrint(p->aileDefl*90);
-  consolePrint("; aneutral "); consolePrint(p->aileNeutral*90);
-  consolePrint("; azero "); consolePrint(p->aileZero*90);
-  consolePrint("; fstep "); consolePrint(p->flapStep*90);
-  consolePrint("; fneutral "); consolePrint(p->flapNeutral*90);
-  consolePrint("; bdefl "); consolePrint(p->brakeDefl*90);
-  consolePrint("; bneutral "); consolePrint(p->brakeNeutral*90);
-  consolePrint("; filtlen "); consolePrint(p->filtLen);
+  consolePrint_P(PSTR("; inner_pid "));
+  consolePrint(p->i_Kp, 4);
+  consolePrint(" ");
+  consolePrint(p->i_Ki, 4);
+  consolePrint(" ");
+  consolePrint(p->i_Kd, 4);
+  consolePrint_P(PSTR("; outer_p "));
+  consolePrint(p->o_P);
+  consolePrint_P(PSTR("; stabilizer_pid "));
+  consolePrint(p->s_Kp, 4);
+  consolePrint(" ");
+  consolePrint(p->s_Ki, 4);
+  consolePrint(" ");
+  consolePrint(p->s_Kd, 4);
+  consolePrint_P(PSTR("; min ")); consolePrint(p->alphaMin*360);
+  consolePrint_P(PSTR("; max ")); consolePrint(p->alphaMax*360);
+  consolePrint_P(PSTR("; edefl ")); consolePrint(p->elevDefl*90);
+  consolePrint_P(PSTR("; eneutral ")); consolePrint(p->elevNeutral*90);
+  consolePrint_P(PSTR("; ezero ")); consolePrint(p->elevZero*90);
+  consolePrint_P(PSTR("; adefl ")); consolePrint(p->aileDefl*90);
+  consolePrint_P(PSTR("; aneutral ")); consolePrint(p->aileNeutral*90);
+  consolePrint_P(PSTR("; azero ")); consolePrint(p->aileZero*90);
+  consolePrint_P(PSTR("; fstep ")); consolePrint(p->flapStep*90);
+  consolePrint_P(PSTR("; fneutral ")); consolePrint(p->flapNeutral*90);
+  consolePrint_P(PSTR("; bdefl ")); consolePrint(p->brakeDefl*90);
+  consolePrint_P(PSTR("; bneutral ")); consolePrint(p->brakeNeutral*90);
+  consolePrint_P(PSTR("; filtlen ")); consolePrint(p->filtLen);
 }
 
 const uint8_t addr5048B_c = 0x40;
@@ -452,14 +467,15 @@ bool readPressure(int16_t *result)
   return true;
 }
 
-typedef enum { c_, c_adefl, c_edefl, c_clear, c_dump, c_min, c_max, c_zero,
-c_eneutral, c_aneutral, c_store, c_report, c_stop, c_cycle,
-           c_read, c_write, c_5048b_addr, c_5048b_read, c_start, c_init, c_filtlen,
-            c_params, c_defaults, c_reset, c_24l256_addr, c_24l256_clk, c_5048b_clk, c_center,
-           c_loop, c_stamp, c_model, c_alpha, c_flapneutral, c_flapstep, c_backup, c_echo,
-           c_ezero, c_azero, c_5048b_ref, c_bdefl, c_bneutral, c_rpm, c_baud, c_dumpz,
-            c_stabilizer_pid, c_stabilizer_pid_zn, c_stabilizer_pi_zn, c_outer_p, 
-          c_inner_pid, c_inner_pid_zn, c_inner_pi_zn, c_arm, c_disarm, c_test, c_talk } command_t;
+typedef enum {
+  c_, c_adefl, c_edefl, c_clear, c_dump, c_min, c_max, c_zero,
+  c_eneutral, c_aneutral, c_store, c_report, c_stop, c_cycle,
+  c_read, c_write, c_5048b_addr, c_5048b_read, c_start, c_init, c_filtlen,
+  c_params, c_defaults, c_reset, c_24l256_addr, c_24l256_clk, c_5048b_clk, c_center,
+  c_loop, c_stamp, c_model, c_alpha, c_flapneutral, c_flapstep, c_backup, c_echo,
+  c_ezero, c_azero, c_5048b_ref, c_bdefl, c_bneutral, c_rpm, c_baud, c_dumpz,
+  c_stabilizer_pid, c_stabilizer_pid_zn, c_stabilizer_pi_zn, c_outer_p, 
+  c_inner_pid, c_inner_pid_zn, c_inner_pi_zn, c_arm, c_disarm, c_test, c_talk } command_t;
 
 struct command {
   const char *c_string;
@@ -528,7 +544,7 @@ const struct command commands[] = {
 
 bool looping;
     
-const int maxCmdLen = 100;
+const int maxCmdLen = 40;
 char cmdBuf[maxCmdLen];
 int cmdBufLen;
 
@@ -549,36 +565,36 @@ int indexOf(const char *s, const char c)
   return indexOf(s, c, 0);
 }
     
-void executeCommand(const char *cmdBuf, int cmdBufLen)
+void executeCommand(const char *buf, int bufLen)
 {
   if(echoEnabled)
-    consolePrintf("\r// %% %s          \n", cmdBuf);  
+    consolePrintf("\r// %% %s          \n", buf);  
   
   const int maxParams = 8;
 
-  int index = 0, prevIndex = 0, numParams = 0, tokenLen = cmdBufLen;
+  int index = 0, prevIndex = 0, numParams = 0, tokenLen = bufLen;
   float param[maxParams];
 
   for(int i = 0; i < maxParams; i++)
     param[i] = 0.0;
 
-  if((index = indexOf(cmdBuf, ' ')) > 0) {
+  if((index = indexOf(buf, ' ')) > 0) {
     tokenLen = index;
     
     do {
       prevIndex = index;
     
-      index = indexOf(cmdBuf, ' ', index+1);
+      index = indexOf(buf, ' ', index+1);
       
       if(index < 0)
-        index = cmdBufLen;
+        index = bufLen;
         
-      float value = 0.0, fract = 0.0;
+      float value = 0.0;
       int exponent = 0;
       bool sign = false, deci = false;
 
       for(int i = prevIndex+1; i < index; i++) {
-        char c = cmdBuf[i];
+        char c = buf[i];
 
         switch(c) {
           case '-':
@@ -608,7 +624,7 @@ void executeCommand(const char *cmdBuf, int cmdBufLen)
             break;
             
           default:
-            consoleNote("weird char = ");
+            consoleNote_P(PSTR("weird char = "));
             consolePrintLn(c);
         }
       }
@@ -618,13 +634,13 @@ void executeCommand(const char *cmdBuf, int cmdBufLen)
     
       if(numParams < maxParams)
         param[numParams++] = value;
-    } while(index < cmdBufLen);
+    } while(index < bufLen);
   }
   
   int j = 0;
   
   while(commands[j].c_token != c_) {
-    if(!strncmp(cmdBuf, commands[j].c_string, tokenLen))
+    if(!strncmp(buf, commands[j].c_string, tokenLen))
       break;
     j++;
   }
@@ -636,19 +652,19 @@ void executeCommand(const char *cmdBuf, int cmdBufLen)
     
   case c_disarm:
     armed = false;
-    consoleNoteLn("We're DISARMED");
+    consoleNoteLn_P(PSTR("We're DISARMED"));
     break;
     
   case c_talk:
     talk = true;
-    consoleNoteLn("Hello world");
+    consoleNoteLn_P(PSTR("Hello world"));
     break;
     
   case c_test:
     if(numParams > 0)
       stateRecord.testChannel = param[0];
     else {
-      consoleNote("Current test channel = ");
+      consoleNote_P(PSTR("Current test channel = "));
       consolePrintLn(stateRecord.testChannel);
     }
     break;
@@ -663,19 +679,19 @@ void executeCommand(const char *cmdBuf, int cmdBufLen)
 
     aileController.setPID(paramRecord.s_Kp, paramRecord.s_Ki, paramRecord.s_Kd);
 
-    consoleNote("Stabilizer P = ");
+    consoleNote_P(PSTR("Stabilizer P = "));
     consolePrint(paramRecord.s_Kp);
-    consolePrint(", I = ");
+    consolePrint_P(PSTR(", I = "));
     consolePrint(paramRecord.s_Ki);
-    consolePrint(", D = ");
+    consolePrint_P(PSTR(", D = "));
     consolePrintLn(paramRecord.s_Kd);    
     break;
     
   case c_stabilizer_pid_zn:
     if(numParams > 1) {
-      consoleNote("Stabilizer Z-N PID Ku, Tu = ");
+      consoleNote_P(PSTR("Stabilizer Z-N PID Ku, Tu = "));
       consolePrint(param[0]);
-      consolePrint(", ");
+      consolePrint_P(PSTR(", "));
       consolePrintLn(param[1]);
     
       aileController.setZieglerNicholsPID(param[0], param[1]);
@@ -684,29 +700,29 @@ void executeCommand(const char *cmdBuf, int cmdBufLen)
       paramRecord.s_Ki = aileController.getI();
       paramRecord.s_Kd = aileController.getD();
 
-      consoleNote("  Resulting P = ");
+      consoleNote_P(PSTR("  Resulting P = "));
       consolePrint(paramRecord.s_Kp);
-      consolePrint(", I = ");
+      consolePrint_P(PSTR(", I = "));
       consolePrint(paramRecord.s_Ki);
-      consolePrint(", D = ");
+      consolePrint_P(PSTR(", D = "));
       consolePrintLn(paramRecord.s_Kd);
     } else {
       float Ku, Tu;
       aileController.getZieglerNicholsPID(&Ku, &Tu);
-      consoleNote("Current stabilizer ");
+      consoleNote_P(PSTR("Current stabilizer "));
       consolePrint(aileController.getD() > 0.0 ? "PID" : "PI");
-      consolePrint(" Ku, Tu = ");
+      consolePrint_P(PSTR(" Ku, Tu = "));
       consolePrint(Ku, 4);
-      consolePrint(", ");
+      consolePrint_P(PSTR(", "));
       consolePrintLn(Tu, 4);      
     }
     break;
     
   case c_stabilizer_pi_zn:
     if(numParams > 1) {
-      consoleNote("Stabilizer Z-N PI Ku, Tu = ");
+      consoleNote_P(PSTR("Stabilizer Z-N PI Ku, Tu = "));
       consolePrint(param[0]);
-      consolePrint(", ");
+      consolePrint_P(PSTR(", "));
       consolePrintLn(param[1]);
     
       aileController.setZieglerNicholsPI(param[0], param[1]);
@@ -715,11 +731,11 @@ void executeCommand(const char *cmdBuf, int cmdBufLen)
       paramRecord.s_Ki = aileController.getI();
       paramRecord.s_Kd = aileController.getD();
 
-      consoleNote("  Resulting P = ");
+      consoleNote_P(PSTR("  Resulting P = "));
       consolePrint(paramRecord.s_Kp);
-      consolePrint(", I = ");
+      consolePrint_P(PSTR(", I = "));
       consolePrint(paramRecord.s_Ki);
-      consolePrint(", D = ");
+      consolePrint_P(PSTR(", D = "));
       consolePrintLn(paramRecord.s_Kd);
     }
     break;
@@ -732,11 +748,11 @@ void executeCommand(const char *cmdBuf, int cmdBufLen)
     if(numParams > 2)
       paramRecord.i_Kd = param[2];
 
-    consoleNote("Autostick/Pusher inner P = ");
+    consoleNote_P(PSTR("Autostick/Pusher inner P = "));
     consolePrint(paramRecord.i_Kp);
-    consolePrint(", I = ");
+    consolePrint_P(PSTR(", I = "));
     consolePrint(paramRecord.i_Ki);
-    consolePrint(", D = ");
+    consolePrint_P(PSTR(", D = "));
     consolePrintLn(paramRecord.i_Kd);
     
     elevController.setPID(paramRecord.i_Kp, paramRecord.i_Ki, paramRecord.i_Kd);
@@ -745,9 +761,9 @@ void executeCommand(const char *cmdBuf, int cmdBufLen)
     
   case c_inner_pid_zn:
     if(numParams > 1) {
-      consoleNote("Autostick/Pusher inner Z-N PID Ku, Tu = ");
+      consoleNote_P(PSTR("Autostick/Pusher inner Z-N PID Ku, Tu = "));
       consolePrint(param[0]);
-      consolePrint(", ");
+      consolePrint_P(PSTR(", "));
       consolePrintLn(param[1]);
     
       elevController.setZieglerNicholsPID(param[0], param[1]);
@@ -757,29 +773,29 @@ void executeCommand(const char *cmdBuf, int cmdBufLen)
       paramRecord.i_Ki = elevController.getI();
       paramRecord.i_Kd = elevController.getD();
 
-      consoleNote("  Resulting P = ");
+      consoleNote_P(PSTR("  Resulting P = "));
       consolePrint(paramRecord.i_Kp);
-      consolePrint(", I = ");
+      consolePrint_P(PSTR(", I = "));
       consolePrint(paramRecord.i_Ki);
-      consolePrint(", D = ");
+      consolePrint_P(PSTR(", D = "));
       consolePrintLn(paramRecord.i_Kd);
     } else {
       float Ku, Tu;
       elevController.getZieglerNicholsPID(&Ku, &Tu);
-      consoleNote("Current autostick ");
+      consoleNote_P(PSTR("Current autostick "));
       consolePrint(elevController.getD() > 0.0 ? "PID" : "PI");
-      consolePrint(" Ku, Tu = ");
+      consolePrint_P(PSTR(" Ku, Tu = "));
       consolePrint(Ku, 4);
-      consolePrint(", ");
+      consolePrint_P(PSTR(", "));
       consolePrintLn(Tu, 4);      
     }
     break;
     
   case c_inner_pi_zn:
     if(numParams > 1) {
-      consoleNote("Autostick/Pusher inner Z-N PI Ku, Tu = ");
+      consoleNote_P(PSTR("Autostick/Pusher inner Z-N PI Ku, Tu = "));
       consolePrint(param[0]);
-      consolePrint(", ");
+      consolePrint_P(PSTR(", "));
       consolePrintLn(param[1]);
     
       elevController.setZieglerNicholsPI(param[0], param[1]);
@@ -789,11 +805,11 @@ void executeCommand(const char *cmdBuf, int cmdBufLen)
       paramRecord.i_Ki = elevController.getI();
       paramRecord.i_Kd = elevController.getD();
 
-      consoleNote("  Resulting P = ");
+      consoleNote_P(PSTR("  Resulting P = "));
       consolePrint(paramRecord.i_Kp);
-      consolePrint(", I = ");
+      consolePrint_P(PSTR(", I = "));
       consolePrint(paramRecord.i_Ki);
-      consolePrint(", D = ");
+      consolePrint_P(PSTR(", D = "));
       consolePrintLn(paramRecord.i_Kd);
     }
     break;
@@ -802,7 +818,7 @@ void executeCommand(const char *cmdBuf, int cmdBufLen)
     if(numParams > 0)
       autoAlphaP = paramRecord.o_P = param[0];
 
-    consoleNote("Autostick outer P = ");
+    consoleNote_P(PSTR("Autostick outer P = "));
     consolePrintLn(paramRecord.o_P);
     break;
     
@@ -871,13 +887,13 @@ void executeCommand(const char *cmdBuf, int cmdBufLen)
     break;
     
   case c_store:
-    consoleNoteLn("Params & NV state stored");
+    consoleNoteLn_P(PSTR("Params & NV state stored"));
     storeParams();
     storeNVState();
     break;
 
   case c_dump:
-    consoleNoteLn("Log contents:");
+    consoleNoteLn_P(PSTR("Log contents:"));
     if(numParams > 0)
       logDump(param[0]);
     else
@@ -885,20 +901,20 @@ void executeCommand(const char *cmdBuf, int cmdBufLen)
     break;
     
   case c_dumpz:
-    consoleNoteLn("Compressed log contents:");
+    consoleNoteLn_P(PSTR("Compressed log contents:"));
     //    logDumpBinary();
     break;
     
   case c_backup:
-    consoleNoteLn("Param backup");
+    consoleNoteLn_P(PSTR("Param backup"));
     consolePrintLn("//");
-    consoleNote("MODEL ");
+    consoleNote_P(PSTR("MODEL "));
     consolePrintLn(stateRecord.model);
     consolePrintLn("//");
     consolePrintLn("");
-    consolePrint("echo 0; model ");
+    consolePrint_P(PSTR("echo 0; model "));
     consolePrint(stateRecord.model);
-    consolePrint("; ");
+    consolePrint_P(PSTR("; "));
     dumpParams(&paramRecord);
     consolePrintLn("; echo 1; store");
     consolePrintLn("");
@@ -906,19 +922,19 @@ void executeCommand(const char *cmdBuf, int cmdBufLen)
 
   case c_stamp:
     if(numParams > 0) {
-      consoleNote("Log stamp set to ");
+      consoleNote_P(PSTR("Log stamp set to "));
       consolePrintLn(param[0]);  
       stateRecord.logStamp = param[0];
       storeNVState();
     } else {
-      consoleNote("Current log stamp is ");
+      consoleNote_P(PSTR("Current log stamp is "));
       consolePrintLn(stateRecord.logStamp);  
     }
     break;
 
   case c_model:
     if(numParams < 1) {
-      consoleNote("Current model is ");
+      consoleNote_P(PSTR("Current model is "));
       consolePrintLn(stateRecord.model); 
     } else { 
       if(param[0] > MAX_MODELS-1)
@@ -932,7 +948,7 @@ void executeCommand(const char *cmdBuf, int cmdBufLen)
     if(numParams > 0 && param[0] < 1.0) 
       echoEnabled = false;
     else {
-      consoleNoteLn("Echo enabled");
+      consoleNoteLn_P(PSTR("Echo enabled"));
       echoEnabled = true;
     }
     break;
@@ -962,47 +978,47 @@ void executeCommand(const char *cmdBuf, int cmdBufLen)
     break;
 
   case c_report:
-    consoleNote("Alpha = ");
+    consoleNote_P(PSTR("Alpha = "));
     consolePrint(360*alpha);
     if(alphaFailed)
       consolePrintLn(" FAIL");
     else
       consolePrintLn(" OK");
       
-    consoleNoteLn("Cycle time (ms)");
-    consoleNote("  median     = ");
+    consoleNoteLn_P(PSTR("Cycle time (ms)"));
+    consoleNote_P(PSTR("  median     = "));
     consolePrintLn(controlCycle*1e3);
-    consoleNote("  min        = ");
+    consoleNote_P(PSTR("  min        = "));
     consolePrintLn(cycleMin*1e3);
-    consoleNote("  max        = ");
+    consoleNote_P(PSTR("  max        = "));
     consolePrintLn(cycleMax*1e3);
-    consoleNote("  mean       = ");
+    consoleNote_P(PSTR("  mean       = "));
     consolePrintLn(cycleMean*1e3);
-    consoleNote("  cum. value = ");
+    consoleNote_P(PSTR("  cum. value = "));
     consolePrintLn(cycleCum*1e3);
-    consoleNote("Warning flags :");
+    consoleNote_P(PSTR("Warning flags :"));
     if(pciWarn)
-      consolePrint(" SPURIOUS_PCINT");
+      consolePrint_P(PSTR(" SPURIOUS_PCINT"));
     if(alphaWarn)
-      consolePrint(" ALPHA_SENSOR");
+      consolePrint_P(PSTR(" ALPHA_SENSOR"));
     if(ppmWarnShort)
-      consolePrint(" PPM_SHORT");
+      consolePrint_P(PSTR(" PPM_SHORT"));
     if(ppmWarnSlow)
-      consolePrint(" PPM_SLOW");
+      consolePrint_P(PSTR(" PPM_SLOW"));
     if(eepromWarn)
-      consolePrint(" EEPROM");
+      consolePrint_P(PSTR(" EEPROM"));
     if(eepromFailed)
-      consolePrint(" EEPROM_FAILED");
+      consolePrint_P(PSTR(" EEPROM_FAILED"));
     if(alphaBuffer.warn)
-      consolePrint(" ALPHA_BUFFER");
+      consolePrint_P(PSTR(" ALPHA_BUFFER"));
     if(pusher.warn)
-      consolePrint(" PUSHER");
+      consolePrint_P(PSTR(" PUSHER"));
     if(elevController.warn)
-      consolePrint(" AUTOSTICK");
+      consolePrint_P(PSTR(" AUTOSTICK"));
       
     consolePrintLn("");
 
-    consoleNote("Log write bandwidth = ");
+    consoleNote_P(PSTR("Log write bandwidth = "));
     consolePrint(logBandWidth);
     consolePrintLn(" bytes/sec");
     break;
@@ -1011,7 +1027,7 @@ void executeCommand(const char *cmdBuf, int cmdBufLen)
     pciWarn = alphaWarn = alphaFailed = pusher.warn = elevController.warn
       = alphaBuffer.warn = eepromWarn = eepromFailed = ppmWarnShort
       = ppmWarnSlow = false;
-    consoleNoteLn("Warning flags reset");
+    consoleNoteLn_P(PSTR("Warning flags reset"));
     break;
     
   case c_5048b_addr:
@@ -1028,7 +1044,7 @@ void executeCommand(const char *cmdBuf, int cmdBufLen)
     
   case c_rpm:
     stateRecord.logRPM = param[0] > 0.5 ? true : false;
-    consoleNote("RPM logging ");
+    consoleNote_P(PSTR("RPM logging "));
     consolePrintLn(stateRecord.logRPM ? "ENABLED" : "DISABLED");
     rpmMeasure(stateRecord.logRPM);
     storeNVState();
@@ -1040,7 +1056,7 @@ void executeCommand(const char *cmdBuf, int cmdBufLen)
       break;
       
    case c_params:
-      consoleNote("SETTINGS (MODEL ");
+     consoleNote_P(PSTR("SETTINGS (MODEL "));
       consolePrint(stateRecord.model);
       consolePrintLn(")");
       printParams(&paramRecord);
@@ -1199,18 +1215,21 @@ void sensorTask(uint32_t currentMicros)
 
   // Attitude
 
-  ins.update();
-
+  ins.wait_for_sample();
+  
+  ahrs.update();
+  
   Vector3f gyro = ins.get_gyro();
   
   rollRate = -gyro.x * 180/PI / 360;
   pitchRate = -gyro.y * 180/PI / 360;
 
+  rollAngle = -ahrs.roll * 180/PI;
+  pitchAngle = -ahrs.pitch * 180/PI;
+  heading = ahrs.yaw * 180/PI;
+  
   /*
   acc = (float) imu.accSmooth[2] / (1<<9);
-  rollAngle = (float) att.angle[0] / 10;
-  pitchAngle = (float) -att.angle[1] / 10;
-  heading = (float) att.heading;
   */
 }
 
@@ -1306,7 +1325,7 @@ void measurementTask(uint32_t currentMicros)
     
   if(cycleTimeCounter > 5) {
     controlCycle = cycleTimeFilter.output();
-    consoleNote("Effective cycle time is ");
+    consoleNote_P(PSTR("Effective cycle time is "));
     consolePrintLn(controlCycle*1e3);
     cycleTimesDone = true;
     return;
@@ -1316,7 +1335,7 @@ void measurementTask(uint32_t currentMicros)
     qsort((void*) cycleTimeStore, cycleTimeWindow, sizeof(float), compareFloat);
     controlCycle = cycleTimeStore[cycleTimeWindow/2];
     
-    consoleNote("Cycle time (min, median, max) = ");
+    consoleNote_P(PSTR("Cycle time (min, median, max) = "));
     consolePrint(cycleTimeStore[0]*1e3);
     consolePrint(", ");
     consolePrint(controlCycle*1e3);
@@ -1378,13 +1397,13 @@ void configurationTask(uint32_t currentMicros)
         if(armed) {   
           if(!pulsePolarity) {
             if(!mode.sensorFailSafe) {
-              consoleNoteLn("Failsafe ENABLED");
+              consoleNoteLn_P(PSTR("Failsafe ENABLED"));
               mode.sensorFailSafe = true;
             } else {
               logDisable();
             }
           } else {
-            consoleNoteLn("Climbing out");
+            consoleNoteLn_P(PSTR("Climbing out"));
             gearOutput = 1;
             if(flapOutput > 2)
               flapOutput = 2;
@@ -1400,14 +1419,14 @@ void configurationTask(uint32_t currentMicros)
     if(switchState != switchStateLazy) {
       switchStateLazy = switchState;
         
-      consoleNote("Lazy switch ");
+      consoleNote_P(PSTR("Lazy switch "));
       consolePrintLn(switchState ? "ON" : "OFF");
 
       if(switchState) {
         if(armed && !logEnabled)
           logEnable();
           
-        consoleNoteLn("Wing leveler ENABLED");
+        consoleNoteLn_P(PSTR("Wing leveler ENABLED"));
         mode.wingLeveler = true;
       } else {
         if(armed && logEnabled)
@@ -1419,37 +1438,37 @@ void configurationTask(uint32_t currentMicros)
       if(pulsePolarity) {
         if(mode.sensorFailSafe) {
             mode.sensorFailSafe = false;
-            consoleNoteLn("Failsafe DISABLED");
+            consoleNoteLn_P(PSTR("Failsafe DISABLED"));
             
         } else if(!armed) {
-          consoleNoteLn("We're now ARMED");
+          consoleNoteLn_P(PSTR("We're now ARMED"));
           armed = true;
           talk = false;
           
         } else if(testMode) {
-          consoleNote("Test channel incremented to ");
+          consoleNote_P(PSTR("Test channel incremented to "));
           consolePrintLn(++stateRecord.testChannel);
 
         } else if(gearOutput > 0) {
           if(flapOutput > 0) {
             flapOutput--;
-            consoleNote("Flaps RETRACTED to ");
+            consoleNote_P(PSTR("Flaps RETRACTED to "));
             consolePrintLn(flapOutput);
           }
         } else  {
-          consoleNoteLn("Gear UP");
+          consoleNoteLn_P(PSTR("Gear UP"));
           gearOutput = 1;
         }
       } else {
         if(testMode) {
-          consoleNoteLn("Test channel RESET");
+          consoleNoteLn_P(PSTR("Test channel RESET"));
           // stateRecord.testChannel = 0;
         } else if(gearOutput > 0) {
-          consoleNoteLn("Gear DOWN");
+          consoleNoteLn_P(PSTR("Gear DOWN"));
           gearOutput = 0;
         } else if(flapOutput < 3) {
           flapOutput++;
-          consoleNote("Flaps EXTENDED to ");
+          consoleNote_P(PSTR("Flaps EXTENDED to "));
           consolePrintLn(flapOutput);
         }
       }
@@ -1466,12 +1485,12 @@ void configurationTask(uint32_t currentMicros)
   if(!testMode && parameter > 0.5) {
     testMode = true;
 
-    consoleNoteLn("Test mode ENABLED");
+    consoleNoteLn_P(PSTR("Test mode ENABLED"));
     
   } else if(testMode && parameter < 0.1) {
     testMode = false;
     
-    consoleNoteLn("Test mode DISABLED");
+    consoleNoteLn_P(PSTR("Test mode DISABLED"));
   }
 
   if(mode.wingLeveler && abs(aileStick) > 0.2)
@@ -1499,12 +1518,12 @@ void configurationTask(uint32_t currentMicros)
 
   if(mode.bankLimiter && aileStick < -0.90 && elevStick > 0.90) {
     if(!mode.rxFailSafe) {
-      consoleNoteLn("Receiver failsafe mode ENABLED");
+      consoleNoteLn_P(PSTR("Receiver failsafe mode ENABLED"));
       mode.rxFailSafe = true;
       mode.sensorFailSafe = false;
     }
   } else if(mode.rxFailSafe) {
-    consoleNoteLn("Receiver failsafe mode DISABLED");
+    consoleNoteLn_P(PSTR("Receiver failsafe mode DISABLED"));
     mode.rxFailSafe = false;
   }
       
@@ -1670,7 +1689,7 @@ void loopTask(uint32_t currentMicros)
   }
 }
 
-const int serialBufLen = 1<<7;
+const int serialBufLen = 1<<6;
 char serialBuf[serialBufLen];
 int serialBufIndex = 0;
 
@@ -1695,7 +1714,7 @@ void communicationTask(uint32_t currentMicros)
 	looping = false;
 	executeCommandSeries(serialBuf, serialBufIndex);
 	serialBufIndex = 0;
-	controlCycleEnded = -1.0;
+	controlCycleEnded = -1;
 
       } else if(c == '\b') {
 	if(serialBufIndex > 0) {
@@ -1713,6 +1732,7 @@ void communicationTask(uint32_t currentMicros)
   }
 }
 
+/*
 const int gpsBufLen = 1<<7, gpsMaxParam = 1<<5;
 char gpsBuf[gpsBufLen], gpsMsg[gpsBufLen], gpsParam[gpsMaxParam+1];
 int gpsBufIndex = 0, gpsMsgLen = 0;
@@ -1811,6 +1831,7 @@ void gpsInput(const char *buf, int len)
     }
   }
 }
+*/
 
 void gpsTask(uint32_t currentMicros)
 {
@@ -2085,21 +2106,25 @@ int scheduler(uint32_t currentMicros)
 void setup() {
   // Serial comms
 
-  cliSerial = hal.console;
-    
-  consoleNoteLn("Project | Alpha"); 
-  
-  //  Serial1.begin(38400); 
-
   // HAL
 
   hal.init(0, NULL);
   
+  // initialise serial port
+  
+  // serial_manager.init_console();
+
+  cliSerial = hal.console;
+  
+  consoleNoteLn_P(PSTR("Project | Alpha"));   
+  consoleNote_P(PSTR("Init Free RAM: "));
+  consolePrintfLn("%u", hal.util->available_memory());
+
   // Read the non-volatile state
 
   readNVState();
     
-  consoleNote("Current model is ");
+  consoleNote_P(PSTR("Current model is "));
   consolePrintLn(stateRecord.model);
   
   // I2C
@@ -2126,14 +2151,14 @@ void setup() {
   
 #ifdef MEGAMINI
 
-  consoleNoteLn("Initializing PPM receiver");
+  consoleNoteLn_P(PSTR("Initializing PPM receiver"));
 
   configureInput(&ppmInputPin, true);
   ppmInputInit(ppmInputs, sizeof(ppmInputs)/sizeof(struct RxInputRecord*));
 
 #else
   
-  consoleNoteLn("Initializing individual PWM inputs");
+  consoleNoteLn_P(PSTR("Initializing individual PWM inputs"));
 
   rxInputInit(&elevInput);
   rxInputInit(&aileInput);
@@ -2153,7 +2178,7 @@ void setup() {
 
   // Servos
 
-  consoleNoteLn("Initializing servos");
+  consoleNoteLn_P(PSTR("Initializing servos"));
 
   pwmTimerInit(hwTimers, sizeof(hwTimers)/sizeof(struct HWTimer*));
   pwmOutputInitList(pwmOutput, sizeof(pwmOutput)/sizeof(struct PWMOutput));
@@ -2166,9 +2191,11 @@ void setup() {
   
   consoleNote("Initializing sensors... ");
 
+  barometer.init();
   ins.init(AP_InertialSensor::COLD_START, AP_InertialSensor::RATE_100HZ);
+  ahrs.init();
 
-  consoleNoteLn("  done");
+  consoleNoteLn_P(PSTR("  done"));
   
   // LED output
 
