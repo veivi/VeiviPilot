@@ -10,7 +10,7 @@ struct ParamRecord paramRecord;
 #define stateOffset 0
 #define paramOffset (stateRecord.paramPartition+stateRecord.model*sizeof(paramRecord))
 
-struct ParamRecord paramDefaults = {
+const struct ParamRecord paramDefaults = {
       0,
       64, 0x50, 
       12, 12,
@@ -24,7 +24,7 @@ struct ParamRecord paramDefaults = {
        0.5, -0.3,
       -45.0/90, -45.0/90 };
 
-struct NVStateRecord stateDefaults = { 0, 128, 1024, 400, 0, false, 0 };
+const struct NVStateRecord stateDefaults = { 0, 128, 1024, 400, 0, false, 0 };
 
 static uint16_t crc16_update(uint16_t crc, uint8_t a)
 {
@@ -66,6 +66,14 @@ static uint16_t stateRecordCrc(struct NVStateRecord *record)
 
 void setModel(int model)
 {
+  const int maxModels_c =
+    (stateRecord.logPartition - stateRecord.paramPartition) / sizeof(paramRecord);
+  
+  if(model < 0)
+    model = 0;
+  else if(model > maxModels_c - 1)
+    model = maxModels_c - 1;
+  
   stateRecord.model = model;
   cacheRead(paramOffset, (uint8_t*) &paramRecord, sizeof(paramRecord));
 
