@@ -77,17 +77,17 @@ void setModel(int model)
   stateRecord.model = model;
   cacheRead(paramOffset, (uint8_t*) &paramRecord, sizeof(paramRecord));
 
-  consoleNote("MODEL ");
+  consoleNote_P(PSTR("MODEL "));
   consolePrintLn(model);
   
-  consoleNote("  Model record CRC = ");
+  consoleNote_P(PSTR("  Model record CRC = "));
   consolePrint(paramRecord.crc);
     
   if(paramRecordCrc(&paramRecord) != paramRecord.crc) {
-    consolePrintLn(" CORRUPT, using defaults"); 
+    consolePrintLn_P(PSTR(" CORRUPT, using defaults")); 
     paramRecord = paramDefaults;
   } else
-    consolePrintLn(" OK");  
+    consolePrintLn_P(PSTR(" OK"));  
 }
   
 void storeParams(void)
@@ -101,14 +101,14 @@ void readNVState(void)
 {
   cacheRead(stateOffset, (uint8_t*) &stateRecord, sizeof(stateRecord));
   
-  consoleNote("  State record CRC = ");
+  consoleNote_P(PSTR("  State record CRC = "));
   consolePrint(stateRecord.crc);
     
   if(stateRecord.crc != stateRecordCrc(&stateRecord)) {
-    consolePrintLn(" CORRUPT, using defaults"); 
+    consolePrintLn_P(PSTR(" CORRUPT, using defaults")); 
     stateRecord = stateDefaults;
   } else
-    consolePrintLn(" OK");
+    consolePrintLn_P(PSTR(" OK"));
 
 }
 

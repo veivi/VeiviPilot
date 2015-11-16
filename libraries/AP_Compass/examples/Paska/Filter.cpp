@@ -77,7 +77,7 @@ float AlphaBuffer::output(void) {
     sum = 0.0;
     length = 0;
   } else if(!warn) {
-    consolePrintLn("Alpha/IAS buffer starved");
+    consoleNoteLn_P(PSTR("Alpha/IAS buffer starved"));
     warn = true;
   }  
   return value;

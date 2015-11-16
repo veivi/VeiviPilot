@@ -70,7 +70,7 @@ static bool logReady(void)
   if(logState == stop_c || logState == run_c)
     return true;
 
-  consoleNoteLn("Log not ready");
+  consoleNoteLn_P(PSTR("Log not ready"));
   return false;
 }
 
@@ -139,7 +139,7 @@ void logClear(void)
   if(!logReady())
     return;
     
-  consoleNoteLn("Log being CLEARED");
+  consoleNoteLn_P(PSTR("Log being CLEARED"));
     
   logEnter(ENTRY_TOKEN(t_start));
 
@@ -205,7 +205,7 @@ void logEnable()
   
   prevCh = -1;  
   
-  consoleNoteLn("Logging ENABLED");
+  consoleNoteLn_P(PSTR("Logging ENABLED"));
 }
 
 void logDisable()
@@ -216,7 +216,7 @@ void logDisable()
   logMark();
   logEnabled = false;
   
-  consoleNoteLn("Logging DISABLED");
+  consoleNoteLn_P(PSTR("Logging DISABLED"));
 }
 
 static int col = 0;
@@ -321,7 +321,7 @@ void logDump(int ch)
     
     consolePrint(" ]\n");
 
-    consoleNoteLn("FLIGHT DATA RECORD WITH INDEX");
+    consoleNoteLn_P(PSTR("FLIGHT DATA RECORD WITH INDEX"));
     
     consolePrint("fdr_");
     consolePrint(stateRecord.logStamp);
@@ -342,7 +342,7 @@ void logDump(int ch)
   int32_t len = logLen, notFirst = 0;
 
   if(len < 0) {
-    consoleNote("Looking for log start...");
+    consoleNote_P(PSTR("Looking for log start..."));
     
     len = 0;
     
@@ -358,7 +358,7 @@ void logDump(int ch)
     logLen = len;
   }
   
-  consoleNote("CHANNEL ");
+  consoleNote_P(PSTR("CHANNEL "));
   consolePrint(ch);
   consolePrint(" (");
   consolePrint(logChannels[ch].name);
@@ -519,7 +519,7 @@ bool logInit(uint32_t maxDuration)
     if(!readEEPROM(eepromSize-1, &dummy, 1)) {
       logSize = (eepromSize - logOffset)/sizeof(uint16_t);
 
-      consoleNote("Inferred log size = ");
+      consoleNote_P(PSTR("Inferred log size = "));
       consolePrint(logSize/(1<<10));
       consolePrintLn("k entries");
       
@@ -528,7 +528,7 @@ bool logInit(uint32_t maxDuration)
 
         return false;
     } else {
-      consoleNoteLn("Log EEPROM failed");
+      consoleNoteLn_P(PSTR("Log EEPROM failed"));
       logState = failed_c;
     }
     break;
@@ -539,7 +539,7 @@ bool logInit(uint32_t maxDuration)
         uint16_t stamp = logRead(logIndex(searchPtr+1));
 
         if(stamp % 500 == 0) {
-          consoleNote("  Searching for log end at ");
+          consoleNote_P(PSTR("  Searching for log end at "));
           consolePrint(searchPtr);
           consolePrintLn("...");
         }
@@ -566,12 +566,12 @@ bool logInit(uint32_t maxDuration)
     if(endFound && endPtr < logSize) {
       logPtr = endPtr;
     
-      consoleNote("End of log found at ");
+      consoleNote_P(PSTR("End of log found at "));
       consolePrint(logPtr);
       consolePrint(", stamp = ");
       consolePrintLn(logEndStamp);
     } else {
-      consoleNoteLn("*** The log is corrupt and is being cleared ***");
+      consoleNoteLn_P(PSTR("*** The log is corrupt and is being cleared ***"));
       logEndStamp = 0;
       logPtr = logSize-1;  
       logClear();
@@ -587,7 +587,7 @@ void logSave(void (*logStartCB)())
   switch(logState) {
     case stop_c:
       if(logEnabled) {
-        consoleNoteLn("Logging STARTED");
+        consoleNoteLn_P(PSTR("Logging STARTED"));
       
         logState = run_c;
     
@@ -600,7 +600,7 @@ void logSave(void (*logStartCB)())
       
     case run_c:
       if(!logEnabled) {
-        consoleNoteLn("Logging STOPPED");
+        consoleNoteLn_P(PSTR("Logging STOPPED"));
         logState = stop_c;
       } else if(logDirty) {
         logDirty = false;

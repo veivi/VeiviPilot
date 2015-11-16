@@ -26,6 +26,7 @@ void consolePrint(unsigned int v);
 void consolePrint(long v);
 void consolePrint(unsigned long v);
 void consolePrint(uint8_t v);
+void consolePrintLn_P(const prog_char_t *s);
 void consolePrintLn(const char *s);
 void consolePrintLn(float v);
 void consolePrintLn(float v, int p);

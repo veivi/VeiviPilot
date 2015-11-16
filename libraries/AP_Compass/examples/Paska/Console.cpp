@@ -180,6 +180,12 @@ void consolePrintLn(const char *s)
   newline();
 }
 
+void consolePrintLn_P(const prog_char_t *s)
+{
+  consolePrint_P(s);
+  newline();
+}
+
 void consolePrintLn(float v)
 {
   consolePrint(v);
