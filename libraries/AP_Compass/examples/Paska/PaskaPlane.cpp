@@ -914,9 +914,9 @@ void executeCommand(const char *buf, int bufLen)
     consolePrintLn("");
     consolePrint_P(PSTR("echo 0; model "));
     consolePrint(stateRecord.model);
-    consolePrint_P(PSTR("; "));
+    consolePrint("; ");
     dumpParams(&paramRecord);
-    consolePrintLn("; echo 1; store");
+    consolePrintLn_P(PSTR("; echo 1; store"));
     consolePrintLn("");
     break;
 
@@ -981,9 +981,9 @@ void executeCommand(const char *buf, int bufLen)
     consoleNote_P(PSTR("Alpha = "));
     consolePrint(360*alpha);
     if(alphaFailed)
-      consolePrintLn(" FAIL");
+      consolePrintLn_P(PSTR(" FAIL"));
     else
-      consolePrintLn(" OK");
+      consolePrintLn_P(PSTR(" OK"));
       
     consoleNoteLn_P(PSTR("Cycle time (ms)"));
     consoleNote_P(PSTR("  median     = "));
@@ -1020,7 +1020,7 @@ void executeCommand(const char *buf, int bufLen)
 
     consoleNote_P(PSTR("Log write bandwidth = "));
     consolePrint(logBandWidth);
-    consolePrintLn(" bytes/sec");
+    consolePrintLn_P(PSTR(" bytes/sec"));
     break;
 
   case c_reset:
@@ -1088,7 +1088,7 @@ void executeCommand(const char *buf, int bufLen)
     break;
     
   default:
-    consolePrintLn("Command not recognized");
+    consolePrintLn_P(PSTR("Command not recognized"));
     break;
   }
 }
@@ -2138,7 +2138,7 @@ void setup() {
   
   setModel(stateRecord.model);
 
-  consoleNote("MODEL ");
+  consoleNote_P(PSTR("MODEL "));
   consolePrintLn(stateRecord.model);
   printParams(&paramRecord);    
 
@@ -2189,7 +2189,7 @@ void setup() {
 
   // Misc sensors
   
-  consoleNote("Initializing sensors... ");
+  consoleNote_P(PSTR("Initializing sensors... "));
 
   barometer.init();
   ins.init(AP_InertialSensor::COLD_START, AP_InertialSensor::RATE_100HZ);
