@@ -194,14 +194,14 @@ NewI2C I2c = NewI2C();
 RunningAvgFilter alphaFilter;
 AlphaBuffer alphaBuffer, pressureBuffer;
 float controlCycle = 10.0e-3;
+uint32_t idleMicros;
+float idleAvg;
 
 float elevOutput = 0, aileOutput = 0, flapOutput = 0, gearOutput = 1, brakeOutput = 0;
 
 #ifdef rpmPin
 struct RxInputRecord rpmInput = { rpmPin };
 #endif
-
-#define minAlpha paramRecord.alphaMin
 
 void printParams(struct ParamRecord *p)
 {
@@ -978,6 +978,8 @@ void executeCommand(const char *buf, int bufLen)
     break;
 
   case c_report:
+    consoleNote_P(PSTR("Idle avg = "));
+    consolePrintLn(idleAvg*100,1);
     consoleNote_P(PSTR("Alpha = "));
     consolePrint(360*alpha);
     if(alphaFailed)
@@ -1319,6 +1321,9 @@ void measurementTask(uint32_t currentMicros)
   logBandWidth = 1.0e6 * logBytesCum / (currentMicros - prevMeasurement);
   logBytesCum = 0;
   prevMeasurement = currentMicros;
+
+  idleAvg = 7*idleAvg/8 + (float) idleMicros/1e6/8;
+  idleMicros = 0;
   
   if(cycleTimesDone)
     return;
@@ -1635,7 +1640,7 @@ void configurationTask(uint32_t currentMicros)
   alphaFilter.input(alpha);
   
   if(!mode.autoAlpha)
-    neutralAlpha = clamp(alphaFilter.output(), minAlpha, maxAlpha);
+    neutralAlpha = clamp(alphaFilter.output(), paramRecord.alphaMin, maxAlpha);
 }
 
 void loopTask(uint32_t currentMicros)
@@ -1689,7 +1694,7 @@ void loopTask(uint32_t currentMicros)
   }
 }
 
-const int serialBufLen = 1<<6;
+const int serialBufLen = 1<<8;
 char serialBuf[serialBufLen];
 int serialBufIndex = 0;
 
@@ -1905,7 +1910,7 @@ void controlTask(uint32_t currentMicros)
         float maxAutoAlpha = maxAlpha/square(1.1);
         
         targetAlpha = clamp(neutralAlpha + elevStick*maxAutoAlpha,
-          minAlpha, maxAutoAlpha);
+          paramRecord.alphaMin, maxAutoAlpha);
  
         targetRate = (targetAlpha - alpha) * autoAlphaP;
         
@@ -2014,18 +2019,22 @@ void trimTask(uint32_t currentMicros)
   if(mode.autoTrim && abs(rollAngle) < 30) {
     neutralAlpha += clamp((targetAlpha - neutralAlpha)/2/TRIM_HZ,
       -1.5/360/TRIM_HZ, 1.5/360/TRIM_HZ);
-//    neutralAlpha = clamp(neutralAlpha, minAlpha, maxAlpha*0.9);
+//    neutralAlpha = clamp(neutralAlpha, paramRecord.alphaMin, maxAlpha*0.9);
   }
 }
 
 bool logInitialized = false;
 
 void backgroundTask(uint32_t durationMicros)
-{ 
+{
+  uint32_t idleStart = hal.scheduler->micros();
+  
   if(!logInitialized)
     logInitialized = logInit(durationMicros);
   else
     hal.scheduler->delay(1);
+
+  idleMicros += hal.scheduler->micros() - idleStart;
 }
 
 void blinkTask(uint32_t currentMicros)
