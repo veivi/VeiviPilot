@@ -1011,6 +1011,10 @@ void executeCommand(const char *buf, int bufLen)
       consolePrint_P(PSTR(" EEPROM"));
     if(eepromFailed)
       consolePrint_P(PSTR(" EEPROM_FAILED"));
+    if(iasWarn)
+      consolePrint_P(PSTR(" IAS_WARN"));
+    if(iasFailed)
+      consolePrint_P(PSTR(" IAS_FAILED"));
     if(alphaBuffer.warn)
       consolePrint_P(PSTR(" ALPHA_BUFFER"));
     if(pusher.warn)
@@ -1206,15 +1210,12 @@ void receiverTask(uint32_t currentMicros)
     tuningKnobValue = inputValue(&tuningKnobInput);
 }
 
-void sensorTask(uint32_t currentMicros)
+void sensorTaskFast(uint32_t currentMicros)
 {
-  // Altitude
-    
-  //  Baro_update();
-  //  getEstimatedAltitude();
-
-  //  altitude = (float) alt.EstAlt / 100;
-
+  // Alpha input
+  
+  alpha = alphaBuffer.output();
+  
   // Attitude
 
   ins.wait_for_sample();
@@ -1223,12 +1224,25 @@ void sensorTask(uint32_t currentMicros)
   
   Vector3f gyro = ins.get_gyro();
   
-  rollRate = -gyro.x * 180/PI / 360;
-  pitchRate = -gyro.y * 180/PI / 360;
+  rollRate = gyro.x * 180/PI / 360;
+  pitchRate = gyro.y * 180/PI / 360;
 
-  rollAngle = -ahrs.roll * 180/PI;
-  pitchAngle = -ahrs.pitch * 180/PI;
+  rollAngle = ahrs.roll * 180/PI;
+  pitchAngle = ahrs.pitch * 180/PI;
   heading = ahrs.yaw * 180/PI;
+
+  // Altitude sensor accumulate
+
+  barometer.accumulate();
+}
+
+void sensorTaskSlow(uint32_t currentMicros)
+{
+  // Altitude
+
+  barometer.update();
+
+  altitude = (float) barometer.get_altitude();
   
   /*
   acc = (float) imu.accSmooth[2] / (1<<9);
@@ -1677,11 +1691,13 @@ void loopTask(uint32_t currentMicros)
 /*    consolePrint(" heading = ");
     consolePrint(heading);
 */
-    /*consolePrint(" alt(GPS) = ");
+    consolePrint(" alt(GPS) = ");
     consolePrint(altitude);
     consolePrint(" m (");
     consolePrint(gpsFix.altitude);
-    consolePrint(" m) speed = ");
+    consolePrint(" m)");
+    /*
+    consolePrint(" speed = ");
     consolePrint(gpsFix.speed);
     consolePrint(" target = ");
     consolePrint(targetAlpha*360);
@@ -1882,10 +1898,6 @@ void controlTask(uint32_t currentMicros)
 
   controlCycleEnded = currentMicros;
   
-  // Alpha input
-  
-  alpha = alphaBuffer.output();
-  
   if(calibrateStart) {
     paramRecord.elevZero += elevStick;
     paramRecord.aileZero += aileStick;
@@ -2061,8 +2073,10 @@ struct Task taskList[] = {
     HZ_TO_PERIOD(LED_TICK) },
   { receiverTask,
     HZ_TO_PERIOD(CONTROL_HZ) },
-  { sensorTask,
+  { sensorTaskFast,
     HZ_TO_PERIOD(CONTROL_HZ) },
+  { sensorTaskSlow,
+    HZ_TO_PERIOD(CONTROL_HZ/5) },
   { controlTask,
     HZ_TO_PERIOD(CONTROL_HZ) },
   { actuatorTask,
@@ -2198,9 +2212,15 @@ void setup() {
 
   // Misc sensors
   
-  consoleNote_P(PSTR("Initializing sensors... "));
+  consoleNote_P(PSTR("Initializing barometer... "));
 
   barometer.init();
+  barometer.calibrate();
+  
+  consoleNoteLn_P(PSTR("  done"));
+  
+  consoleNote_P(PSTR("Initializing INS / AHRS... "));
+  
   ins.init(AP_InertialSensor::COLD_START, AP_InertialSensor::RATE_100HZ);
   ahrs.init();
 
