@@ -17,13 +17,10 @@
 #include "PWMOutput.h"
 #include "PPM.h"
 #include <AP_Progmem/AP_Progmem.h>
-#include <AP_BoardConfig/AP_BoardConfig.h>
 #include <AP_HAL/AP_HAL.h>
 #include <AP_HAL_AVR/AP_HAL_AVR.h>
 #include <AP_InertialSensor/AP_InertialSensor.h>
 #include <AP_AHRS/AP_AHRS.h>
-
-AP_BoardConfig BoardConfig;
 
 const AP_HAL::HAL& hal = AP_HAL_BOARD_DRIVER;
 AP_HAL::BetterStream* cliSerial;
@@ -1158,23 +1155,6 @@ void alphaTask(uint32_t currentMicros)
     alphaBuffer.input((float) raw / (1L<<(8*sizeof(raw))));
 }
 
-void airspeedReadTask(uint32_t currentMicros)
-{
-  int16_t raw = 0;
-  static int failCount = 0;
-  
-  if(!handleFailure("airspeed", !readPressure(&raw), &iasWarn, &iasFailed, &failCount))
-    pressureBuffer.input((float) raw);
-}
-
-void airspeedUpdateTask(uint32_t currentMicros)
-{
-  const float pascalsPerPSI_c = 6894.7573, range_c = 2*1.1;
-  const float factor_c = pascalsPerPSI_c * range_c / (1L<<(8*sizeof(uint16_t)));
-    
-  dynPressure = pressureBuffer.output() * factor_c;
-}
-
 #define NULLZONE 0.075
 
 float applyNullZone(float value)
@@ -1231,9 +1211,17 @@ void sensorTaskFast(uint32_t currentMicros)
   pitchAngle = ahrs.pitch * 180/PI;
   heading = ahrs.yaw * 180/PI;
 
-  // Altitude sensor accumulate
+  // Altitude data acquisition
 
   barometer.accumulate();
+
+  // Airspeed data acquisition
+  
+  int16_t raw = 0;
+  static int failCount = 0;
+  
+  if(!handleFailure("airspeed", !readPressure(&raw), &iasWarn, &iasFailed, &failCount))
+    pressureBuffer.input((float) raw);
 }
 
 void sensorTaskSlow(uint32_t currentMicros)
@@ -1243,6 +1231,13 @@ void sensorTaskSlow(uint32_t currentMicros)
   barometer.update();
 
   altitude = (float) barometer.get_altitude();
+
+  // Airspeed
+  
+  const float pascalsPerPSI_c = 6894.7573, range_c = 2*1.1;
+  const float factor_c = pascalsPerPSI_c * range_c / (1L<<(8*sizeof(uint16_t)));
+    
+  dynPressure = pressureBuffer.output() * factor_c;
   
   /*
   acc = (float) imu.accSmooth[2] / (1<<9);
@@ -2065,22 +2060,18 @@ struct Task taskList[] = {
   //  { gpsTask, HZ_TO_PERIOD(100) },
   { alphaTask,
     HZ_TO_PERIOD(ALPHA_HZ) },
-  { airspeedReadTask,
-    HZ_TO_PERIOD(30/2) },
-  { airspeedUpdateTask,
-    HZ_TO_PERIOD(30) },
   { blinkTask,
     HZ_TO_PERIOD(LED_TICK) },
   { receiverTask,
     HZ_TO_PERIOD(CONTROL_HZ) },
   { sensorTaskFast,
     HZ_TO_PERIOD(CONTROL_HZ) },
-  { sensorTaskSlow,
-    HZ_TO_PERIOD(CONTROL_HZ/5) },
   { controlTask,
     HZ_TO_PERIOD(CONTROL_HZ) },
   { actuatorTask,
     HZ_TO_PERIOD(ACTUATOR_HZ) },
+  { sensorTaskSlow,
+    HZ_TO_PERIOD(CONTROL_HZ/5) },
   { trimTask,
     HZ_TO_PERIOD(TRIM_HZ) },
   { configurationTask,
