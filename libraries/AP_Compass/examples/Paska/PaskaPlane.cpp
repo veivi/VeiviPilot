@@ -162,6 +162,7 @@ struct GPSFix {
 struct GPSFix gpsFix;
 
 bool testMode = false;
+bool rattling = false;
 float testGain = 0;
 bool calibrate, switchState = false, switchStateLazy = false, echoEnabled = true;
 bool iasFailed = false, iasWarn = false, alphaFailed = false, alphaWarn = false;
@@ -471,7 +472,7 @@ typedef enum {
   c_params, c_defaults, c_reset, c_24l256_addr, c_24l256_clk, c_5048b_clk, c_center,
   c_loop, c_stamp, c_model, c_alpha, c_flapneutral, c_flapstep, c_backup, c_echo,
   c_ezero, c_azero, c_5048b_ref, c_bdefl, c_bneutral, c_rpm, c_baud, c_dumpz,
-  c_stabilizer_pid, c_stabilizer_pid_zn, c_stabilizer_pi_zn, c_outer_p, 
+  c_stabilizer_pid, c_stabilizer_pid_zn, c_stabilizer_pi_zn, c_outer_p, c_rattle,
   c_inner_pid, c_inner_pid_zn, c_inner_pi_zn, c_arm, c_disarm, c_test, c_talk } command_t;
 
 struct command {
@@ -536,6 +537,7 @@ const struct command commands[] = {
   { "test", c_test },
   { "cycle", c_cycle },
   { "talk", c_talk },
+  { "rattle", c_rattle },
   { "", c_ }
 };
 
@@ -644,7 +646,13 @@ void executeCommand(const char *buf, int bufLen)
 
   switch(commands[j].c_token) {
   case c_arm:
+    rattling = false;
     armed = true;
+    break;
+    
+  case c_rattle:
+    rattling = true;
+    armed = false;
     break;
     
   case c_disarm:
@@ -1213,6 +1221,7 @@ void sensorTaskFast(uint32_t currentMicros)
 
   // Altitude data acquisition
 
+  barometer.update();
   barometer.accumulate();
 
   // Airspeed data acquisition
@@ -1227,8 +1236,6 @@ void sensorTaskFast(uint32_t currentMicros)
 void sensorTaskSlow(uint32_t currentMicros)
 {
   // Altitude
-
-  barometer.update();
 
   altitude = (float) barometer.get_altitude();
 
@@ -1884,6 +1891,11 @@ void gpsTask(uint32_t currentMicros)
   */
 }
 
+float randomNum(float small, float large)
+{
+  return small + (large-small)*(float) (rand() % 1000) / 1000;
+}  
+
 void controlTask(uint32_t currentMicros)
 {
   // Cycle time bookkeeping 
@@ -1999,7 +2011,7 @@ void controlTask(uint32_t currentMicros)
 void actuatorTask(uint32_t currentMicros)
 {
   // Actuators
- 
+
   if(armed) {
     pwmOutputWrite(aileHandle, NEUTRAL
 		   + RANGE*clamp(paramRecord.aileDefl*aileOutput 
@@ -2018,7 +2030,24 @@ void actuatorTask(uint32_t currentMicros)
     pwmOutputWrite(brakeHandle, NEUTRAL
 		   + RANGE*clamp(paramRecord.brakeNeutral + 
 				 paramRecord.brakeDefl*brakeOutput, -1, 1));                        
-  }
+  } else if(rattling) {
+    pwmOutputWrite(aileHandle, NEUTRAL
+		   + RANGE*clamp(paramRecord.aileDefl*randomNum(-1, 1) 
+				 + paramRecord.aileNeutral, -1, 1));
+
+    pwmOutputWrite(elevatorHandle, NEUTRAL
+		   + RANGE*clamp(paramRecord.elevDefl*randomNum(-1, 1) 
+				 + paramRecord.elevNeutral, -1, 1));
+                              
+    pwmOutputWrite(flapHandle, NEUTRAL
+		   + RANGE*clamp(paramRecord.flapNeutral 
+				 + randomNum(0, 3)*paramRecord.flapStep, -1, 1));                              
+
+    pwmOutputWrite(gearHandle, NEUTRAL - RANGE*randomNum(-1, 1));
+
+    pwmOutputWrite(brakeHandle, NEUTRAL
+		   + RANGE*clamp(paramRecord.brakeNeutral + 
+				 paramRecord.brakeDefl*randomNum(0, 1), -1, 1));                    }
 }
 
 void trimTask(uint32_t currentMicros)
