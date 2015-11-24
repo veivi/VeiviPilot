@@ -1,7 +1,7 @@
 #include "PWMOutput.h"
 #include <avr/io.h>
 
-#define PWM_HZ 50
+#define PWM_HZ 100
 #define TIMER_HZ (16e6/8)
 
 static const uint8_t outputModeMask[3] = { 1<<COM1A1, 1<<COM1B1, 1<<COM1C1 };
@@ -22,8 +22,8 @@ void pwmTimerInit(const struct HWTimer *timer[], int num)
 
    // Output set to nil by default
 
-   for(int i = 0; i < 3; i++)
-      *(timer[i]->OCR[i]) = 0xFFFF;
+   for(int j = 0; j < 3; j++)
+      *(timer[i]->OCR[j]) = 0xFFFF;
   }
 }
 

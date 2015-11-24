@@ -184,8 +184,6 @@ Controller elevController, aileController, pusher;
 float autoAlphaP, maxAlpha;
 float acc,altitude,  heading, rollAngle, pitchAngle, rollRate, pitchRate;
 int cycleTimeCounter = 0;
-Median3Filter cycleTimeFilter;
-bool cycleTimesDone = false;
 uint32_t prevMeasurement;
 float parameter;  
 NewI2C I2c = NewI2C();
@@ -979,7 +977,6 @@ void executeCommand(const char *buf, int bufLen)
 
   case c_cycle:
     cycleTimeCounter = 0;
-    cycleTimesDone = false;
     break;
 
   case c_report:
@@ -1295,9 +1292,6 @@ void positionLogTask(uint32_t currentMicros)
 
 void cycleTimeMonitor(float value)
 {
-//  consolePrint("ct = ");
-//  consolePrintLn(value*1000);
-  
   cycleTimeStore[cycleTimePtr] = value;
   
   if(cycleTimePtr < cycleTimeWindow-1)
@@ -1329,6 +1323,16 @@ float ppmFreq;
 
 void measurementTask(uint32_t currentMicros)
 {
+  // Idle measurement
+  
+  idleAvg = 7*idleAvg/8 + (float) idleMicros/1e6/8;
+  idleMicros = 0;
+
+  // Cycle time monitoring
+  
+  if(cycleTimeCounter > 5)
+    return;
+    
   FORBID;
   ppmFreq = 1.0e6 * ppmFrames / (currentMicros - prevMeasurement);
   ppmFrames = 0;
@@ -1338,28 +1342,13 @@ void measurementTask(uint32_t currentMicros)
   logBytesCum = 0;
   prevMeasurement = currentMicros;
 
-  idleAvg = 7*idleAvg/8 + (float) idleMicros/1e6/8;
-  idleMicros = 0;
-  
-  if(cycleTimesDone)
-    return;
-    
-  if(cycleTimeCounter > 5) {
-    controlCycle = cycleTimeFilter.output();
-    consoleNote_P(PSTR("Effective cycle time is "));
-    consolePrintLn(controlCycle*1e3);
-    cycleTimesDone = true;
-    return;
-  }
-
   if(cycleTimesValid) {
     qsort((void*) cycleTimeStore, cycleTimeWindow, sizeof(float), compareFloat);
-    controlCycle = cycleTimeStore[cycleTimeWindow/2];
     
     consoleNote_P(PSTR("Cycle time (min, median, max) = "));
     consolePrint(cycleTimeStore[0]*1e3);
     consolePrint(", ");
-    consolePrint(controlCycle*1e3);
+    consolePrint(cycleTimeStore[cycleTimeWindow/2]*1e3);
     consolePrint(", ");
     consolePrintLn(cycleTimeStore[cycleTimeWindow-1]*1e3);
     
@@ -1369,8 +1358,6 @@ void measurementTask(uint32_t currentMicros)
     cycleMean = sum / cycleTimeWindow;
     cycleTimesValid = false;
     cycleTimePtr = 0;
-
-    cycleTimeFilter.input(controlCycle);    
     cycleTimeCounter++;
   }
 }
@@ -1737,7 +1724,7 @@ void communicationTask(uint32_t currentMicros)
 	looping = false;
 	executeCommandSeries(serialBuf, serialBufIndex);
 	serialBufIndex = 0;
-	controlCycleEnded = -1;
+	controlCycleEnded = 0;
 
       } else if(c == '\b') {
 	if(serialBufIndex > 0) {
@@ -1900,9 +1887,11 @@ void controlTask(uint32_t currentMicros)
 {
   // Cycle time bookkeeping 
   
-  if(controlCycleEnded > 0.0)
-    cycleTimeMonitor((currentMicros - controlCycleEnded)/1.0e6);
-
+  if(controlCycleEnded > 0) {
+    controlCycle = (currentMicros - controlCycleEnded)/1.0e6;
+    cycleTimeMonitor(controlCycle);
+  }
+  
   controlCycleEnded = currentMicros;
   
   if(calibrateStart) {
