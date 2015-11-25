@@ -84,6 +84,9 @@ struct RxInputRecord tuningKnobInput = { { PortK, 3 } };
 // Servo PWM output
 //
 
+#define NEUTRAL 1500
+#define RANGE 500
+
 #ifdef MEGAMINI
 
 const struct PWMOutput pwmOutput[] = {
@@ -114,11 +117,11 @@ const struct PWMOutput pwmOutput[] = {
 // Function to servo output mapping
 //
 
-#define aileHandle     &pwmOutput[0]
-#define elevatorHandle &pwmOutput[1]
-#define flapHandle     &pwmOutput[2]
-#define gearHandle     &pwmOutput[3]
-#define brakeHandle    &pwmOutput[4]
+#define aileHandle     (&pwmOutput[0])
+#define elevatorHandle (&pwmOutput[1])
+#define flapHandle     (&pwmOutput[2])
+#define gearHandle     (&pwmOutput[3])
+#define brakeHandle    (&pwmOutput[4])
 
 //
 // Periodic task stuff
@@ -561,7 +564,7 @@ int indexOf(const char *s, const char c)
 {
   return indexOf(s, c, 0);
 }
-    
+
 void executeCommand(const char *buf, int bufLen)
 {
   if(echoEnabled)
@@ -1149,6 +1152,18 @@ void logStartCallback()
 void logSaveTask(uint32_t currentMicros)
 {
   logSave(logStartCallback);
+}
+
+void rattleTask(uint32_t currentMicros)
+{
+  static int i;
+
+  if(rattling) {
+    pwmOutputWrite(aileHandle, NEUTRAL - (i & 1) * RANGE*0.15);
+    pwmOutputWrite(elevatorHandle, NEUTRAL + (i & 1) * RANGE*0.15);
+  }
+
+  i++;
 }
 
 void alphaTask(uint32_t currentMicros)
@@ -1994,14 +2009,30 @@ void controlTask(uint32_t currentMicros)
   } 
 }
 
-#define NEUTRAL 1500
-#define RANGE 500
-
 void actuatorTask(uint32_t currentMicros)
 {
   // Actuators
 
-  if(armed) {
+  if(rattling) {
+    /*    pwmOutputWrite(aileHandle, NEUTRAL
+		   + RANGE*clamp(paramRecord.aileDefl*randomNum(-1, 1) 
+				 + paramRecord.aileNeutral, -1, 1));
+
+    pwmOutputWrite(elevatorHandle, NEUTRAL
+		   + RANGE*clamp(paramRecord.elevDefl*randomNum(-1, 1) 
+				 + paramRecord.elevNeutral, -1, 1));
+                              
+    pwmOutputWrite(flapHandle, NEUTRAL
+		   + RANGE*clamp(paramRecord.flapNeutral 
+				 + randomNum(0, 3)*paramRecord.flapStep, -1, 1));                              
+
+    pwmOutputWrite(gearHandle, NEUTRAL - RANGE*randomNum(-1, 1));
+
+    pwmOutputWrite(brakeHandle, NEUTRAL
+		   + RANGE*clamp(paramRecord.brakeNeutral + 
+		   paramRecord.brakeDefl*randomNum(0, 1), -1, 1));                
+*/
+  } else if(armed) {
     pwmOutputWrite(aileHandle, NEUTRAL
 		   + RANGE*clamp(paramRecord.aileDefl*aileOutput 
 				 + paramRecord.aileNeutral, -1, 1));
@@ -2019,24 +2050,7 @@ void actuatorTask(uint32_t currentMicros)
     pwmOutputWrite(brakeHandle, NEUTRAL
 		   + RANGE*clamp(paramRecord.brakeNeutral + 
 				 paramRecord.brakeDefl*brakeOutput, -1, 1));                        
-  } else if(rattling) {
-    pwmOutputWrite(aileHandle, NEUTRAL
-		   + RANGE*clamp(paramRecord.aileDefl*randomNum(-1, 1) 
-				 + paramRecord.aileNeutral, -1, 1));
-
-    pwmOutputWrite(elevatorHandle, NEUTRAL
-		   + RANGE*clamp(paramRecord.elevDefl*randomNum(-1, 1) 
-				 + paramRecord.elevNeutral, -1, 1));
-                              
-    pwmOutputWrite(flapHandle, NEUTRAL
-		   + RANGE*clamp(paramRecord.flapNeutral 
-				 + randomNum(0, 3)*paramRecord.flapStep, -1, 1));                              
-
-    pwmOutputWrite(gearHandle, NEUTRAL - RANGE*randomNum(-1, 1));
-
-    pwmOutputWrite(brakeHandle, NEUTRAL
-		   + RANGE*clamp(paramRecord.brakeNeutral + 
-				 paramRecord.brakeDefl*randomNum(0, 1), -1, 1));                    }
+  } 
 }
 
 void trimTask(uint32_t currentMicros)
@@ -2073,6 +2087,8 @@ void blinkTask(uint32_t currentMicros)
 }
 
 struct Task taskList[] = {
+  { rattleTask,
+    HZ_TO_PERIOD(789) },
   { communicationTask,
     HZ_TO_PERIOD(100) },
   //  { gpsTask, HZ_TO_PERIOD(100) },
