@@ -229,28 +229,33 @@ static void logPrintValue(void)
   tick = false;
 }
 
+long valueCount;
+
 static void logPrintValue(float v)
 {
   float av = abs(v);
   
   if(!first) {
-    consolePrint(",");
+    consolePrint(',');
     col++;
   }
 
   if(col > 72) {
-    consolePrintLn("");
+    float progress = (float) valueCount / logLen / l_channels;
+    consolePrint(" // ");
+    consolePrint(100.0*progress, 0);
+    consolePrintLn("%");
     col = 0;
   }
   
   if(av < 0.001) {
     col++;
-    consolePrint(0);
-    } else if(abs(av - 1) < 0.001){
-    consolePrint(v < 0.0 ? -1 : 1);
+    consolePrint("0");
+  } else if(abs(av - 1) < 0.001){
+    consolePrint(v < 0.0 ? "-1" : "1");
     col += v < 0.0 ? 2 : 1;
-    } else {
-      int decimals = av < 1 ? 3 : av < 10 ? 2 : av < 100 ? 1 : 0;
+  } else {
+    int decimals = av < 1 ? 3 : av < 10 ? 2 : av < 100 ? 1 : 0;
     consolePrint(v, decimals);
     col += 3 + (v < 0.0 ? 1 : 0) + (decimals > 0 ? 1 : 0) + (av < 1.0 ? 1 : 0)
       + (av >= 1000.0 ? 1 : 0) + (av >= 10000.0 ? 1 : 0);
@@ -297,6 +302,7 @@ static void logPrintVariableName(int stamp, const char *name)
 
 static void logPrintValue(float small, float large)
 {
+  valueCount++;  
   logPrintValue(tick ? small : large);
   tick = !tick;
 }
@@ -307,6 +313,8 @@ void logDump(int ch)
     return;
   
   if(ch < 0) {
+    valueCount = 0;
+    
     for(ch = 0; ch < l_channels; ch++)
       logDump(ch);
 
@@ -378,7 +386,9 @@ void logDump(int ch)
 
   logPrintValue(); // Initialize
     
-  for(int32_t i = 0; i < logLen; i++) {
+  for(int32_t i = 0; i < logLen; i++) {    
+    valueCount++;
+  
     uint16_t entry = logRead(logIndex(-logLen+i));
 
     if(ENTRY_IS_TOKEN(entry) && ENTRY_VALUE(entry) < t_delta) {
@@ -538,7 +548,7 @@ bool logInit(uint32_t maxDuration)
       if(logRead(searchPtr) == ENTRY_TOKEN(t_stamp)) {
         uint16_t stamp = logRead(logIndex(searchPtr+1));
 
-        if(stamp % 500 == 0) {
+        if(stamp % 100 == 0) {
           consoleNote_P(PSTR("  Searching for log end at "));
           consolePrint(searchPtr);
           consolePrintLn("...");

@@ -7,6 +7,9 @@ extern const AP_HAL::HAL& hal;
 static void newline(void);
 bool talk = true;
 
+#define printChar(c) hal.uartA->write(c)
+#define printDigit(d) printChar('0'+d)
+
 void consoleNote(const char *s)
 {
   consolePrint("// ");
@@ -93,7 +96,9 @@ void consolePrint(const char *s)
 #ifdef ARDUINO
     Serial.print(s);
 #else
-    hal.console->printf("%s", s);
+  while(*s)
+    printChar(*s++);
+  //    hal.console->printf("%s", s);
 #endif
 }
 
@@ -103,23 +108,53 @@ void consolePrint_P(const prog_char_t *s)
 #ifdef ARDUINO
     Serial.print(s);
 #else
-    hal.console->printf_P(s);
+  hal.console->printf_P(s);
 #endif
 }
 
 void consolePrint(float v, int p)
 {
-  if(talk) {
+  if(!talk)
+    return;
+     
 #ifdef ARDUINO
-    Serial.print(v, p);
+  Serial.print(v, p);
 #else
-    char fmt[10];
-    strcpy(fmt, "%. f");
-    fmt[2] = '0' + p;
-    hal.console->printf(fmt, (double) v);
-#endif
+  if(v < 0.0) {
+    printChar('-');
+    v = -v;
   }
+
+  uint32_t i = (uint32_t) v;
+
+  consolePrint(i);
+
+  if(p > 0) {
+    float f = v - (float) i;
+  
+    consolePrint('.');
+
+    while(p > 0) {
+      f *= 10.0;
+      i = (uint32_t) f;
+      printDigit(i);
+      f -= (float) i;
+      p--;
+    }
+  }
+  /*  
+  char fmt[10];
+  strcpy(fmt, "%. f");
+  fmt[2] = '0' + p;
+  hal.console->printf(fmt, (double) v);
+  */
+#endif
 }
+
+void consolePrint(char c)
+{
+  printChar(c);
+}  
 
 void consolePrint(float v)
 {
@@ -148,19 +183,47 @@ void consolePrint(unsigned int v)
 
 void consolePrint(long v)
 {
+  if(!talk)
+    return;
+  
 #ifdef ARDUINO
-    Serial.print(v);
+  Serial.print(v);
 #else
-    hal.console->printf("%ld", v);
+
+  if(v < 0) {
+    v = -v;
+    printChar('-');
+  }
+
+  consolePrint((unsigned long) v);
+
+  //  hal.console->printf("%ld", v);
 #endif
 }
 
 void consolePrint(unsigned long v)
 {
+  if(!talk)
+    return;
+  
 #ifdef ARDUINO
-    Serial.print(v);
+  Serial.print(v);
 #else
-    hal.console->printf("%lu", v);
+  uint8_t buf[20];
+  int l = 0;
+
+  while(v > 0 && l < 20) {
+    buf[l++] = v % 10;
+    v /= 10;
+  }
+
+  if(l > 0) 
+    while(l > 0)
+      printDigit(buf[--l]);
+  else
+    printDigit(0);
+  
+  //  hal.console->printf("%lu", v);
 #endif
 }
 
