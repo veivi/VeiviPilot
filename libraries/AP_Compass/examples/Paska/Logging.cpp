@@ -185,7 +185,7 @@ void logGeneric(int ch, float value)
 {
   float small = logChannels[ch].small, large = logChannels[ch].large;
   
-  logWithCh(ch, (uint16_t) ((float) VALUE_MASK*clamp((value-small)/(large-small), 0, 1)));
+  logWithCh(ch, (uint16_t) ((float) VALUE_MASK*((value-small)/(large-small))));
 }
 
 void logMark(void)
@@ -233,7 +233,7 @@ long valueCount;
 
 static void logPrintValue(float v)
 {
-  float av = abs(v);
+  float av = absVal(v);
   
   if(!first) {
     consolePrint(',');
@@ -251,7 +251,7 @@ static void logPrintValue(float v)
   if(av < 0.001) {
     col++;
     consolePrint("0");
-  } else if(abs(av - 1) < 0.001){
+  } else if(absVal(av - 1.0) < 0.001){
     consolePrint(v < 0.0 ? "-1" : "1");
     col += v < 0.0 ? 2 : 1;
   } else {
@@ -448,7 +448,8 @@ void logDump(int ch)
           valueRaw = entry;
         }
         
-        value = (float) (large - small) * valueRaw / VALUE_MASK + small;
+        // value = (float) valueRaw;
+	value = small + (float) valueRaw / (float) VALUE_MASK * (large - small);
         valueValid = true;
       }
 

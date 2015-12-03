@@ -120,6 +120,10 @@ void consolePrint(float v, int p)
 #ifdef ARDUINO
   Serial.print(v, p);
 #else
+#ifdef USE_PRINTF
+  const char fmt[] = {'%', '.', '0'+p, 'f', '\0'};
+  hal.console->printf(fmt, (double) v);
+#else
   if(v < 0.0) {
     printChar('-');
     v = -v;
@@ -136,18 +140,11 @@ void consolePrint(float v, int p)
 
     while(p > 0) {
       f *= 10.0;
-      i = (uint32_t) f;
-      printDigit(i);
-      f -= (float) i;
+      printDigit(((uint32_t) f) % 10);
       p--;
     }
   }
-  /*  
-  char fmt[10];
-  strcpy(fmt, "%. f");
-  fmt[2] = '0' + p;
-  hal.console->printf(fmt, (double) v);
-  */
+#endif  
 #endif
 }
 

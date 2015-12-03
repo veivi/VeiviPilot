@@ -7,6 +7,14 @@ float sign(float x)
   return x < 0.0 ? -1.0 : 1.0;
 }
 
+float absVal(float a)
+{
+  if(a < 0.0)
+    return -a;
+  else
+    return a;
+}  
+
 float clamp(float value, float a, float b)
 {
   if(a > b) {
