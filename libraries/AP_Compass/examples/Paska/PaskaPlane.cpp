@@ -1963,7 +1963,7 @@ void controlTask(uint32_t currentMicros)
   
     // Aileron
     
-    float maxBank = 45.0;
+    float maxBank = 60.0;
     
     float targetRate = 270.0/360*aileStick;
     
