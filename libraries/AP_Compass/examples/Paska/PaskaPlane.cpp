@@ -248,7 +248,7 @@ void printParams(struct ParamRecord *p)
 
 void dumpParams(struct ParamRecord *p)
 {
-  consolePrint_P(PSTR("; 5048b_ref "));
+  consolePrint_P(PSTR("5048b_ref "));
   consolePrint(p->alphaRef);
   consolePrint_P(PSTR("; inner_pid "));
   consolePrint(p->i_Kp, 4);
