@@ -1962,14 +1962,12 @@ void controlTask(uint32_t currentMicros)
     
     if(mode.autoStick && !mode.sensorFailSafe && !alphaFailed) {
       const float fract_c = 1.0/3;
-      float strength = max(absVal(elevStick)-(1.0-fract_c), 0)/fract_c;
+      float strength = square(max(elevStick-(1.0-fract_c), 0)/fract_c);
 
-      elevOutput = elevController.output() + square(strength)*elevStick;
+      elevOutput = clamp(elevController.output() + strength*elevStick, -1, 1);
     } else
       elevOutput = elevStick;
 
-    elevOutput = clamp(elevOutput, -1, 1);
-    
     // Pusher
 
     pusher.input((maxAlpha - alpha)*paramRecord.o_P - pitchRate, controlCycle);
@@ -2302,5 +2300,6 @@ AP_HAL_MAIN();
 //
 // Backup VIPER 2015/12/12
 
-echo 0; model 0; ; 5048b_ref 2068; inner_pid 0.5100 4.6398 0.0140; outer_p 10.00; stabilizer_pid 0.4799 4.0000 0.0130; min -3.00; max 12.00; edefl 45.00; eneutral -8.00; ezero 3.33; adefl -45.00; aneutral 0.00; azero 6.00; fstep -40.00; fneutral 55.00; fneutral 55.00 -80.00; bdefl -45.00; bneutral -45.00; echo 1; store
-*/
+echo 0; model 0; 5048b_ref 2068; inner_pid 0.5100 4.6398 0.0140; outer_p 10.00; stabilizer_pid 0.4799 4.0000 0.0130; min -3.00; max 12.00; edefl 45.00; eneutral -8.00; ezero 3.33; adefl -45.00; aneutral 0.00; azero 6.00; fstep -40.00; fneutral 55.00; fneutral 55.00 -80.00; bdefl -45.00; bneutral -45.00; echo 1; store
+
+ */
