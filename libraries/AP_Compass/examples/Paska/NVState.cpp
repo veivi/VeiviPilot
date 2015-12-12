@@ -11,18 +11,20 @@ struct ParamRecord paramRecord;
 #define paramOffset (stateRecord.paramPartition+stateRecord.model*sizeof(paramRecord))
 
 const struct ParamRecord paramDefaults = {
-      0,
-      64, 0x50, 
-      12, 12,
-      0,
-      -45.0/90, -45.0/90,
-      0, 0, 0, 0,
-      -3.0/360,  12.0/360,  0,
-      0.51, 4.64, 0.014, 10.0, 
-      0.48, 4.36, 0.013,
-      2,
-       0.5, -0.3,
-      -45.0/90, -45.0/90 };
+  0,
+  12,
+  0x40, 0x50, 
+  0,
+  0, 0,
+  0, -45.0/90,
+  0, 45.0/90,
+  0.5, 0.5, -0.3,
+  -0.5, -0.5,
+  0, 1, 2, 3, -1, -1,
+  -3.0/360,  12.0/360,
+  0.51, 4.64, 0.014, 10.0, 
+  0.48, 4.36, 0.013
+};
 
 const struct NVStateRecord stateDefaults = { 0, 128, 1024, 400, 0, false, 0 };
 

@@ -117,11 +117,12 @@ const struct PWMOutput pwmOutput[] = {
 // Function to servo output mapping
 //
 
-#define aileHandle     (&pwmOutput[0])
-#define elevatorHandle (&pwmOutput[1])
-#define flapHandle     (&pwmOutput[2])
-#define gearHandle     (&pwmOutput[3])
-#define brakeHandle    (&pwmOutput[4])
+#define aileHandle     (paramRecord.servoAile < 0 ? NULL : (&pwmOutput[paramRecord.servoAile]))
+#define elevatorHandle (paramRecord.servoElev < 0 ? NULL : (&pwmOutput[paramRecord.servoElev]))
+#define flapHandle     (paramRecord.servoFlap < 0 ? NULL : (&pwmOutput[paramRecord.servoFlap]))
+#define flap2Handle    (paramRecord.servoFlap2 < 0 ? NULL : (&pwmOutput[paramRecord.servoFlap2]))
+#define gearHandle     (paramRecord.servoGear < 0 ? NULL : (&pwmOutput[paramRecord.servoGear]))
+#define brakeHandle    (paramRecord.servoBrake < 0 ? NULL : (&pwmOutput[paramRecord.servoBrake]))
 
 //
 // Periodic task stuff
@@ -129,7 +130,6 @@ const struct PWMOutput pwmOutput[] = {
 
 #define CONTROL_HZ 100
 #define ALPHA_HZ (CONTROL_HZ*6)
-#define ACTUATOR_HZ CONTROL_HZ
 #define TRIM_HZ 10
 #define LED_HZ 3
 #define LED_TICK 100
@@ -206,14 +206,14 @@ void printParams(struct ParamRecord *p)
 {
   consoleNote_P(PSTR("  24L256 addr = "));
   consolePrint(p->i2c_24L256);
-  consolePrint_P(PSTR(" clk div = "));
-  consolePrintLn(p->clk_24L256);
+  //  consolePrint_P(PSTR(" clk div = "));
+  //  consolePrintLn(p->clk_24L256);
   consoleNote_P(PSTR("  AS5048B addr = "));
   consolePrint(p->i2c_5048B);
   consolePrint_P(PSTR(" ref = "));
   consolePrint(p->alphaRef);
-  consolePrint_P(PSTR(" clk div = "));
-  consolePrintLn(p->clk_5048B);
+  //  consolePrint_P(PSTR(" clk div = "));
+  //  consolePrintLn(p->clk_5048B);
   consoleNoteLn_P(PSTR("  Autostick/pusher"));
   consoleNote_P(PSTR("    Inner P = "));
   consolePrint(p->i_Kp, 4);
@@ -250,12 +250,12 @@ void dumpParams(struct ParamRecord *p)
 {
   consolePrint_P(PSTR("24l256_addr "));
   consolePrint(p->i2c_24L256);
-  consolePrint_P(PSTR("; 24l256_clk "));
-  consolePrint(p->clk_24L256);
+  //  consolePrint_P(PSTR("; 24l256_clk "));
+  //  consolePrint(p->clk_24L256);
   consolePrint_P(PSTR("; 5048b_addr "));
   consolePrint(p->i2c_5048B);
-  consolePrint_P(PSTR("; 5048b_clk "));
-  consolePrint(p->clk_5048B);
+  //  consolePrint_P(PSTR("; 5048b_clk "));
+  //  consolePrint(p->clk_5048B);
   consolePrint_P(PSTR("; 5048b_ref "));
   consolePrint(p->alphaRef);
   consolePrint_P(PSTR("; inner_pid "));
@@ -284,7 +284,7 @@ void dumpParams(struct ParamRecord *p)
   consolePrint_P(PSTR("; fneutral ")); consolePrint(p->flapNeutral*90);
   consolePrint_P(PSTR("; bdefl ")); consolePrint(p->brakeDefl*90);
   consolePrint_P(PSTR("; bneutral ")); consolePrint(p->brakeNeutral*90);
-  consolePrint_P(PSTR("; filtlen ")); consolePrint(p->filtLen);
+  //  consolePrint_P(PSTR("; filtlen ")); consolePrint(p->filtLen);
 }
 
 const uint8_t addr5048B_c = 0x40;
@@ -828,39 +828,87 @@ void executeCommand(const char *buf, int bufLen)
     consolePrintLn(paramRecord.o_P);
     break;
     
+  case c_center:
+    paramRecord.elevZero = elevStickRaw;
+    paramRecord.aileZero = aileStickRaw;
+    consoleNoteLn_P(PSTR("Stick center set"));
+    consolePrintLn(paramRecord.o_P);
+    break;
+    
+  case c_eneutral:
+    if(numParams > 0)
+      paramRecord.elevNeutral = param[0]/90.0;
+    else {
+      consoleNote_P(PSTR("Elev neutral = "));
+      consolePrintLn(paramRecord.elevNeutral*90.0);
+    }
+    break;
+    
   case c_edefl:
     if(numParams > 0)
       paramRecord.elevDefl = param[0] / 90.0;
+    else {
+      consoleNote_P(PSTR("Elev defl = "));
+      consolePrintLn(paramRecord.elevDefl*90.0);
+    }
+    break;
+    
+  case c_aneutral:
+    if(numParams > 0)
+      paramRecord.aileNeutral = param[0]/90.0;
+    else {
+      consoleNote_P(PSTR("Aile neutral = "));
+      consolePrintLn(paramRecord.aileNeutral*90.0);
+    }
     break;
     
   case c_adefl:
     if(numParams > 0)
       paramRecord.aileDefl = param[0] / 90.0;
+    else {
+      consoleNote_P(PSTR("Aile defl = "));
+      consolePrintLn(paramRecord.aileDefl*90.0);
+    }
+    break;
+    
+  case c_bneutral:
+    if(numParams > 0)
+      paramRecord.brakeNeutral = param[0]/90.0;
+    else {
+      consoleNote_P(PSTR("Brake neutral = "));
+      consolePrintLn(paramRecord.brakeNeutral*90.0);
+    }
     break;
     
   case c_bdefl:
     if(numParams > 0)
       paramRecord.brakeDefl = param[0] / 90.0;
-    break;
-    
-  case c_ezero:
-    if(numParams > 0)
-      paramRecord.elevZero = param[0] / 90.0;
-    break;
-    
-  case c_azero:
-    if(numParams > 0)
-      paramRecord.aileZero = param[0] / 90.0;
+    else {
+      consoleNoteLn_P(PSTR("Brake defl = "));
+      consolePrintLn(paramRecord.brakeDefl*90.0);
+    }
     break;
     
   case c_flapneutral:
-    if(numParams > 0)
+    if(numParams > 0) {
       paramRecord.flapNeutral = param[0] / 90.0;
+      if(numParams > 1)
+	paramRecord.flap2Neutral = param[1] / 90.0;
+    } else {
+      consoleNote_P(PSTR("Flap neutral = "));
+      consolePrint(paramRecord.flapNeutral*90.0);
+      consolePrint_P(PSTR(", "));
+      consolePrintLn(paramRecord.flap2Neutral*90.0);
+    }
     break;
     
   case c_flapstep:
     if(numParams > 0)
       paramRecord.flapStep = param[0] / 90.0;
+    else {
+      consoleNote_P(PSTR("Flap step = "));
+      consolePrintLn(paramRecord.flapStep*90.0);
+    }
     break;
     
   case c_min:
@@ -1074,28 +1122,11 @@ void executeCommand(const char *buf, int bufLen)
       break;
   
   case c_5048b_clk:
-    paramRecord.clk_5048B = param[0];
+    //    paramRecord.clk_5048B = param[0];
     break;
     
   case c_24l256_clk:
-    paramRecord.clk_24L256 = param[0];
-    break;
-    
-  case c_center:
-    paramRecord.elevZero = elevStickRaw;
-    paramRecord.aileZero = aileStickRaw;
-    break;
-    
-  case c_eneutral:
-    paramRecord.elevNeutral = param[0]/90.0;
-    break;
-    
-  case c_aneutral:
-    paramRecord.aileNeutral = param[0]/90.0;
-    break;
-    
-  case c_bneutral:
-    paramRecord.brakeNeutral = param[0]/90.0;
+    //    paramRecord.clk_24L256 = param[0];
     break;
     
   default:
@@ -1152,18 +1183,6 @@ void logStartCallback()
 void logSaveTask(uint32_t currentMicros)
 {
   logSave(logStartCallback);
-}
-
-void rattleTask(uint32_t currentMicros)
-{
-  static int i;
-
-  if(rattling) {
-    pwmOutputWrite(aileHandle, NEUTRAL - (i & 1) * RANGE*0.15);
-    pwmOutputWrite(elevatorHandle, NEUTRAL + (i & 1) * RANGE*0.15);
-  }
-
-  i++;
 }
 
 void alphaTask(uint32_t currentMicros)
@@ -1472,13 +1491,13 @@ void configurationTask(uint32_t currentMicros)
           consoleNote_P(PSTR("Test channel incremented to "));
           consolePrintLn(++stateRecord.testChannel);
 
-        } else if(gearOutput > 0) {
+        } else if(paramRecord.servoGear < 0 || gearOutput > 0) {
           if(flapOutput > 0) {
             flapOutput--;
             consoleNote_P(PSTR("Flaps RETRACTED to "));
             consolePrintLn(flapOutput);
           }
-        } else  {
+        } else {
           consoleNoteLn_P(PSTR("Gear UP"));
           gearOutput = 1;
         }
@@ -1486,7 +1505,7 @@ void configurationTask(uint32_t currentMicros)
         if(testMode) {
           consoleNoteLn_P(PSTR("Test channel RESET"));
           // stateRecord.testChannel = 0;
-        } else if(gearOutput > 0) {
+        } else if(paramRecord.servoGear > -1 && gearOutput > 0) {
           consoleNoteLn_P(PSTR("Gear DOWN"));
           gearOutput = 0;
         } else if(flapOutput < 3) {
@@ -1516,7 +1535,7 @@ void configurationTask(uint32_t currentMicros)
     consoleNoteLn_P(PSTR("Test mode DISABLED"));
   }
 
-  if(mode.wingLeveler && abs(aileStick) > 0.2)
+  if(mode.wingLeveler && absVal(aileStick) > 0.1)
     mode.wingLeveler = false;
   
   // Mode-to-feature mapping: first nominal values
@@ -1535,7 +1554,8 @@ void configurationTask(uint32_t currentMicros)
     mode.autoAlpha = mode.autoTrim = true;
    */
   
-  mode.autoStick = mode.autoAlpha = mode.autoTrim = !gearOutput;
+  // mode.autoStick = mode.autoAlpha = mode.autoTrim = !gearOutput;
+  mode.autoStick = mode.autoAlpha = mode.autoTrim = flapOutput > 0;
    
   // Detect transmitter fail
 
@@ -1666,9 +1686,9 @@ void loopTask(uint32_t currentMicros)
   if(looping) {
     consolePrint("alpha = ");
     consolePrint(alpha*360);
-/*    consolePrint(" IAS = ");
+    consolePrint(" IAS = ");
     consolePrint(sqrt(2*dynPressure));
-*/
+
 /*
     consolePrint(" ppmFreq = ");
     consolePrint(ppmFreq);
@@ -1695,11 +1715,13 @@ void loopTask(uint32_t currentMicros)
 /*    consolePrint(" heading = ");
     consolePrint(heading);
 */
+    /*
     consolePrint(" alt(GPS) = ");
     consolePrint(altitude);
     consolePrint(" m (");
     consolePrint(gpsFix.altitude);
     consolePrint(" m)");
+    */
     /*
     consolePrint(" speed = ");
     consolePrint(gpsFix.speed);
@@ -1822,7 +1844,7 @@ void gpsSentence(const char *type)
   if(!strncmp("RMC", type, 3)) {
     if(!strcmp("A", gpsParamIndex(2))) {
       gpsFix.speed = atof(gpsParamIndex(7));
-      gpsFix.track = atof(gpsParamIndex(8));
+         gpsFix.track = atof(gpsParamIndex(8));
 //      consoleNote("GPS speed = ");
 //      consolePrintLn(gpsFix.speed);
     }    
@@ -1947,12 +1969,13 @@ void controlTask(uint32_t currentMicros)
     
     if(mode.autoStick && !mode.sensorFailSafe && !alphaFailed) {
       const float fract_c = 1.0/3;
-      float strongStick = 
-        sign(elevStick)*max(abs(elevStick)-(1.0-fract_c), 0)/fract_c;
+      float strongStick = max(absVal(elevStick)-(1.0-fract_c), 0)/fract_c;
 
-      elevOutput = mixValue(square(strongStick), elevController.output(), elevStick);
+      elevOutput = elevController.output() + square(strongStick)*elevStick;
     } else
-      elevOutput = elevStick;   
+      elevOutput = elevStick;
+
+    elevOutput = clamp(elevOutput, -1, 1);
     
     // Pusher
 
@@ -1988,7 +2011,7 @@ void controlTask(uint32_t currentMicros)
       if(mode.wingLeveler)
         // Wing leveler enabled
         
-        targetRate = clamp((aileStick*maxBank - rollAngle) / 90, -0.5, 0.5);
+        targetRate = clamp((aileStick*maxBank - rollAngle) / 90, -0.75, 0.75);
       else if(mode.bankLimiter) {
         // No leveling but limit bank
                 
@@ -2014,7 +2037,7 @@ void actuatorTask(uint32_t currentMicros)
   // Actuators
 
   if(rattling) {
-    /*    pwmOutputWrite(aileHandle, NEUTRAL
+    pwmOutputWrite(aileHandle, NEUTRAL
 		   + RANGE*clamp(paramRecord.aileDefl*randomNum(-1, 1) 
 				 + paramRecord.aileNeutral, -1, 1));
 
@@ -2026,12 +2049,16 @@ void actuatorTask(uint32_t currentMicros)
 		   + RANGE*clamp(paramRecord.flapNeutral 
 				 + randomNum(0, 3)*paramRecord.flapStep, -1, 1));                              
 
+    pwmOutputWrite(flap2Handle, NEUTRAL
+		   + RANGE*clamp(paramRecord.flap2Neutral 
+				 - randomNum(0, 3)*paramRecord.flapStep, -1, 1));                              
+
     pwmOutputWrite(gearHandle, NEUTRAL - RANGE*randomNum(-1, 1));
 
     pwmOutputWrite(brakeHandle, NEUTRAL
 		   + RANGE*clamp(paramRecord.brakeNeutral + 
 		   paramRecord.brakeDefl*randomNum(0, 1), -1, 1));                
-*/
+
   } else if(armed) {
     pwmOutputWrite(aileHandle, NEUTRAL
 		   + RANGE*clamp(paramRecord.aileDefl*aileOutput 
@@ -2044,6 +2071,9 @@ void actuatorTask(uint32_t currentMicros)
     pwmOutputWrite(flapHandle, NEUTRAL
 		   + RANGE*clamp(paramRecord.flapNeutral 
 				  + flapOutput*paramRecord.flapStep, -1, 1));                              
+    pwmOutputWrite(flap2Handle, NEUTRAL
+		   + RANGE*clamp(paramRecord.flap2Neutral 
+				  - flapOutput*paramRecord.flapStep, -1, 1));                              
 
     pwmOutputWrite(gearHandle, NEUTRAL - RANGE*(gearOutput*2-1));
 
@@ -2055,7 +2085,7 @@ void actuatorTask(uint32_t currentMicros)
 
 void trimTask(uint32_t currentMicros)
 {
-  if(mode.autoTrim && abs(rollAngle) < 30) {
+  if(mode.autoTrim && absVal(rollAngle) < 30) {
     neutralAlpha += clamp((targetAlpha - neutralAlpha)/2/TRIM_HZ,
       -1.5/360/TRIM_HZ, 1.5/360/TRIM_HZ);
 //    neutralAlpha = clamp(neutralAlpha, paramRecord.alphaMin, maxAlpha*0.9);
@@ -2069,9 +2099,9 @@ void backgroundTask(uint32_t durationMicros)
   uint32_t idleStart = hal.scheduler->micros();
   
   if(!logInitialized)
-    logInitialized = logInit(durationMicros);
+    logInitialized = logInit(2*durationMicros);
   else
-    hal.scheduler->delay(1);
+    hal.scheduler->delay(durationMicros/1000);
 
   idleMicros += hal.scheduler->micros() - idleStart;
 }
@@ -2086,9 +2116,15 @@ void blinkTask(uint32_t currentMicros)
   setPinState(&RED_LED, tick < ledRatio*LED_TICK/LED_HZ ? 0 : 1);
 }
 
+void controlTaskGroup(uint32_t currentMicros)
+{
+  receiverTask(currentMicros);
+  sensorTaskFast(currentMicros);
+  controlTask(currentMicros);
+  actuatorTask(currentMicros);
+}
+
 struct Task taskList[] = {
-  { rattleTask,
-    HZ_TO_PERIOD(789) },
   { communicationTask,
     HZ_TO_PERIOD(100) },
   //  { gpsTask, HZ_TO_PERIOD(100) },
@@ -2096,14 +2132,8 @@ struct Task taskList[] = {
     HZ_TO_PERIOD(ALPHA_HZ) },
   { blinkTask,
     HZ_TO_PERIOD(LED_TICK) },
-  { receiverTask,
+  { controlTaskGroup,
     HZ_TO_PERIOD(CONTROL_HZ) },
-  { sensorTaskFast,
-    HZ_TO_PERIOD(CONTROL_HZ) },
-  { controlTask,
-    HZ_TO_PERIOD(CONTROL_HZ) },
-  { actuatorTask,
-    HZ_TO_PERIOD(ACTUATOR_HZ) },
   { sensorTaskSlow,
     HZ_TO_PERIOD(CONTROL_HZ/5) },
   { trimTask,
@@ -2192,9 +2222,8 @@ void setup() {
 
   // Set I2C speed
   
-  TWBR = max(paramRecord.clk_24L256,
-              paramRecord.clk_5048B);
-              
+  TWBR = paramRecord.i2c_clkDiv;
+                
   // RC input
   
 #ifdef MEGAMINI
@@ -2242,7 +2271,7 @@ void setup() {
   barometer.init();
   barometer.calibrate();
   
-  consoleNoteLn_P(PSTR("  done"));
+  consolePrintLn_P(PSTR("  done"));
   
   consoleNote_P(PSTR("Initializing INS / AHRS... "));
   
@@ -2271,7 +2300,7 @@ void loop()
   if(!scheduler(currentTime))
     // Idle
       
-    backgroundTask(100);
+    backgroundTask(1000);
 }
 
 AP_HAL_MAIN();

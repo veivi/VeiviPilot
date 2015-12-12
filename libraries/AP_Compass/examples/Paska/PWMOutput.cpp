@@ -1,7 +1,7 @@
 #include "PWMOutput.h"
 #include <avr/io.h>
 
-#define PWM_HZ 100 // (100.141592654)
+#define PWM_HZ 50 // (100.141592654)
 #define TIMER_HZ (16e6/8)
 
 static const uint8_t outputModeMask[] = { 1<<COM1A1, 1<<COM1B1, 1<<COM1C1 };
@@ -57,6 +57,9 @@ uint16_t constrain_period(uint16_t p) {
 
 void pwmOutputWrite(const struct PWMOutput *output, uint16_t value)
 {
+  if(!output)
+    return;
+  
    *(output->timer->OCR[output->pwmCh]) = constrain_period(value) << 1;
 }
 

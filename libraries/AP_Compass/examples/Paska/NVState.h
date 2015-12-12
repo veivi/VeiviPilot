@@ -9,18 +9,18 @@
 
 struct ParamRecord {
   uint16_t crc;
+  uint8_t i2c_clkDiv;
   uint8_t i2c_5048B, i2c_24L256;
-  uint8_t clk_5048B, clk_24L256;
   uint16_t alphaRef;
-  float elevDefl, aileDefl;
   float elevZero, aileZero;
-  float elevNeutral, aileNeutral;
-  float alphaMin, alphaMax, alphaNeutral;
+  float aileNeutral, aileDefl;
+  float elevNeutral, elevDefl;
+  float flapNeutral, flap2Neutral, flapStep;
+  float brakeNeutral, brakeDefl;
+  int8_t servoAile, servoElev, servoFlap, servoFlap2, servoGear, servoBrake;
+  float alphaMin, alphaMax;
   float i_Kp, i_Ki, i_Kd, o_P;
   float s_Kp, s_Ki, s_Kd;
-  int filtLen;
-  float flapNeutral, flapStep;
-  float brakeNeutral, brakeDefl;
 };
 
 struct NVStateRecord {

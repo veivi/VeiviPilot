@@ -84,27 +84,9 @@ void ppmInputInit(struct RxInputRecord *inputs[], int num)
   inputRecords = inputs;
   numInputs = min(num, AVR_RC_INPUT_MAX_CHANNELS);
   
-  /**
-   * WGM: 1 1 1 1. Fast WPM, TOP is in OCR5A
-   * COM all disabled
-   * CS51: prescale by 8 => 0.5us tick
-   * ICES5: input capture on rising edge
-   * OCR5A: 40000, 0.5us tick => 2ms period / 50hz freq for outbound
-   * fast PWM.
-   */
-
   FORBID;
     
-  /* Timer cleanup before configuring */
-  //  TCNT5 = 0;
-  //  TIFR5 = 0;
-    
-  /* Set timer 8x prescaler fast PWM mode toggle compare at OCRA with rising edge input capture */
-  // TCCR5A = 0;
   TCCR5B |= (1<<ICES5) | (1<<CS51);
-  // OCR5A  = 0xFFFF;
-
-  /* Enable input capture interrupt */
   TIMSK5 |= 1<<ICIE5;
      
   PERMIT;
