@@ -204,16 +204,8 @@ struct RxInputRecord rpmInput = { rpmPin };
 
 void printParams(struct ParamRecord *p)
 {
-  consoleNote_P(PSTR("  24L256 addr = "));
-  consolePrint(p->i2c_24L256);
-  //  consolePrint_P(PSTR(" clk div = "));
-  //  consolePrintLn(p->clk_24L256);
-  consoleNote_P(PSTR("  AS5048B addr = "));
-  consolePrint(p->i2c_5048B);
-  consolePrint_P(PSTR(" ref = "));
-  consolePrint(p->alphaRef);
-  //  consolePrint_P(PSTR(" clk div = "));
-  //  consolePrintLn(p->clk_5048B);
+  consoleNote_P(PSTR(" AS5048B ref = "));
+  consolePrintLn(p->alphaRef);
   consoleNoteLn_P(PSTR("  Autostick/pusher"));
   consoleNote_P(PSTR("    Inner P = "));
   consolePrint(p->i_Kp, 4);
@@ -244,18 +236,18 @@ void printParams(struct ParamRecord *p)
   consolePrint(p->aileDefl*90);
   consolePrint_P(PSTR(" neutral = "));
   consolePrintLn(p->aileNeutral*90);
+  consoleNoteLn_P(PSTR("  Flap"));
+  consoleNote_P(PSTR("    step = "));
+  consolePrint(p->flapStep*90);
+  consolePrint_P(PSTR(" neutral = "));
+  consolePrint(p->flapNeutral*90);
+  consolePrint_P(PSTR(" ("));
+  consolePrint(p->flap2Neutral*90);
+  consolePrintLn_P(PSTR(")"));
 }
 
 void dumpParams(struct ParamRecord *p)
 {
-  consolePrint_P(PSTR("24l256_addr "));
-  consolePrint(p->i2c_24L256);
-  //  consolePrint_P(PSTR("; 24l256_clk "));
-  //  consolePrint(p->clk_24L256);
-  consolePrint_P(PSTR("; 5048b_addr "));
-  consolePrint(p->i2c_5048B);
-  //  consolePrint_P(PSTR("; 5048b_clk "));
-  //  consolePrint(p->clk_5048B);
   consolePrint_P(PSTR("; 5048b_ref "));
   consolePrint(p->alphaRef);
   consolePrint_P(PSTR("; inner_pid "));
@@ -282,9 +274,9 @@ void dumpParams(struct ParamRecord *p)
   consolePrint_P(PSTR("; azero ")); consolePrint(p->aileZero*90);
   consolePrint_P(PSTR("; fstep ")); consolePrint(p->flapStep*90);
   consolePrint_P(PSTR("; fneutral ")); consolePrint(p->flapNeutral*90);
+  consolePrint_P(PSTR("; fneutral ")); consolePrint(p->flapNeutral*90); consolePrint(" "); consolePrint(p->flap2Neutral*90); 
   consolePrint_P(PSTR("; bdefl ")); consolePrint(p->brakeDefl*90);
   consolePrint_P(PSTR("; bneutral ")); consolePrint(p->brakeNeutral*90);
-  //  consolePrint_P(PSTR("; filtlen ")); consolePrint(p->filtLen);
 }
 
 const uint8_t addr5048B_c = 0x40;
@@ -994,16 +986,17 @@ void executeCommand(const char *buf, int bufLen)
       if(param[0] > MAX_MODELS-1)
         param[0] = MAX_MODELS-1;
       setModel(param[0]);
-      storeNVState();
+      if(echoEnabled)
+	storeNVState();
     }
     break;
 
   case c_echo:
     if(numParams > 0 && param[0] < 1.0) 
-      echoEnabled = false;
+      echoEnabled = talk = false;
     else {
       consoleNoteLn_P(PSTR("Echo enabled"));
-      echoEnabled = true;
+      echoEnabled = talk = true;
     }
     break;
     
@@ -1736,7 +1729,7 @@ void loopTask(uint32_t currentMicros)
   }
 }
 
-const int serialBufLen = 1<<8;
+const int serialBufLen = 1<<9;
 char serialBuf[serialBufLen];
 int serialBufIndex = 0;
 
@@ -1969,9 +1962,9 @@ void controlTask(uint32_t currentMicros)
     
     if(mode.autoStick && !mode.sensorFailSafe && !alphaFailed) {
       const float fract_c = 1.0/3;
-      float strongStick = max(absVal(elevStick)-(1.0-fract_c), 0)/fract_c;
+      float strength = max(absVal(elevStick)-(1.0-fract_c), 0)/fract_c;
 
-      elevOutput = elevController.output() + square(strongStick)*elevStick;
+      elevOutput = elevController.output() + square(strength)*elevStick;
     } else
       elevOutput = elevStick;
 
@@ -2304,3 +2297,10 @@ void loop()
 }
 
 AP_HAL_MAIN();
+
+/*
+//
+// Backup VIPER 2015/12/12
+
+echo 0; model 0; ; 5048b_ref 2068; inner_pid 0.5100 4.6398 0.0140; outer_p 10.00; stabilizer_pid 0.4799 4.0000 0.0130; min -3.00; max 12.00; edefl 45.00; eneutral -8.00; ezero 3.33; adefl -45.00; aneutral 0.00; azero 6.00; fstep -40.00; fneutral 55.00; fneutral 55.00 -80.00; bdefl -45.00; bneutral -45.00; echo 1; store
+*/
