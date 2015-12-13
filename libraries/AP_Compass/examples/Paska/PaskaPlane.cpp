@@ -1565,20 +1565,12 @@ void configurationTask(uint32_t currentMicros)
       
   // Default controller settings
      
-  elevController.setPID(
-    paramRecord.i_Kp,
-    paramRecord.i_Ki,
-    paramRecord.i_Kd);
-  
-  pusher.setPID(
-    paramRecord.i_Kp,
-    paramRecord.i_Ki,
-    paramRecord.i_Kd);
-  
-  aileController.setPID(
-    paramRecord.s_Kp,
-    paramRecord.s_Ki,
-    paramRecord.s_Kd);
+  elevController
+    .setPID(paramRecord.i_Kp, paramRecord.i_Ki, paramRecord.i_Kd);
+  pusher
+    .setPID(paramRecord.i_Kp, paramRecord.i_Ki, paramRecord.i_Kd);
+  aileController
+    .setPID(paramRecord.s_Kp, paramRecord.s_Ki, paramRecord.s_Kd);
 
   autoAlphaP = paramRecord.o_P;
   maxAlpha = paramRecord.alphaMax;
@@ -1977,7 +1969,7 @@ void controlTask(uint32_t currentMicros)
   
     // Aileron
     
-    float maxBank = 60.0;
+    float maxBank = 45.0;
     
     float targetRate = 270.0/360*aileStick;
     
