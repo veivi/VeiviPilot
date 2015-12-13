@@ -1956,7 +1956,7 @@ void controlTask(uint32_t currentMicros)
       const float fract_c = 1.0/3;
       float strength = square(max(elevStick-(1.0-fract_c), 0)/fract_c);
 
-      elevOutput = clamp(elevController.output() + strength*elevStick, -1, 1);
+      elevOutput = mixValue(strength, elevController.output(), elevStick);
     } else
       elevOutput = elevStick;
 
