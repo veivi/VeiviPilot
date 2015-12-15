@@ -2289,6 +2289,11 @@ void loop()
 AP_HAL_MAIN();
 
 /*
+
+L-39 2015/12/15
+
+echo 0; model 0; 5048b_ref 39656; inner_pid 0.6900 5.1111 0.0232; outer_p 10.00; stabilizer_pid 0.8400 4.6666 0.0378; min -3.00; max 12.00; edefl -45.00; eneutral 0.00; ezero 0.00; adefl -35.00; aneutral 0.00; azero 0.00; fstep -27.00; fneutral 45.00; fneutral 45.00 45.00; bdefl -45.00; bneutral -45.00; echo 1; store
+
 //
 // Backup VIPER 2015/12/12
 
