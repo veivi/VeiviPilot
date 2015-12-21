@@ -62,6 +62,7 @@ logState_t logState;
 int32_t logPtr, logLen, logSize;
 uint16_t logEndStamp;
 bool logEnabled = false;
+long logBytesCum;
 
 #define logOffset stateRecord.logPartition
 
@@ -112,6 +113,8 @@ static void logCommit(int bytes)
     return;
     
   logPtr = logIndex(bytes);
+
+  logBytesCum += bytes;
 }
 
 bool logDirty = false;

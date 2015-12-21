@@ -30,6 +30,8 @@ typedef enum {  l_alpha,
                 l_channels } ChannelId_t;
 
 extern bool logEnabled;
+extern long logBytesCum;
+
 
 bool logInit(uint32_t);
 void logClear(void);

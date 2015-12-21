@@ -3,8 +3,7 @@
 
 #define EXT_EEPROM_LATENCY 6000
 
-extern int logBytesCum;
-extern float logBandWidth;
+extern long writeBytesCum;
 extern bool eepromWarn, eepromFailed;
 
 void waitEEPROM(uint32_t addr);

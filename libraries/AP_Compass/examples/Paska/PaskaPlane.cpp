@@ -128,8 +128,8 @@ const struct PWMOutput pwmOutput[] = {
 // Periodic task stuff
 //
 
-#define CONTROL_HZ 100
-#define ALPHA_HZ (CONTROL_HZ*6)
+#define CONTROL_HZ 50
+#define ALPHA_HZ (CONTROL_HZ*10)
 #define TRIM_HZ 10
 #define LED_HZ 3
 #define LED_TICK 100
@@ -185,7 +185,7 @@ float neutralStick = 0.0, neutralAlpha, targetAlpha;
 float switchValue, tuningKnobValue, rpmOutput;
 Controller elevController, aileController, pusher;
 float autoAlphaP, maxAlpha;
-float acc,altitude,  heading, rollAngle, pitchAngle, rollRate, pitchRate;
+float accG,altitude,  heading, rollAngle, pitchAngle, rollRate, pitchRate;
 int cycleTimeCounter = 0;
 uint32_t prevMeasurement;
 float parameter;  
@@ -194,7 +194,7 @@ RunningAvgFilter alphaFilter;
 AlphaBuffer alphaBuffer, pressureBuffer;
 float controlCycle = 10.0e-3;
 uint32_t idleMicros;
-float idleAvg;
+float idleAvg, logBandWidth, ppmFreq;
 
 float elevOutput = 0, aileOutput = 0, flapOutput = 0, gearOutput = 1, brakeOutput = 0;
 
@@ -378,7 +378,7 @@ void logRPM(void)
 void logAttitude(void)
 {
   logGeneric(l_dynpressure, dynPressure);
-  logGeneric(l_acc, acc);
+  logGeneric(l_acc, accG);
   logGeneric(l_roll, rollAngle);
   logGeneric(l_rollrate, rollRate*360);
   logGeneric(l_pitch, pitchAngle);
@@ -443,17 +443,24 @@ bool readAlpha_5048B(int16_t *result) {
 
 bool readPressure(int16_t *result) 
 {
-  uint16_t raw = 0;
+  static uint32_t acc;
+  static int accCount;
+  const int log2CalibWindow = 6;
   
   if(iasFailed)
     // Stop trying
     return false;
   
+  uint16_t raw = 0;
+
   if(!read4525DO_word14(&raw))
     return false;
 
-  if(result)
-    *result = (raw - 8176)<<2;
+  if(accCount < 1<<log2CalibWindow) {
+    acc += raw;
+    accCount++;
+  } else if(result)
+    *result = (raw - (acc>>log2CalibWindow))<<2;
   
   return true;
 }
@@ -1026,6 +1033,8 @@ void executeCommand(const char *buf, int bufLen)
   case c_report:
     consoleNote_P(PSTR("Idle avg = "));
     consolePrintLn(idleAvg*100,1);
+    consoleNote_P(PSTR("PPM frequency = "));
+    consolePrintLn(ppmFreq);
     consoleNote_P(PSTR("Alpha = "));
     consolePrint(360*alpha);
     if(alphaFailed)
@@ -1346,8 +1355,6 @@ int compareFloat(const void *a, const void *b)
   else return 0;    
 }
 
-float ppmFreq;
-
 void measurementTask(uint32_t currentMicros)
 {
   // Idle measurement
@@ -1355,20 +1362,24 @@ void measurementTask(uint32_t currentMicros)
   idleAvg = 7*idleAvg/8 + (float) idleMicros/1e6/8;
   idleMicros = 0;
 
-  // Cycle time monitoring
+  // PPM monitoring
   
-  if(cycleTimeCounter > 5)
-    return;
-    
   FORBID;
   ppmFreq = 1.0e6 * ppmFrames / (currentMicros - prevMeasurement);
   ppmFrames = 0;
   PERMIT;
 
-  logBandWidth = 1.0e6 * logBytesCum / (currentMicros - prevMeasurement);
-  logBytesCum = 0;
+  // Log bandwidth
+
+  logBandWidth = 1.0e6 * writeBytesCum / (currentMicros - prevMeasurement);
+  writeBytesCum = 0;
   prevMeasurement = currentMicros;
 
+  // Cycle time monitoring
+  
+  if(cycleTimeCounter > 5)
+    return;
+    
   if(cycleTimesValid) {
     qsort((void*) cycleTimeStore, cycleTimeWindow, sizeof(float), compareFloat);
     
@@ -1671,8 +1682,8 @@ void loopTask(uint32_t currentMicros)
   if(looping) {
     consolePrint("alpha = ");
     consolePrint(alpha*360);
-    consolePrint(" IAS = ");
-    consolePrint(sqrt(2*dynPressure));
+    consolePrint(" dynPress = ");
+    consolePrint(dynPressure);
 
 /*
     consolePrint(" ppmFreq = ");
@@ -1969,7 +1980,7 @@ void controlTask(uint32_t currentMicros)
   
     // Aileron
     
-    float maxBank = 45.0;
+    float maxBank = 60.0;
     
     float targetRate = 270.0/360*aileStick;
     

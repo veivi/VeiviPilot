@@ -16,8 +16,7 @@ uint8_t cacheData[EXT_EEPROM_PAGE];
 bool cacheFlag[EXT_EEPROM_PAGE];
 bool cacheValid, cacheModified;
 uint32_t cacheTag;
-int logBytesCum;
-float logBandWidth;
+long writeBytesCum;
 
 bool eepromWarn = false, eepromFailed = false;
 
@@ -122,7 +121,7 @@ static void cacheWriteLine(uint32_t addr, const uint8_t *value, int size)
   
   cacheValid = false;
   cacheModified = true;
-  logBytesCum += size;
+  writeBytesCum += size;
 }
 
 void cacheWrite(uint32_t addr, const uint8_t *value, int size)
