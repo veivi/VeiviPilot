@@ -466,14 +466,53 @@ bool readPressure(int16_t *result)
 }
 
 typedef enum {
-  c_, c_adefl, c_edefl, c_clear, c_dump, c_min, c_max, c_zero,
-  c_eneutral, c_aneutral, c_store, c_report, c_stop, c_cycle,
-  c_read, c_write, c_5048b_addr, c_5048b_read, c_start, c_init, c_filtlen,
-  c_params, c_defaults, c_reset, c_24l256_addr, c_24l256_clk, c_5048b_clk, c_center,
-  c_loop, c_stamp, c_model, c_alpha, c_flapneutral, c_flapstep, c_backup, c_echo,
-  c_ezero, c_azero, c_5048b_ref, c_bdefl, c_bneutral, c_rpm, c_baud, c_dumpz,
-  c_stabilizer_pid, c_stabilizer_pid_zn, c_stabilizer_pi_zn, c_outer_p, c_rattle,
-  c_inner_pid, c_inner_pid_zn, c_inner_pi_zn, c_arm, c_disarm, c_test, c_talk } command_t;
+  c_,
+  c_adefl,
+  c_edefl,
+  c_clear,
+  c_dump,
+  c_min,
+  c_max,
+  c_zero,
+  c_eneutral,
+  c_aneutral,
+  c_store,
+  c_report,
+  c_stop,
+  c_cycle,
+  c_read,
+  c_write,
+  c_start,
+  c_params,
+  c_reset,
+  c_center,
+  c_loop,
+  c_stamp,
+  c_model,
+  c_alpha,
+  c_flapneutral,
+  c_flapstep,
+  c_backup,
+  c_echo,
+  c_ezero,
+  c_azero,
+  c_bdefl,
+  c_bneutral,
+  c_rpm,
+  c_baud,
+  c_dumpz,
+  c_stabilizer_pid,
+  c_stabilizer_pid_zn,
+  c_stabilizer_pi_zn,
+  c_outer_p,
+  c_rattle,
+  c_inner_pid,
+  c_inner_pid_zn,
+  c_inner_pi_zn,
+  c_arm,
+  c_disarm,
+  c_test,
+  c_talk } command_t;
 
 struct command {
   const char *c_string;
@@ -499,18 +538,9 @@ const struct command commands[] = {
   { "cycle", c_cycle },
   { "read", c_read },
   { "write", c_write },
-  { "5048b_addr", c_5048b_addr },
-  { "5048b_ref", c_5048b_ref },
-  { "24l256_addr", c_24l256_addr },
-  { "5048b_read", c_5048b_read },
   { "start", c_start },
-  { "init", c_init },
-  { "filtlen", c_filtlen },
-  { "defaults", c_defaults },
   { "params", c_params },
   { "reset", c_reset },
-  { "5048b_clk", c_5048b_clk },
-  { "24l256_clk", c_24l256_clk },
   { "center", c_center },
   { "loop", c_loop },
   { "stamp", c_stamp },
@@ -924,11 +954,6 @@ void executeCommand(const char *buf, int bufLen)
     paramRecord.alphaRef += (int16_t) ((1L<<16) * alpha);
     break;
 
-  case c_5048b_ref:
-    if(numParams > 0)
-      paramRecord.alphaRef = (int16_t) param[0];
-    break;
-
   case c_alpha:
     if(numParams > 0)
       paramRecord.alphaRef += (int16_t) ((1L<<16) * (alpha - (float) param[0] / 360));
@@ -1007,10 +1032,6 @@ void executeCommand(const char *buf, int bufLen)
     }
     break;
     
-  case c_init:
-//    logEndStamp = ENTRY_VALUE(-100);
-//    logPtr = logSize - 1;
-
   case c_clear:
     logClear();
     cycleMin = cycleMax = cycleCum = cycleMean = -1;
@@ -1091,18 +1112,6 @@ void executeCommand(const char *buf, int bufLen)
     consoleNoteLn_P(PSTR("Warning flags reset"));
     break;
     
-  case c_5048b_addr:
-    paramRecord.i2c_5048B = param[0];
-    break;
-    
-  case c_24l256_addr:
-    paramRecord.i2c_24L256 = param[0];
-    break;
-    
-  case c_5048b_read:
-//    consolePrintLn(read5048B_byte((int) param), DEC);
-    break;
-    
   case c_rpm:
     stateRecord.logRPM = param[0] > 0.5 ? true : false;
     consoleNote_P(PSTR("RPM logging "));
@@ -1111,26 +1120,13 @@ void executeCommand(const char *buf, int bufLen)
     storeNVState();
     break;
     
-   case c_defaults:
-//      paramRecord[stateRecord.model] = paramDefaults;
-//      consoleNoteLn("Defaults restored");
-      break;
-      
    case c_params:
      consoleNote_P(PSTR("SETTINGS (MODEL "));
       consolePrint(stateRecord.model);
       consolePrintLn(")");
       printParams(&paramRecord);
       break;
-  
-  case c_5048b_clk:
-    //    paramRecord.clk_5048B = param[0];
-    break;
-    
-  case c_24l256_clk:
-    //    paramRecord.clk_24L256 = param[0];
-    break;
-    
+
   default:
     consolePrintLn_P(PSTR("Command not recognized"));
     break;
