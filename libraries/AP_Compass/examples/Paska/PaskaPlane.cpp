@@ -128,12 +128,15 @@ const struct PWMOutput pwmOutput[] = {
 // Periodic task stuff
 //
 
-#define CONTROL_HZ 50
+#define CONTROL_HZ 50.0
 #define ALPHA_HZ (CONTROL_HZ*10)
 #define TRIM_HZ 10
 #define LED_HZ 3
 #define LED_TICK 100
-
+#define LOG_HZ_ALPHA CONTROL_HZ
+#define LOG_HZ_CONTROL (CONTROL_HZ/3)
+#define LOG_HZ_SLOW 2
+  
 struct Task {
   void (*code)(uint32_t time);
   uint32_t period, lastExecuted;
@@ -2129,19 +2132,19 @@ struct Task taskList[] = {
   { trimTask,
     HZ_TO_PERIOD(TRIM_HZ) },
   { configurationTask,
-    HZ_TO_PERIOD(50) },
-  { cacheTask,
-    HZ_TO_PERIOD(4) },
+    HZ_TO_PERIOD(LOG_HZ_CONTROL) },
   { rpmTask,
-    HZ_TO_PERIOD(10) },
+    HZ_TO_PERIOD(LOG_HZ_CONTROL) },
   { alphaLogTask,
-    HZ_TO_PERIOD(45) },
+    HZ_TO_PERIOD(LOG_HZ_ALPHA) },
   { controlLogTask,
-    HZ_TO_PERIOD(15) },
+    HZ_TO_PERIOD(LOG_HZ_CONTROL) },
   { positionLogTask,
-    HZ_TO_PERIOD(2) },
+    HZ_TO_PERIOD(LOG_HZ_SLOW) },
   { logSaveTask,
-    HZ_TO_PERIOD(2) },
+    HZ_TO_PERIOD(LOG_HZ_SLOW) },
+  { cacheTask,
+    HZ_TO_PERIOD(LOG_HZ_SLOW) },
   { measurementTask,
     HZ_TO_PERIOD(1) },
   { loopTask,
