@@ -1572,7 +1572,10 @@ void configurationTask(uint32_t currentMicros)
     consoleNoteLn_P(PSTR("Receiver failsafe mode DISABLED"));
     mode.rxFailSafe = false;
   }
-      
+
+  if(mode.rxFailSafe)
+    mode.autoStick = mode.autoAlpha = true;
+  
   // Default controller settings
      
   elevController
@@ -1681,6 +1684,8 @@ void loopTask(uint32_t currentMicros)
   if(looping) {
     consolePrint("alpha = ");
     consolePrint(alpha*360);
+    consolePrint(" targAlpha = ");
+    consolePrint(targetAlpha*360);
     consolePrint(" dynPress = ");
     consolePrint(dynPressure);
 
@@ -1913,7 +1918,9 @@ void gpsTask(uint32_t currentMicros)
 float randomNum(float small, float large)
 {
   return small + (large-small)*(float) (rand() % 1000) / 1000;
-}  
+}
+
+#define maxAutoAlpha (maxAlpha/square(1.1))
 
 void controlTask(uint32_t currentMicros)
 {
@@ -1947,11 +1954,17 @@ void controlTask(uint32_t currentMicros)
       float targetRate = clamp(elevStick, -0.5, 0.5);
 
       if(mode.autoAlpha) {  
-        float maxAutoAlpha = maxAlpha/square(1.1);
-        
-        targetAlpha = clamp(neutralAlpha + elevStick*maxAutoAlpha,
-          paramRecord.alphaMin, maxAutoAlpha);
- 
+	if(mode.rxFailSafe)
+	  targetAlpha = maxAutoAlpha;
+	else {
+	  const float fract_c = 1.0/3;
+	  const float strength_c = max(elevStick-(1.0-fract_c), 0)/fract_c;
+	  const float maxTargetAlpha_c = mixValue(strength_c, maxAutoAlpha, maxAlpha);
+
+	  targetAlpha = clamp(neutralAlpha + elevStick*maxAlpha/2,
+			      paramRecord.alphaMin, maxTargetAlpha_c);
+	}
+	
         targetRate = (targetAlpha - alpha) * autoAlphaP;
         
       } else
@@ -1962,12 +1975,9 @@ void controlTask(uint32_t currentMicros)
       elevController.reset(elevStick, 0.0);
     }
     
-    if(mode.autoStick && !mode.sensorFailSafe && !alphaFailed) {
-      const float fract_c = 1.0/3;
-      float strength = square(max(elevStick-(1.0-fract_c), 0)/fract_c);
-
-      elevOutput = mixValue(strength, elevController.output(), elevStick);
-    } else
+    if(mode.autoStick && !mode.sensorFailSafe && !alphaFailed)
+      elevOutput = elevController.output();
+    else
       elevOutput = elevStick;
 
     // Pusher
@@ -2079,7 +2089,7 @@ void actuatorTask(uint32_t currentMicros)
 void trimTask(uint32_t currentMicros)
 {
   if(mode.autoTrim && absVal(rollAngle) < 30) {
-    neutralAlpha += clamp((targetAlpha - neutralAlpha)/2/TRIM_HZ,
+    neutralAlpha += clamp((min(targetAlpha, maxAutoAlpha) - neutralAlpha)/2/TRIM_HZ,
       -1.5/360/TRIM_HZ, 1.5/360/TRIM_HZ);
 //    neutralAlpha = clamp(neutralAlpha, paramRecord.alphaMin, maxAlpha*0.9);
   }
