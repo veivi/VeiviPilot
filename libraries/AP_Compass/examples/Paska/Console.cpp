@@ -148,7 +148,7 @@ void consolePrint(float v, int p)
 #endif
 }
 
-void consolePrint(char c)
+void consolePrint(const char c)
 {
   printChar(c);
 }  

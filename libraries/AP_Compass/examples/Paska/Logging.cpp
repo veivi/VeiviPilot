@@ -1,3 +1,4 @@
+#include <AP_HAL/AP_HAL.h>
 #include "Logging.h"
 #include "NVState.h"
 #include "Filter.h"
@@ -5,54 +6,6 @@
 #include <AP_HAL/AP_HAL.h>
 
 extern const AP_HAL::HAL& hal;
-
-struct LogChannel {
-  ChannelId_t ch;
-  const char *name;
-  float small, large;
-  bool tick;
-  uint16_t value;
-};
-
-// Must match the order with logChannelId_t declaration!!
-
-struct LogChannel logChannels[] = {
-   { l_alpha, "ALPH", -180, 180, true },
-   { l_dynpressure, "PRES", -100, 10000 },
-   { l_acc, "G", 0, 10 },
-   { l_roll, "ROLL", -180, 180 },
-   { l_rollrate, "RRTE", -360, 360 },
-   { l_pitch, "PTCH", -90, 90 },
-   { l_pitchrate, "PRTE", -360, 360 },
-   { l_heading, "HEAD", -180, 180},
-   { l_ailestick, "ASTK", -1, 1 },
-   { l_elevstick, "ESTK", -1, 1 },
-   { l_aileron, "AILE", -1, 1 },
-   { l_elevator, "ELEV", -1, 1 },
-   { l_mode, "MODE", 0, 255 },
-   { l_target, "TARG", -180, 180 },
-   { l_trim, "TRIM", -180, 180 },
-   { l_gain, "GAIN", 0, 50},
-   { l_test, "TEST", 0, 255},
-   { l_rpm, "RPM", 0, 50000 },
-   { l_speed, "VELO", 0, 300 },
-   { l_track, "TRAK", 0, 360 },
-   { l_altgps, "ALTG", -10, 300 },
-   { l_altbaro, "ALTB", -10, 300 } };
-
-#define TOKEN_MASK (1U<<15)
-#define VALUE_MASK (~TOKEN_MASK)
-#define DELTA_MASK (VALUE_MASK>>1)
-#define ENTRY_TOKEN(t) (TOKEN_MASK | (t))
-#define ENTRY_VALUE(v) (((uint16_t) v) & VALUE_MASK)
-#define ENTRY_IS_TOKEN(e) ((e) & TOKEN_MASK)
-
-typedef enum { t_stamp,
-               t_start, 
-               t_mark, 
-               t_channel = t_stamp + (1<<8),
-               t_delta = t_stamp + (1<<14)
-            } LogToken_t;
 
 #define logIndex(i) ((logPtr + logSize + (i)) % logSize)
 
@@ -203,7 +156,7 @@ void logEnable()
     
   logEnabled = true;
   
-  for(int i = 0; i < l_channels; i++)
+  for(int i = 0; i < lc_channels; i++)
     logChannels[i].value = TOKEN_MASK;
   
   prevCh = -1;  
@@ -225,7 +178,7 @@ void logDisable()
 static int col = 0;
 static bool first = false, tick = false;
 
-static void logPrintValue(void)
+static void logOutputInit(void)
 {
   col = 20;
   first = true;
@@ -234,7 +187,7 @@ static void logPrintValue(void)
 
 long valueCount;
 
-static void logPrintValue(float v)
+static void logOutputValue(float v)
 {
   float av = absVal(v);
   
@@ -244,7 +197,7 @@ static void logPrintValue(float v)
   }
 
   if(col > 72) {
-    float progress = (float) valueCount / logLen / l_channels;
+    float progress = (float) valueCount / logLen / lc_channels;
     consolePrint(" // ");
     consolePrint(100.0*progress, 0);
     consolePrintLn("%");
@@ -267,7 +220,20 @@ static void logPrintValue(float v)
   first = false;
 }
 
-static void logPrintString(const char *s)
+static void logPrint(const char *s)
+{  
+  if(col > 72) {
+    consolePrintLn("");
+    col = 0;
+  }
+
+  consolePrint(s);
+  col += strlen(s);
+
+  first = false;
+}
+
+static void logOutputString(const char *s)
 {  
   if(!first) {
     consolePrint(",");
@@ -285,7 +251,7 @@ static void logPrintString(const char *s)
   first = false;
 }
 
-static void logPrintVariableName(int stamp, const char *name)
+static void logOutputVariableName(int stamp, const char *name)
 {  
   if(!first) {
     consolePrint(";");
@@ -303,10 +269,10 @@ static void logPrintVariableName(int stamp, const char *name)
   first = false;
 }
 
-static void logPrintValue(float small, float large)
+static void logOutputValue(float small, float large)
 {
   valueCount++;  
-  logPrintValue(tick ? small : large);
+  logOutputValue(tick ? small : large);
   tick = !tick;
 }
 
@@ -318,17 +284,17 @@ void logDump(int ch)
   if(ch < 0) {
     valueCount = 0;
     
-    for(ch = 0; ch < l_channels; ch++)
+    for(ch = 0; ch < lc_channels; ch++)
       logDump(ch);
 
     consolePrint("fdr_");
     consolePrint(stateRecord.logStamp);
     consolePrint("_matrix = [ ");
 
-    logPrintValue();
+    logOutputInit();
 
-    for(ch = 0; ch < l_channels; ch++)
-      logPrintVariableName(stateRecord.logStamp, logChannels[ch].name);
+    for(ch = 0; ch < lc_channels; ch++)
+      logOutputVariableName(stateRecord.logStamp, logChannels[ch].name);
     
     consolePrint(" ]\n");
 
@@ -340,10 +306,10 @@ void logDump(int ch)
     consolePrint(stateRecord.logStamp);
     consolePrint("_matrix, ");
     
-    logPrintValue();
+    logOutputInit();
 
-    for(ch = 0; ch < l_channels; ch++)
-      logPrintString(logChannels[ch].name);
+    for(ch = 0; ch < lc_channels; ch++)
+      logOutputString(logChannels[ch].name);
     
     consolePrintLn(" }");
     
@@ -387,7 +353,7 @@ void logDump(int ch)
   bool valueValid = false;
   float value = 0.0;
 
-  logPrintValue(); // Initialize
+  logOutputInit(); // Initialize
     
   for(int32_t i = 0; i < logLen; i++) {    
     valueCount++;
@@ -410,11 +376,11 @@ void logDump(int ch)
           // Mark
                       
           for(int j = 0; j < 10; j++)
-            logPrintValue(small, large); 
+            logOutputValue(small, large); 
           break;
           
         default:
-          if(token >= t_channel && token < t_channel+l_channels) {
+          if(token >= t_channel && token < t_channel+lc_channels) {
             // Valid channel id
       
             nextCh = token - t_channel;
@@ -434,9 +400,9 @@ void logDump(int ch)
       
       if(logChannels[currentCh].tick) {
         if(valueValid)
-          logPrintValue(value);
+          logOutputValue(value);
         else
-          logPrintValue(small, large);
+          logOutputValue(small, large);
       }
 
       if(currentCh == ch) {
@@ -464,56 +430,32 @@ void logDump(int ch)
   consolePrintLn(" ]");
 }
 
-/*
-#define WORD6_CHAR(v, s)  (' ' + (((v)>>(s*6)) & 0x3F))
+void binaryOutput(const uint8_t c)
+{
+  if(c == '\\')
+    hal.uartA->write((const uint8_t) '\\');
+
+  hal.uartA->write(c);
+}
+
+void binaryOutputEnd(void)
+{
+  hal.uartA->write((const uint8_t) '\\');
+  hal.uartA->write((const uint8_t) '\0');
+}
 
 void logDumpBinary(void)
 {
-  int32_t len = 0;
-
-  consoleNote("Looking for log start... ");
-
-  while(len < logSize-1 && logRead(logIndex(-len-1)) != ENTRY_TOKEN(t_start))
-    len++;
-  
-  consolePrint("found, log length = ");
-  consolePrintLn(len);
-  
-  int lineLen = 0;
-  
-  uint16_t buf[3];
-  int count = 0;
-  
-  for(int32_t i = 0; i < len; i++) {
-    buf[count++] = logRead(logIndex(-len+i));
-    
-    if(count == 3) {
-      uint64_t tmp = *((uint64_t*) buf);
-      
-      char string[] = {
-        WORD6_CHAR(tmp, 0),      
-        WORD6_CHAR(tmp, 1),      
-        WORD6_CHAR(tmp, 2),      
-        WORD6_CHAR(tmp, 3),      
-        WORD6_CHAR(tmp, 4),      
-        WORD6_CHAR(tmp, 5),      
-        WORD6_CHAR(tmp, 6),      
-        WORD6_CHAR(tmp, 7),     
-        '\0' };
-        
-      consolePrint(string);
-    
-      lineLen += 8;
-      if(lineLen >= 72) {
-        consolePrintLn("");
-        lineLen = 0;
-      }
-      
-      count = 0;
-    }
+  for(int32_t i = 0; i < logSize; i++) {
+    const uint16_t buf = logRead(i);
+    binaryOutput(buf & 0xFF);
+    binaryOutput(buf>>8);
   }
+
+  binaryOutputEnd();
+
+  consoleNoteLn_P(PSTR("LOG DUMP COMPLETED"));
 }
-*/
 
 bool logInit(uint32_t maxDuration)
 {
@@ -580,10 +522,7 @@ bool logInit(uint32_t maxDuration)
     if(endFound && endPtr < logSize) {
       logPtr = endPtr;
     
-      consoleNote_P(PSTR("End of log found at "));
-      consolePrint(logPtr);
-      consolePrint(", stamp = ");
-      consolePrintLn(logEndStamp);
+      consoleNoteLn_P(PSTR("LOG READY"));
     } else {
       consoleNoteLn_P(PSTR("*** The log is corrupt and is being cleared ***"));
       logEndStamp = 0;

@@ -5,7 +5,7 @@
 
 extern bool talk;
 
-void consolePrint(char c);
+void consolePrint(const char c);
 void consolevNotef(const char *s, va_list argp);
 void consoleNotef(const char *s, ...);
 void consoleNotefLn(const char *s, ...);

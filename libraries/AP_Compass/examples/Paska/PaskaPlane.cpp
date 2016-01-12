@@ -188,7 +188,7 @@ float neutralStick = 0.0, neutralAlpha, targetAlpha;
 float switchValue, tuningKnobValue, rpmOutput;
 Controller elevController, aileController, pusher;
 float autoAlphaP, maxAlpha;
-float accG,altitude,  heading, rollAngle, pitchAngle, rollRate, pitchRate;
+float accX, accY, accZ, altitude,  heading, rollAngle, pitchAngle, rollRate, pitchRate, yawRate;
 int cycleTimeCounter = 0;
 uint32_t prevMeasurement;
 float parameter;  
@@ -328,12 +328,12 @@ bool read4525DO_word14(uint16_t *result)
 
 void logAlpha(void)
 {
-  logGeneric(l_alpha, alpha*360);
+  logGeneric(lc_alpha, alpha*360);
 }
 
 void logConfig(void)
 {
-  logGeneric(l_mode, 
+  logGeneric(lc_mode, 
     (mode.rxFailSafe ? 32 : 0) 
     + (mode.sensorFailSafe ? 16 : 0) 
     + (mode.wingLeveler ? 8 : 0) 
@@ -341,52 +341,55 @@ void logConfig(void)
     + (mode.autoStick ? 2 : 0) 
     + (mode.autoAlpha ? 1 : 0)); 
     
-  logGeneric(l_target, targetAlpha*360);
-  logGeneric(l_trim, neutralAlpha*360);
+  logGeneric(lc_target, targetAlpha*360);
+  logGeneric(lc_trim, neutralAlpha*360);
 
   if(testMode) {
-    logGeneric(l_gain, testGain);
-    logGeneric(l_test, stateRecord.testChannel);
+    logGeneric(lc_gain, testGain);
+    logGeneric(lc_test, stateRecord.testChannel);
   } else {
-    logGeneric(l_gain, 0);
-    logGeneric(l_test, 0);
+    logGeneric(lc_gain, 0);
+    logGeneric(lc_test, 0);
   }
 }
 
 void logPosition(void)
 {
-  logGeneric(l_speed, gpsFix.speed);
-  logGeneric(l_track, gpsFix.track);
-  logGeneric(l_altgps, gpsFix.altitude);
-  logGeneric(l_altbaro, altitude);
+  logGeneric(lc_speed, gpsFix.speed);
+  logGeneric(lc_track, gpsFix.track);
+  logGeneric(lc_altgps, gpsFix.altitude);
+  logGeneric(lc_altbaro, altitude);
 }
   
 void logInput(void)
 {
-  logGeneric(l_ailestick, aileStick);
-  logGeneric(l_elevstick, elevStick);
+  logGeneric(lc_ailestick, aileStick);
+  logGeneric(lc_elevstick, elevStick);
 }
 
 void logActuator(void)
 {
-  logGeneric(l_aileron, aileOutput);
-  logGeneric(l_elevator, elevOutput);
+  logGeneric(lc_aileron, aileOutput);
+  logGeneric(lc_elevator, elevOutput);
 }
 
 void logRPM(void)
 {
-  logGeneric(l_rpm, rpmOutput);
+  logGeneric(lc_rpm, rpmOutput);
 }
 
 void logAttitude(void)
 {
-  logGeneric(l_dynpressure, dynPressure);
-  logGeneric(l_acc, accG);
-  logGeneric(l_roll, rollAngle);
-  logGeneric(l_rollrate, rollRate*360);
-  logGeneric(l_pitch, pitchAngle);
-  logGeneric(l_pitchrate, pitchRate*360);
-  logGeneric(l_heading, heading);
+  logGeneric(lc_dynpressure, dynPressure);
+  logGeneric(lc_accx, accX);
+  logGeneric(lc_accy, accY);
+  logGeneric(lc_accz, accZ);
+  logGeneric(lc_roll, rollAngle);
+  logGeneric(lc_rollrate, rollRate*360);
+  logGeneric(lc_pitch, pitchAngle);
+  logGeneric(lc_pitchrate, pitchRate*360);
+  logGeneric(lc_heading, heading);
+  logGeneric(lc_yawrate, yawRate*360);
 }
 
 bool readSwitch() {
@@ -983,7 +986,7 @@ void executeCommand(const char *buf, int bufLen)
     
   case c_dumpz:
     consoleNoteLn_P(PSTR("Compressed log contents:"));
-    //    logDumpBinary();
+    logDumpBinary();
     break;
     
   case c_backup:
@@ -1242,10 +1245,17 @@ void sensorTaskFast(uint32_t currentMicros)
   
   ahrs.update();
   
+  Vector3f acc = ins.get_accel(0);
+
+  accX = acc.x;
+  accY = acc.y;
+  accZ = -acc.z;
+  
   Vector3f gyro = ins.get_gyro();
   
   rollRate = gyro.x * 180/PI / 360;
   pitchRate = gyro.y * 180/PI / 360;
+  yawRate = gyro.z * 180/PI / 360;
 
   rollAngle = ahrs.roll * 180/PI;
   pitchAngle = ahrs.pitch * 180/PI;
@@ -1698,6 +1708,14 @@ void loopTask(uint32_t currentMicros)
     consolePrint(elevStick);
 */    
 
+    consolePrint(" acc = (");
+    consolePrint(accX, 2);
+    consolePrint(", ");
+    consolePrint(accY, 2);
+    consolePrint(", ");
+    consolePrint(accZ, 2);
+    consolePrint(")");
+    /*    
     consolePrint(" roll = ");
     consolePrint(rollAngle, 2);
     consolePrint(" (rate = ");
@@ -1707,7 +1725,7 @@ void loopTask(uint32_t currentMicros)
     consolePrint(" (rate = ");
     consolePrint(pitchRate*360, 1);
     consolePrint(")");
-
+    */
     /*
     consolePrint(" rpm = ");
     consolePrint(readRPM());
@@ -2292,6 +2310,10 @@ void setup() {
   setPinState(&RED_LED, 1);
   setPinState(&GREEN_LED, 1);
   setPinState(&BLUE_LED, 1);
+
+  // Done
+  
+  consoleNoteLn_P(PSTR("READY."));
 }
 
 void loop() 
