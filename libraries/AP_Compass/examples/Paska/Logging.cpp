@@ -5,6 +5,10 @@
 #include <stdarg.h>
 #include <AP_HAL/AP_HAL.h>
 
+extern "C" {
+#include "CRC16.h"
+}
+
 extern const AP_HAL::HAL& hal;
 
 #define logIndex(i) ((logPtr + logSize + (i)) % logSize)
@@ -430,29 +434,53 @@ void logDump(int ch)
   consolePrintLn(" ]");
 }
 
-void binaryOutput(const uint8_t c)
-{
-  if(c == '\\')
-    hal.uartA->write((const uint8_t) '\\');
+uint16_t crcState;
 
-  hal.uartA->write(c);
+void datagramStart(void)
+{
+  hal.uartA->write((const uint8_t) 0x00);
+  hal.uartA->write((const uint8_t) 0x00);
+  hal.uartA->write((const uint8_t) 0x01);
+
+  crcState = 0xFFFF;
 }
 
-void binaryOutputEnd(void)
+void binaryOutput(const uint8_t c)
 {
-  hal.uartA->write((const uint8_t) '\\');
-  hal.uartA->write((const uint8_t) '\0');
+  hal.uartA->write(c);
+    
+  if(c == 0x00)
+    hal.uartA->write((const uint8_t) 0xFF);
+}
+
+void binaryOutputCRC(const uint8_t c)
+{
+  binaryOutput(c);
+  crcState = crc16_update(crcState, c);
+}
+
+void datagramEnd(void)
+{
+  binaryOutput(crcState>>8);
+  binaryOutput(crcState & 0xFF);
+  hal.uartA->write((const uint8_t) 0x00);
+  hal.uartA->write((const uint8_t) 0x00);
 }
 
 void logDumpBinary(void)
 {
   for(int32_t i = 0; i < logSize; i++) {
+    if((i & ((1UL<<9)-1)) == 0) {
+      datagramEnd();
+      datagramStart();
+    }
+      
     const uint16_t buf = logRead(i);
-    binaryOutput(buf & 0xFF);
-    binaryOutput(buf>>8);
+    binaryOutputCRC(buf & 0xFF);
+    binaryOutputCRC(buf>>8);
   }
 
-  binaryOutputEnd();
+  datagramEnd();
 
   consoleNoteLn_P(PSTR("LOG DUMP COMPLETED"));
 }
@@ -477,7 +505,9 @@ bool logInit(uint32_t maxDuration)
 
       consoleNote_P(PSTR("Inferred log size = "));
       consolePrint(logSize/(1<<10));
-      consolePrintLn("k entries");
+      consolePrint("k+");
+      consolePrint(logSize%(1<<10));
+      consolePrintLn(" entries");
       
       logState = init_c;
       logLen = -1;

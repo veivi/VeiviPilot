@@ -2,6 +2,10 @@
 #include "Console.h"
 #include "Storage.h"
 
+extern "C" {
+#include "CRC16.h"
+}
+
 // NV store layout
 
 struct NVStateRecord stateRecord;
@@ -15,41 +19,19 @@ const struct ParamRecord paramDefaults = {
   12,
   0x40, 0x50, 
   0,
-  0, 0,
+  0, 0, 0,
   0, -45.0/90,
   0, 45.0/90,
-  0.5, 0.5, -0.3,
-  -0.5, -0.5,
-  0, 1, 2, 3, -1, -1,
+  0, -15.0/90, -15.0/90,
+  0, 45.0/90,
+  0, 45.0/90,
+  0, 1, 2, 3, -1, 6, -1,
   -3.0/360,  12.0/360,
-  0.51, 4.64, 0.014, 10.0, 
-  0.48, 4.36, 0.013
-};
+  1.0, 0.25, 10.0, 
+  1.3, 0.25, 
+  2.0, 1.0, 0.33 };
 
 const struct NVStateRecord stateDefaults = { 0, 128, 1024, 400, 0, false, 0 };
-
-static uint16_t crc16_update(uint16_t crc, uint8_t a)
-{
-  crc ^= a;
-  for (int i = 0; i < 8; ++i) {
-    if (crc & 1)
-      crc = (crc >> 1) ^ 0xA001U;
-    else
-      crc = (crc >> 1);
-  }
-  
-  return crc;
-}
-
-static uint16_t crc16(uint16_t initial, const uint8_t *data, int len)
-{
-  uint16_t crc = initial;
-  
-  for(int i = 0; i < len; i++)
-    crc = crc16_update(crc, data[i]);
-    
-  return crc;
-}
 
 static uint16_t crc16OfRecord(uint16_t initial, const uint8_t *record, int size)
 {
@@ -64,6 +46,11 @@ static uint16_t paramRecordCrc(struct ParamRecord *record)
 static uint16_t stateRecordCrc(struct NVStateRecord *record)
 {
   return crc16OfRecord(0xFFFF, (uint8_t*) record, sizeof(*record));
+}
+
+void defaultParams(void)
+{
+  paramRecord = paramDefaults;
 }
 
 void setModel(int model)
@@ -108,7 +95,7 @@ void readNVState(void)
     
   if(stateRecord.crc != stateRecordCrc(&stateRecord)) {
     consolePrintLn_P(PSTR(" CORRUPT, using defaults")); 
-    stateRecord = stateDefaults;
+    defaultParams();
   } else
     consolePrintLn_P(PSTR(" OK"));
 

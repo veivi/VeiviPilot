@@ -8,6 +8,8 @@ public:
   float getP(void);
   float getI(void);
   float getD(void);
+  float getKu(void);
+  float getTu(void);
   void setZieglerNicholsPID(float Ku, float Tu);
   void setZieglerNicholsPI(float Ku, float Tu);
   void getZieglerNicholsPID(float *Ku, float *Tu);
@@ -22,3 +24,4 @@ private:
   Median3Filter errorFilter;
 };
 
+float znGain(float kP, float kI, float kD);

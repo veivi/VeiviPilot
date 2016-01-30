@@ -67,16 +67,18 @@ const struct PinDescriptor led[] = {{ PortA, 3 }, { PortA, 4 }, { PortA, 5 }};
 #ifdef MEGAMINI
 
 struct PinDescriptor ppmInputPin = { PortL, 1 }; 
-struct RxInputRecord aileInput, elevInput, switchInput, tuningKnobInput;
+struct RxInputRecord aileInput, elevInput, rudderInput,
+  switchInput, tuningKnobInput;
 struct RxInputRecord *ppmInputs[] = 
-{ &aileInput, &elevInput, NULL, NULL, &switchInput, &tuningKnobInput };
+{ &aileInput, &elevInput, NULL, &rudderInput, &switchInput, &tuningKnobInput };
 
 #else
 
 struct RxInputRecord aileInput = { { PortK, 0 } }; 
 struct RxInputRecord elevInput = { { PortK, 1 } };
-struct RxInputRecord switchInput = { { PortK, 2 } };
+struct RxInputRecord switchInput = { { PortK, 3 } };
 struct RxInputRecord tuningKnobInput = { { PortK, 3 } };
+struct RxInputRecord rudderInput = { { PortK, 4 } };
 
 #endif
 
@@ -123,6 +125,7 @@ const struct PWMOutput pwmOutput[] = {
 #define flap2Handle    (paramRecord.servoFlap2 < 0 ? NULL : (&pwmOutput[paramRecord.servoFlap2]))
 #define gearHandle     (paramRecord.servoGear < 0 ? NULL : (&pwmOutput[paramRecord.servoGear]))
 #define brakeHandle    (paramRecord.servoBrake < 0 ? NULL : (&pwmOutput[paramRecord.servoBrake]))
+#define rudderHandle      (paramRecord.servoRudder < 0 ? NULL : (&pwmOutput[paramRecord.servoRudder]))
 
 //
 // Periodic task stuff
@@ -150,6 +153,8 @@ struct ModeRecord {
   bool autoStick;
   bool autoAlpha;
   bool autoTrim;
+  bool autoRudder;
+  bool autoBall;
   bool stabilizer;
   bool wingLeveler;
   bool bankLimiter;
@@ -170,9 +175,8 @@ struct GPSFix gpsFix;
 bool testMode = false;
 bool rattling = false;
 float testGain = 0;
-bool calibrate, switchState = false, switchStateLazy = false, echoEnabled = true;
+bool switchState = false, switchStateLazy = false, echoEnabled = true;
 bool iasFailed = false, iasWarn = false, alphaFailed = false, alphaWarn = false;
-bool calibrateStart = false, calibrateStop = false;
 bool rxElevatorAlive = true, rxAileronAlive = true, rpmAlive = 0;
 const int cycleTimeWindow = 31;
 float cycleTimeStore[cycleTimeWindow];
@@ -180,13 +184,13 @@ int cycleTimePtr = 0;
 bool cycleTimesValid;
 float cycleMin = -1.0, cycleMax = -1.0, cycleMean = -1.0, cycleCum = -1.0;
 const float tau = 0.1;
-float dynPressure, alpha, aileStick, elevStick, aileStickRaw, elevStickRaw;
+float dynPressure, alpha, aileStick, elevStick, aileStickRaw, elevStickRaw, rudderStick, rudderStickRaw;
 uint32_t controlCycleEnded;
 int initCount = 5;
 bool armed = false;
 float neutralStick = 0.0, neutralAlpha, targetAlpha;
 float switchValue, tuningKnobValue, rpmOutput;
-Controller elevController, aileController, pusher;
+Controller elevController, aileController, rudderController, yawRateController, pusher;
 float autoAlphaP, maxAlpha;
 float accX, accY, accZ, altitude,  heading, rollAngle, pitchAngle, rollRate, pitchRate, yawRate;
 int cycleTimeCounter = 0;
@@ -199,7 +203,7 @@ float controlCycle = 10.0e-3;
 uint32_t idleMicros;
 float idleAvg, logBandWidth, ppmFreq;
 
-float elevOutput = 0, aileOutput = 0, flapOutput = 0, gearOutput = 1, brakeOutput = 0;
+float elevOutput = 0, aileOutput = 0, flapOutput = 0, gearOutput = 1, brakeOutput = 0, rudderOutput = 0;
 
 #ifdef rpmPin
 struct RxInputRecord rpmInput = { rpmPin };
@@ -210,21 +214,24 @@ void printParams(struct ParamRecord *p)
   consoleNote_P(PSTR(" AS5048B ref = "));
   consolePrintLn(p->alphaRef);
   consoleNoteLn_P(PSTR("  Autostick/pusher"));
-  consoleNote_P(PSTR("    Inner P = "));
-  consolePrint(p->i_Kp, 4);
-  consolePrint_P(PSTR(" I = "));
-  consolePrint(p->i_Ki, 4);
-  consolePrint_P(PSTR(" D = "));
-  consolePrint(p->i_Kd, 4);
+  consoleNote_P(PSTR("    Inner Ku = "));
+  consolePrint(p->i_Ku, 4);
+  consolePrint_P(PSTR(" Tu = "));
+  consolePrint(p->i_Tu, 4);
   consolePrint_P(PSTR(" Outer P = "));
   consolePrintLn(p->o_P, 4);
   consoleNoteLn_P(PSTR("  Stabilizer"));
-  consoleNote_P(PSTR("    P = "));
-  consolePrint(p->s_Kp, 4);
-  consolePrint_P(PSTR(" I = "));
-  consolePrint(p->s_Ki, 4);
-  consolePrint_P(PSTR(" D = "));
-  consolePrintLn(p->s_Kd, 4);
+  consoleNote_P(PSTR("    Ku = "));
+  consolePrint(p->s_Ku, 4);
+  consolePrint_P(PSTR(" Tu = "));
+  consolePrintLn(p->s_Tu, 4);
+  consoleNoteLn_P(PSTR(" Auto rudder"));
+  consoleNote_P(PSTR("    PID Ku = "));
+  consolePrint(p->r_Ku, 4);
+  consolePrint_P(PSTR(" Tu = "));
+  consolePrintLn(p->i_Tu, 4);
+  consoleNote_P(PSTR("    Yaw damper P = "));
+  consolePrintLn(p->yd_P, 4);
   consoleNote_P(PSTR("  Alpha min = "));
   consolePrint(p->alphaMin*360);
   consolePrint_P(PSTR("  max = "));
@@ -239,6 +246,11 @@ void printParams(struct ParamRecord *p)
   consolePrint(p->aileDefl*90);
   consolePrint_P(PSTR(" neutral = "));
   consolePrintLn(p->aileNeutral*90);
+  consoleNoteLn_P(PSTR("  Rudder"));
+  consoleNote_P(PSTR("    deflection = "));
+  consolePrint(p->rudderDefl*90);
+  consolePrint_P(PSTR(" neutral = "));
+  consolePrintLn(p->rudderNeutral*90);
   consoleNoteLn_P(PSTR("  Flap"));
   consoleNote_P(PSTR("    step = "));
   consolePrint(p->flapStep*90);
@@ -253,20 +265,22 @@ void dumpParams(struct ParamRecord *p)
 {
   consolePrint_P(PSTR("5048b_ref "));
   consolePrint(p->alphaRef);
-  consolePrint_P(PSTR("; inner_pid "));
-  consolePrint(p->i_Kp, 4);
+  consolePrint_P(PSTR("; inner_pid_zn "));
+  consolePrint(p->i_Ku, 4);
   consolePrint(" ");
-  consolePrint(p->i_Ki, 4);
-  consolePrint(" ");
-  consolePrint(p->i_Kd, 4);
+  consolePrint(p->i_Tu, 4);
   consolePrint_P(PSTR("; outer_p "));
   consolePrint(p->o_P);
-  consolePrint_P(PSTR("; stabilizer_pid "));
-  consolePrint(p->s_Kp, 4);
+  consolePrint_P(PSTR("; stabilizer_pid_zn "));
+  consolePrint(p->s_Ku, 4);
   consolePrint(" ");
-  consolePrint(p->s_Ki, 4);
+  consolePrint(p->s_Tu, 4);
+  consolePrint_P(PSTR("; rudder_pid_zn "));
+  consolePrint(p->r_Ku, 4);
   consolePrint(" ");
-  consolePrint(p->s_Kd, 4);
+  consolePrint(p->r_Tu, 4);
+  consolePrint_P(PSTR("; yd_p "));
+  consolePrint(p->yd_P, 4);
   consolePrint_P(PSTR("; min ")); consolePrint(p->alphaMin*360);
   consolePrint_P(PSTR("; max ")); consolePrint(p->alphaMax*360);
   consolePrint_P(PSTR("; edefl ")); consolePrint(p->elevDefl*90);
@@ -280,6 +294,8 @@ void dumpParams(struct ParamRecord *p)
   consolePrint_P(PSTR("; fneutral ")); consolePrint(p->flapNeutral*90); consolePrint(" "); consolePrint(p->flap2Neutral*90); 
   consolePrint_P(PSTR("; bdefl ")); consolePrint(p->brakeDefl*90);
   consolePrint_P(PSTR("; bneutral ")); consolePrint(p->brakeNeutral*90);
+  consolePrint_P(PSTR("; rdefl ")); consolePrint(p->rudderDefl*90);
+  consolePrint_P(PSTR("; rneutral ")); consolePrint(p->rudderNeutral*90);
 }
 
 const uint8_t addr5048B_c = 0x40;
@@ -392,15 +408,24 @@ void logAttitude(void)
   logGeneric(lc_yawrate, yawRate*360);
 }
 
-bool readSwitch() {
-  return decodePWM(switchValue) < 0.0;
+bool readSwitch()
+{
+  static bool state = false;
+  const float value = decodePWM(switchValue);
+  
+  if(absVal(value) > 0.3)
+    state = value < 0.0;
+  
+  return state;
 }
 
-float readParameter() {
+float readParameter()
+{
   return (decodePWM(tuningKnobValue) + 1.0) / 2;
 }
 
-float readRPM() {
+float readRPM()
+{
   return rpmOutput;
 }
 
@@ -498,12 +523,17 @@ typedef enum {
   c_alpha,
   c_flapneutral,
   c_flapstep,
+  c_flapservo,
   c_backup,
   c_echo,
   c_ezero,
   c_azero,
   c_bdefl,
   c_bneutral,
+  c_bservo,
+  c_rdefl,
+  c_rneutral,
+  c_rservo,
   c_rpm,
   c_baud,
   c_dumpz,
@@ -511,6 +541,8 @@ typedef enum {
   c_stabilizer_pid_zn,
   c_stabilizer_pi_zn,
   c_outer_p,
+  c_yd_p,
+  c_rudder_pid_zn,
   c_rattle,
   c_inner_pid,
   c_inner_pid_zn,
@@ -518,7 +550,8 @@ typedef enum {
   c_arm,
   c_disarm,
   c_test,
-  c_talk } command_t;
+  c_talk,
+  c_defaults } command_t;
 
 struct command {
   const char *c_string;
@@ -554,10 +587,15 @@ const struct command commands[] = {
   { "alpha", c_alpha },
   { "fneutral", c_flapneutral },
   { "fstep", c_flapstep },
+  { "fservo", c_flapservo },
   { "backup", c_backup },
   { "echo", c_echo },
   { "bdefl", c_bdefl },
   { "bneutral", c_bneutral },
+  { "bservo", c_bservo },
+  { "rdefl", c_rdefl },
+  { "rneutral", c_rneutral },
+  { "rservo", c_rservo },
   { "rpm", c_rpm },
   { "baud", c_baud },
   { "dumpz", c_dumpz },
@@ -565,6 +603,8 @@ const struct command commands[] = {
   { "stabilizer_pid_zn", c_stabilizer_pid_zn },
   { "stabilizer_pi_zn", c_stabilizer_pi_zn },
   { "outer_p", c_outer_p },
+  { "yd_p", c_yd_p },
+  { "rudder_pid_zn", c_rudder_pid_zn },
   { "inner_pid", c_inner_pid },
   { "inner_pid_zn", c_inner_pid_zn },
   { "inner_pi_zn", c_inner_pi_zn },
@@ -574,6 +614,7 @@ const struct command commands[] = {
   { "cycle", c_cycle },
   { "talk", c_talk },
   { "rattle", c_rattle },
+  { "defaults", c_defaults },
   { "", c_ }
 };
 
@@ -709,149 +750,41 @@ void executeCommand(const char *buf, int bufLen)
       consolePrintLn(stateRecord.testChannel);
     }
     break;
-    
-  case c_stabilizer_pid:
-    if(numParams > 0)
-      paramRecord.s_Kp = param[0];
-    if(numParams > 1)
-      paramRecord.s_Ki = param[1];
-    if(numParams > 2)
-      paramRecord.s_Kd = param[2];
 
-    aileController.setPID(paramRecord.s_Kp, paramRecord.s_Ki, paramRecord.s_Kd);
-
-    consoleNote_P(PSTR("Stabilizer P = "));
-    consolePrint(paramRecord.s_Kp);
-    consolePrint_P(PSTR(", I = "));
-    consolePrint(paramRecord.s_Ki);
-    consolePrint_P(PSTR(", D = "));
-    consolePrintLn(paramRecord.s_Kd);    
-    break;
-    
   case c_stabilizer_pid_zn:
-    if(numParams > 1) {
-      consoleNote_P(PSTR("Stabilizer Z-N PID Ku, Tu = "));
-      consolePrint(param[0]);
-      consolePrint_P(PSTR(", "));
-      consolePrintLn(param[1]);
-    
-      aileController.setZieglerNicholsPID(param[0], param[1]);
-
-      paramRecord.s_Kp = aileController.getP();
-      paramRecord.s_Ki = aileController.getI();
-      paramRecord.s_Kd = aileController.getD();
-
-      consoleNote_P(PSTR("  Resulting P = "));
-      consolePrint(paramRecord.s_Kp);
-      consolePrint_P(PSTR(", I = "));
-      consolePrint(paramRecord.s_Ki);
-      consolePrint_P(PSTR(", D = "));
-      consolePrintLn(paramRecord.s_Kd);
-    } else {
-      float Ku, Tu;
-      aileController.getZieglerNicholsPID(&Ku, &Tu);
-      consoleNote_P(PSTR("Current stabilizer "));
-      consolePrint(aileController.getD() > 0.0 ? "PID" : "PI");
-      consolePrint_P(PSTR(" Ku, Tu = "));
-      consolePrint(Ku, 4);
-      consolePrint_P(PSTR(", "));
-      consolePrintLn(Tu, 4);      
+    if(numParams > 0) {
+      paramRecord.s_Ku = param[0];
+      if(numParams > 1)
+	paramRecord.s_Tu = param[1];
+      
+      consoleNoteLn_P(PSTR("Stabilizer PID set"));
     }
-    break;
-    
-  case c_stabilizer_pi_zn:
-    if(numParams > 1) {
-      consoleNote_P(PSTR("Stabilizer Z-N PI Ku, Tu = "));
-      consolePrint(param[0]);
-      consolePrint_P(PSTR(", "));
-      consolePrintLn(param[1]);
-    
-      aileController.setZieglerNicholsPI(param[0], param[1]);
-
-      paramRecord.s_Kp = aileController.getP();
-      paramRecord.s_Ki = aileController.getI();
-      paramRecord.s_Kd = aileController.getD();
-
-      consoleNote_P(PSTR("  Resulting P = "));
-      consolePrint(paramRecord.s_Kp);
-      consolePrint_P(PSTR(", I = "));
-      consolePrint(paramRecord.s_Ki);
-      consolePrint_P(PSTR(", D = "));
-      consolePrintLn(paramRecord.s_Kd);
-    }
-    break;
-    
-  case c_inner_pid:
-    if(numParams > 0)
-      paramRecord.i_Kp = param[0];
-    if(numParams > 1)
-      paramRecord.i_Ki = param[1];
-    if(numParams > 2)
-      paramRecord.i_Kd = param[2];
-
-    consoleNote_P(PSTR("Autostick/Pusher inner P = "));
-    consolePrint(paramRecord.i_Kp);
-    consolePrint_P(PSTR(", I = "));
-    consolePrint(paramRecord.i_Ki);
-    consolePrint_P(PSTR(", D = "));
-    consolePrintLn(paramRecord.i_Kd);
-    
-    elevController.setPID(paramRecord.i_Kp, paramRecord.i_Ki, paramRecord.i_Kd);
-    pusher.setPID(paramRecord.i_Kp, paramRecord.i_Ki, paramRecord.i_Kd);
     break;
     
   case c_inner_pid_zn:
-    if(numParams > 1) {
-      consoleNote_P(PSTR("Autostick/Pusher inner Z-N PID Ku, Tu = "));
-      consolePrint(param[0]);
-      consolePrint_P(PSTR(", "));
-      consolePrintLn(param[1]);
-    
-      elevController.setZieglerNicholsPID(param[0], param[1]);
-      pusher.setZieglerNicholsPID(param[0], param[1]);
-
-      paramRecord.i_Kp = elevController.getP();
-      paramRecord.i_Ki = elevController.getI();
-      paramRecord.i_Kd = elevController.getD();
-
-      consoleNote_P(PSTR("  Resulting P = "));
-      consolePrint(paramRecord.i_Kp);
-      consolePrint_P(PSTR(", I = "));
-      consolePrint(paramRecord.i_Ki);
-      consolePrint_P(PSTR(", D = "));
-      consolePrintLn(paramRecord.i_Kd);
-    } else {
-      float Ku, Tu;
-      elevController.getZieglerNicholsPID(&Ku, &Tu);
-      consoleNote_P(PSTR("Current autostick "));
-      consolePrint(elevController.getD() > 0.0 ? "PID" : "PI");
-      consolePrint_P(PSTR(" Ku, Tu = "));
-      consolePrint(Ku, 4);
-      consolePrint_P(PSTR(", "));
-      consolePrintLn(Tu, 4);      
+    if(numParams > 0) {
+      paramRecord.i_Ku = param[0];
+      if(numParams > 1)
+	paramRecord.i_Tu = param[1];
+      
+      consoleNoteLn_P(PSTR("Elevator inner PID set"));
     }
     break;
     
-  case c_inner_pi_zn:
-    if(numParams > 1) {
-      consoleNote_P(PSTR("Autostick/Pusher inner Z-N PI Ku, Tu = "));
-      consolePrint(param[0]);
-      consolePrint_P(PSTR(", "));
-      consolePrintLn(param[1]);
+  case c_yd_p:
+    if(numParams > 0) {
+      paramRecord.yd_P = param[0];
+      consoleNoteLn_P(PSTR("Yaw damper P set"));
+    }
+    break;
     
-      elevController.setZieglerNicholsPI(param[0], param[1]);
-      pusher.setZieglerNicholsPI(param[0], param[1]);
-
-      paramRecord.i_Kp = elevController.getP();
-      paramRecord.i_Ki = elevController.getI();
-      paramRecord.i_Kd = elevController.getD();
-
-      consoleNote_P(PSTR("  Resulting P = "));
-      consolePrint(paramRecord.i_Kp);
-      consolePrint_P(PSTR(", I = "));
-      consolePrint(paramRecord.i_Ki);
-      consolePrint_P(PSTR(", D = "));
-      consolePrintLn(paramRecord.i_Kd);
+  case c_rudder_pid_zn:
+    if(numParams > 0) {
+      paramRecord.r_Ku = param[0];
+      if(numParams > 1)
+	paramRecord.r_Tu = param[1];
+      
+      consoleNoteLn_P(PSTR("AutoRudder PID set"));
     }
     break;
     
@@ -862,7 +795,7 @@ void executeCommand(const char *buf, int bufLen)
     consoleNote_P(PSTR("Autostick outer P = "));
     consolePrintLn(paramRecord.o_P);
     break;
-    
+
   case c_center:
     paramRecord.elevZero = elevStickRaw;
     paramRecord.aileZero = aileStickRaw;
@@ -905,7 +838,7 @@ void executeCommand(const char *buf, int bufLen)
       consolePrintLn(paramRecord.aileDefl*90.0);
     }
     break;
-    
+
   case c_bneutral:
     if(numParams > 0)
       paramRecord.brakeNeutral = param[0]/90.0;
@@ -923,6 +856,33 @@ void executeCommand(const char *buf, int bufLen)
       consolePrintLn(paramRecord.brakeDefl*90.0);
     }
     break;
+ 
+  case c_rneutral:
+    if(numParams > 0)
+      paramRecord.rudderNeutral = param[0]/90.0;
+    else {
+      consoleNote_P(PSTR("Rudder neutral = "));
+      consolePrintLn(paramRecord.rudderNeutral*90.0);
+    }
+    break;
+    
+  case c_rdefl:
+    if(numParams > 0)
+      paramRecord.rudderDefl = param[0] / 90.0;
+    else {
+      consoleNoteLn_P(PSTR("Rudder defl = "));
+      consolePrintLn(paramRecord.rudderDefl*90.0);
+    }
+    break;
+    
+  case c_rservo:
+    if(numParams > 0)
+      paramRecord.servoRudder = param[0];
+    else {
+      consoleNoteLn_P(PSTR("Rudder servo ch = "));
+      consolePrintLn(paramRecord.servoRudder);
+    }
+    break;
     
   case c_flapneutral:
     if(numParams > 0) {
@@ -934,6 +894,21 @@ void executeCommand(const char *buf, int bufLen)
       consolePrint(paramRecord.flapNeutral*90.0);
       consolePrint_P(PSTR(", "));
       consolePrintLn(paramRecord.flap2Neutral*90.0);
+    }
+    break;
+    
+  case c_flapservo:
+    if(numParams > 0) {
+      paramRecord.servoFlap = param[0];
+      if(numParams > 1)
+	paramRecord.servoFlap2 = param[1];
+      else
+	paramRecord.servoFlap2 = -1;
+    } else {
+      consoleNote_P(PSTR("Flap servo ch = "));
+      consolePrint(paramRecord.servoFlap);
+      consolePrint_P(PSTR(", "));
+      consolePrintLn(paramRecord.servoFlap2);
     }
     break;
     
@@ -976,6 +951,12 @@ void executeCommand(const char *buf, int bufLen)
     storeNVState();
     break;
 
+  case c_defaults:
+    consoleNoteLn_P(PSTR("Default params restored"));
+    defaultParams();
+    storeNVState();
+    break;
+    
   case c_dump:
     consoleNoteLn_P(PSTR("Log contents:"));
     if(numParams > 0)
@@ -1215,6 +1196,11 @@ void receiverTask(uint32_t currentMicros)
   if(inputValid(&aileInput)) {
     aileStickRaw = decodePWM(inputValue(&aileInput));
     aileStick = applyNullZone(clamp(aileStickRaw - paramRecord.aileZero, -1, 1));
+  }
+  
+  if(inputValid(&rudderInput)) {
+    rudderStickRaw = decodePWM(inputValue(&rudderInput));
+    rudderStick = applyNullZone(clamp(rudderStickRaw - paramRecord.rudderZero, -1, 1));
   }
   
   if(inputValid(&elevInput)) {
@@ -1556,20 +1542,11 @@ void configurationTask(uint32_t currentMicros)
   mode.stabilizer = true;
   mode.bankLimiter = switchStateLazy;
   mode.autoStick = mode.autoAlpha = mode.autoTrim = false;
-
-/*  
-  if(!gearOutput || flapOutput > 0)
-    // Auto stick 
-    mode.autoStick = true;
-
-  if(!gearOutput && flapOutput > 0)
-    // Gear down and flaps out, auto alpha    
-    mode.autoAlpha = mode.autoTrim = true;
-   */
-  
   // mode.autoStick = mode.autoAlpha = mode.autoTrim = !gearOutput;
   mode.autoStick = mode.autoAlpha = mode.autoTrim = flapOutput > 0;
-   
+  mode.autoRudder = true;
+  mode.autoBall = true;
+  
   // Detect transmitter fail
 
   if(mode.bankLimiter && aileStick < -0.90 && elevStick > 0.90) {
@@ -1589,11 +1566,14 @@ void configurationTask(uint32_t currentMicros)
   // Default controller settings
      
   elevController
-    .setPID(paramRecord.i_Kp, paramRecord.i_Ki, paramRecord.i_Kd);
+    .setZieglerNicholsPID(paramRecord.i_Ku, paramRecord.i_Tu);
   pusher
-    .setPID(paramRecord.i_Kp, paramRecord.i_Ki, paramRecord.i_Kd);
+    .setZieglerNicholsPID(paramRecord.i_Ku, paramRecord.i_Tu);
   aileController
-    .setPID(paramRecord.s_Kp, paramRecord.s_Ki, paramRecord.s_Kd);
+    .setZieglerNicholsPID(paramRecord.s_Ku, paramRecord.s_Tu);
+
+  rudderController
+    .setZieglerNicholsPID(paramRecord.r_Ku, paramRecord.r_Tu);
 
   autoAlphaP = paramRecord.o_P;
   maxAlpha = paramRecord.alphaMax;
@@ -1606,7 +1586,7 @@ void configurationTask(uint32_t currentMicros)
          // Wing stabilizer gain
          
          mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
-         aileController.setPID(testGain = testGainExpo(5), 0, 0);
+         aileController.setPID(testGain = testGainExpo(paramRecord.s_Ku), 0, 0);
          break;
             
        case 2:
@@ -1614,21 +1594,21 @@ void configurationTask(uint32_t currentMicros)
          
          mode.autoStick = true;
          mode.autoTrim = mode.autoAlpha = false;
-         elevController.setPID(testGain = testGainExpo(6), 0, 0);
+         elevController.setPID(testGain = testGainExpo(paramRecord.i_Ku), 0, 0);
          break;
          
        case 3:
          // Elevator stabilizer gain, outer loop enabled
          
          mode.autoStick = mode.autoTrim = mode.autoAlpha = true;
-         elevController.setPID(testGain = testGainExpo(6), 0, 0);
+         elevController.setPID(testGain = testGainExpo(paramRecord.i_Ku), 0, 0);
          break;
          
        case 4:
          // Auto alpha outer loop gain
          
          mode.autoStick = mode.autoTrim = mode.autoAlpha = true;
-         autoAlphaP = testGain = testGainExpo(21);
+         autoAlphaP = testGain = testGainExpo(paramRecord.o_P);
          break;
          
        case 11:
@@ -1646,17 +1626,17 @@ void configurationTask(uint32_t currentMicros)
          break;
 
        case 21:
-         // Elevator stabilizer ZN gain = 0... 1.5, fixed period = 0.5
+         // Elevator stabilizer ZN gain = 0.3... 3, fixed period = 0.3
          
-         testGain = testGainExpo(1.5);
-         elevController.setZieglerNicholsPID(testGain, 0.5);
-         pusher.setZieglerNicholsPID(testGain, 0.5);
+         testGain = testGainExpo(1);
+         elevController.setZieglerNicholsPID(testGain, 0.3);
+         pusher.setZieglerNicholsPID(testGain, 0.3);
          break;
          
        case 22:
-         // Elevator stabilizer ZN period = 0... 1, fixed gain = 0.9
+         // Elevator stabilizer ZN period = 0.15... 1.5, fixed gain = 0.9
          
-         testGain = testGainExpo(1);
+         testGain = testGainExpo(0.5);
          elevController.setZieglerNicholsPID(0.9, testGain);
          pusher.setZieglerNicholsPID(0.9, testGain);
          break;
@@ -1951,106 +1931,117 @@ void controlTask(uint32_t currentMicros)
   
   controlCycleEnded = currentMicros;
   
-  if(calibrateStart) {
-    paramRecord.elevZero += elevStick;
-    paramRecord.aileZero += aileStick;
-    paramRecord.elevNeutral = paramRecord.aileNeutral = 0.0;
-    calibrateStart = false;
-  } else if(calibrateStop) {       
-    paramRecord.elevNeutral = elevStick;
-    paramRecord.aileNeutral = aileStick;
-    calibrateStop = false;
-  } else if(calibrate) {
-    elevOutput = elevStick;
-    aileOutput = aileStick;
+  // Rudder
+    
+  if(mode.autoRudder) {
+    float targetBall = rudderStick;
+      
+    if(mode.autoBall)
+      targetBall -= accY/9.81;
+    
+    rudderController.input(targetBall, controlCycle);
+    rudderOutput = rudderController.output();
+
   } else {
-    // Elevator control
-    
-    targetAlpha = 0.0;
+    rudderController.reset(rudderStick, 0.0);
+    rudderOutput = rudderStick;
+  }
 
-    if(mode.autoStick) {
-      float targetRate = clamp(elevStick, -0.5, 0.5);
+  // Yaw damper
 
-      if(mode.autoAlpha) {  
-	if(mode.rxFailSafe)
-	  targetAlpha = maxAutoAlpha;
-	else {
-	  const float fract_c = 1.0/3;
-	  const float strength_c = max(elevStick-(1.0-fract_c), 0)/fract_c;
-	  const float maxTargetAlpha_c = mixValue(strength_c, maxAutoAlpha, maxAlpha);
-
-	  targetAlpha = clamp(neutralAlpha + elevStick*maxAlpha/2,
-			      paramRecord.alphaMin, maxTargetAlpha_c);
-	}
-	
-        targetRate = (targetAlpha - alpha) * autoAlphaP;
-        
-      } else
-        targetRate = min(targetRate, (maxAlpha - alpha) * autoAlphaP);
-      
-      elevController.input(targetRate - pitchRate, controlCycle);
-    } else {
-      elevController.reset(elevStick, 0.0);
-    }
-    
-    if(mode.autoStick && !mode.sensorFailSafe && !alphaFailed)
-      elevOutput = elevController.output();
-    else
-      elevOutput = elevStick;
-
-    // Pusher
-
-    pusher.input((maxAlpha - alpha)*paramRecord.o_P - pitchRate, controlCycle);
-
-    if(!mode.sensorFailSafe && !alphaFailed)
-      elevOutput = min(elevOutput, pusher.output());
+  rudderOutput -= yawRate * paramRecord.yd_P;
   
-    // Aileron
+  if(mode.sensorFailSafe)
+    rudderOutput = rudderStick;
     
-    float maxBank = 60.0;
+  else
     
-    float targetRate = 270.0/360*aileStick;
+  // Elevator control
     
-    if(mode.rxFailSafe)
-      maxBank = 15.0;
+  targetAlpha = 0.0;
 
-    else if(mode.autoTrim)
-      maxBank -= 30.0*(neutralAlpha / maxAlpha);
+  if(mode.autoStick) {
+    float targetRate = clamp(elevStick, -0.5, 0.5);
 
-    if(mode.sensorFailSafe)
-      aileOutput = aileStick;
-    
-    else if(!mode.stabilizer) {
-      // Simple proportional wing leveler
-        
-      aileOutput = (aileStick*maxBank - rollAngle) / 90;
-      aileController.reset(aileOutput, targetRate - rollRate);
-      
-    } else {
-      // Roll stabilizer enabled
-      
-      if(mode.wingLeveler)
-        // Wing leveler enabled
-        
-        targetRate = clamp((aileStick*maxBank - rollAngle) / 90, -0.75, 0.75);
-      else if(mode.bankLimiter) {
-        // No leveling but limit bank
-                
-        targetRate = clamp(targetRate,
-			   (-maxBank - rollAngle) / 90, (maxBank - rollAngle) / 90);
+    if(mode.autoAlpha) {  
+      if(mode.rxFailSafe)
+	targetAlpha = maxAutoAlpha;
+      else {
+	const float fract_c = 1.0/3;
+	const float strength_c = max(elevStick-(1.0-fract_c), 0)/fract_c;
+	const float maxTargetAlpha_c = mixValue(strength_c, maxAutoAlpha, maxAlpha);
+
+	targetAlpha = clamp(neutralAlpha + elevStick*maxAlpha/2,
+			    paramRecord.alphaMin, maxTargetAlpha_c);
       }
+	
+      targetRate = (targetAlpha - alpha) * autoAlphaP;
       
-      aileController.input(targetRate - rollRate, controlCycle);
-      aileOutput = aileController.output();
-    }
- 
-    // Brake
+    } else
+      targetRate = min(targetRate, (maxAlpha - alpha) * autoAlphaP);
+      
+    elevController.input(targetRate - pitchRate, controlCycle);
+  } else {
+    elevController.reset(elevStick, 0.0);
+  }
     
-    if(!mode.sensorFailSafe && gearOutput == 1)
-      brakeOutput = 0;
-    else
-      brakeOutput = max(-elevStick, 0);
-  } 
+  if(mode.autoStick && !mode.sensorFailSafe && !alphaFailed)
+    elevOutput = elevController.output();
+  else
+    elevOutput = elevStick;
+
+  // Pusher
+
+  pusher.input((maxAlpha - alpha)*paramRecord.o_P - pitchRate, controlCycle);
+
+  if(!mode.sensorFailSafe && !alphaFailed)
+    elevOutput = min(elevOutput, pusher.output());
+  
+  // Aileron
+    
+  float maxBank = 45.0;
+    
+  float targetRate = 270.0/360*aileStick;
+    
+  if(mode.rxFailSafe)
+    maxBank = 15.0;
+
+  else if(mode.autoTrim)
+    maxBank -= 15.0*(neutralAlpha / maxAlpha);
+
+  if(mode.sensorFailSafe)
+    aileOutput = aileStick;
+    
+  else if(!mode.stabilizer) {
+    // Simple proportional wing leveler
+        
+    aileOutput = (aileStick*maxBank - rollAngle) / 90;
+    aileController.reset(aileOutput, targetRate - rollRate);
+      
+  } else {
+    // Roll stabilizer enabled
+      
+    if(mode.wingLeveler)
+      // Wing leveler enabled
+        
+      targetRate = clamp((aileStick*maxBank - rollAngle) / 90, -0.75, 0.75);
+    else if(mode.bankLimiter) {
+      // No leveling but limit bank
+                
+      targetRate = clamp(targetRate,
+			 (-maxBank - rollAngle) / 90, (maxBank - rollAngle) / 90);
+    }
+      
+    aileController.input(targetRate - rollRate, controlCycle);
+    aileOutput = aileController.output();
+  }
+ 
+  // Brake
+    
+  if(!mode.sensorFailSafe && gearOutput == 1)
+    brakeOutput = 0;
+  else
+    brakeOutput = max(-elevStick, 0);
 }
 
 void actuatorTask(uint32_t currentMicros)
@@ -2076,9 +2067,9 @@ void actuatorTask(uint32_t currentMicros)
 
     pwmOutputWrite(gearHandle, NEUTRAL - RANGE*randomNum(-1, 1));
 
-    pwmOutputWrite(brakeHandle, NEUTRAL
-		   + RANGE*clamp(paramRecord.brakeNeutral + 
-		   paramRecord.brakeDefl*randomNum(0, 1), -1, 1));                
+    pwmOutputWrite(rudderHandle, NEUTRAL
+		   + RANGE*clamp(paramRecord.rudderNeutral + 
+		   paramRecord.rudderDefl*randomNum(0, 1), -1, 1));                
 
   } else if(armed) {
     pwmOutputWrite(aileHandle, NEUTRAL
@@ -2098,9 +2089,9 @@ void actuatorTask(uint32_t currentMicros)
 
     pwmOutputWrite(gearHandle, NEUTRAL - RANGE*(gearOutput*2-1));
 
-    pwmOutputWrite(brakeHandle, NEUTRAL
-		   + RANGE*clamp(paramRecord.brakeNeutral + 
-				 paramRecord.brakeDefl*brakeOutput, -1, 1));                        
+    pwmOutputWrite(rudderHandle, NEUTRAL
+		   + RANGE*clamp(paramRecord.rudderNeutral + 
+				 paramRecord.rudderDefl*rudderOutput, -1, 1));                        
   } 
 }
 
@@ -2219,6 +2210,17 @@ void setup() {
   consoleNote_P(PSTR("Init Free RAM: "));
   consolePrintfLn("%u", hal.util->available_memory());
 
+  // I2C
+  
+  consoleNote_P(PSTR("Initializing I2C... "));
+  
+  I2c.begin();
+  I2c.setSpeed(true);
+  I2c.pullup(true);
+  I2c.timeOut(2+EXT_EEPROM_LATENCY/1000);
+
+  consolePrintLn_P(PSTR("done. "));
+  
   // Read the non-volatile state
 
   readNVState();
@@ -2226,13 +2228,6 @@ void setup() {
   consoleNote_P(PSTR("Current model is "));
   consolePrintLn(stateRecord.model);
   
-  // I2C
-  
-  I2c.begin();
-  I2c.setSpeed(true);
-  I2c.pullup(true);
-  I2c.timeOut(2+EXT_EEPROM_LATENCY/1000);
-
   // Param record
   
   setModel(stateRecord.model);
@@ -2260,6 +2255,7 @@ void setup() {
 
   rxInputInit(&elevInput);
   rxInputInit(&aileInput);
+  rxInputInit(&rudderInput);
   rxInputInit(&switchInput);
   rxInputInit(&tuningKnobInput);  
 
@@ -2332,7 +2328,25 @@ AP_HAL_MAIN();
 
 /*
 
-L-39 2015/12/15
+//
+// MODEL 1 : Viper 2016/1/25
+//
+
+echo 0; model 1; 5048b_ref 25342; inner_pid 0.5100 4.6398 0.0140; outer_p 10.00; stabilizer_pid 0.4799 4.0000 0.013
+0; min -3.00; max 12.00; edefl 45.00; eneutral 0.00; ezero 3.33; adefl -30.00; aneutral 0.00; azero 6.00; fstep -23
+.00; fneutral 0.00; fneutral 0.00 -20.00; rdefl -45.00; rneutral 0.00; echo 1; store
+ 
+//
+// MODEL 0 : L-39 2016/1/25
+//
+// inner_pid_zn 1.15 0.27
+// stabilizer_pid_zn 1.4 0.36
+ 
+echo 0; model 0; 5048b_ref 32268; inner_pid 0.6900 5.1111 0.0232; outer_p 10.00; stabilizer_pid 0.8400 4.6666 0.0378; 
+min -3.00; max 13.00; edefl -50.00; eneutral 0.00; ezero 0.00; adefl -35.00; aneutral 0.00; azero 0.00; fstep -27.00; 
+fneutral 45.00; fneutral 45.00 45.00; bdefl -45.00; bneutral -45.00; echo 1; store
+
+ L-39 2015/12/15
 
 echo 0; model 0; 5048b_ref 39656; inner_pid 0.6900 5.1111 0.0232; outer_p 10.00; stabilizer_pid 0.8400 4.6666 0.0378; min -3.00; max 12.00; edefl -45.00; eneutral 0.00; ezero 0.00; adefl -35.00; aneutral 0.00; azero 0.00; fstep -27.00; fneutral 45.00; fneutral 45.00 45.00; bdefl -45.00; bneutral -45.00; echo 1; store
 

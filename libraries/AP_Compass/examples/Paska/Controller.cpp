@@ -1,9 +1,9 @@
 #include "Controller.h"
 
-void Controller::setPID(float P, float I, float D) {
-    Kp = P; 
-    Ki = I;
-    Kd = D;
+void Controller::setPID(float kP, float kI, float kD) {
+    Kp = kP; 
+    Ki = kI;
+    Kd = kD;
   }
 
 float Controller::getP(void)
@@ -23,26 +23,49 @@ float Controller::getD(void)
 
 void Controller::setZieglerNicholsPID(float Ku, float Tu) {
   Kp = 0.6*Ku; 
-  Ki = 2.0*Kp/Tu; 
-  Kd = Kp*Tu/8.0;
+  Ki = 2*Kp/Tu; 
+  Kd = Kp*Tu/8;
 }
 
-void Controller::setZieglerNicholsPI(float Ku, float Tu) {
+void Controller::setZieglerNicholsPI(float Ku, float Tu)
+{
   Kp = 0.45*Ku; 
   Ki = 1.2*Kp/Tu; 
   Kd = 0;
 }
 
-void Controller::getZieglerNicholsPID(float *Ku, float *Tu) {
-  if(Kd != 0.0) {
-    *Ku = Kp / 0.6; 
-    *Tu = Kd/Kp*8.0;
-  } else {
-    *Ku = Kp/0.45; 
-    *Tu = 1.2*Kp/Ki; 
-  }
+float Controller::getKu(void)
+{
+  if(Kd != 0.0)
+    return Kp/0.6; 
+  else
+    return Kp/0.45; 
 }
 
+float Controller::getTu(void)
+{
+  if(Kd != 0.0)
+    return 2*Kp/Ki;
+  else
+    return 1.2*Kp/Ki; 
+}
+
+void Controller::getZieglerNicholsPID(float *Ku, float *Tu)
+{
+  if(Ku)
+    *Ku = getKu();
+  if(Tu)
+    *Tu = getTu();
+}
+
+float znGain(float kP, float kI, float kD)
+{
+  if(kD != 0.0)
+    return kP/0.6; 
+  else
+    return kP/0.45; 
+}
+  
 void Controller::reset(float value, float err) {
   prevErr = err;
   I = value - Kp*err;
