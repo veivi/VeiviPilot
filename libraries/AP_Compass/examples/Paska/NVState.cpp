@@ -12,7 +12,7 @@ struct NVStateRecord stateRecord;
 struct ParamRecord paramRecord;
 
 #define stateOffset 0
-#define paramOffset (stateRecord.paramPartition+stateRecord.model*sizeof(paramRecord))
+#define paramOffset stateRecord.paramPartition
 
 const struct ParamRecord paramDefaults = {
   0,
@@ -56,7 +56,8 @@ void defaultParams(void)
 void setModel(int model)
 {
   const int maxModels_c =
-    (stateRecord.logPartition - stateRecord.paramPartition) / sizeof(paramRecord);
+    (stateRecord.logPartition - stateRecord.paramPartition)
+    / sizeof(paramRecord);
   
   if(model < 0)
     model = 0;
@@ -64,7 +65,8 @@ void setModel(int model)
     model = maxModels_c - 1;
   
   stateRecord.model = model;
-  cacheRead(paramOffset, (uint8_t*) &paramRecord, sizeof(paramRecord));
+  cacheRead(paramOffset + sizeof(paramRecord)*model,
+	    (uint8_t*) &paramRecord, sizeof(paramRecord));
 
   consoleNote_P(PSTR("MODEL "));
   consolePrintLn(model);
@@ -82,7 +84,8 @@ void setModel(int model)
 void storeParams(void)
 {
   paramRecord.crc = paramRecordCrc(&paramRecord);
-  cacheWrite(paramOffset, (const uint8_t*) &paramRecord, sizeof(struct ParamRecord));
+  cacheWrite(paramOffset + sizeof(paramRecord)*stateRecord.model,
+  	     (const uint8_t*) &paramRecord, sizeof(paramRecord));
   cacheFlush();
 }
 
@@ -98,13 +101,15 @@ void readNVState(void)
     defaultParams();
   } else
     consolePrintLn_P(PSTR(" OK"));
-
 }
 
 void storeNVState(void)
 {
-  stateRecord.crc = stateRecordCrc(&stateRecord);
-  cacheWrite(stateOffset, (const uint8_t*) &stateRecord, sizeof(stateRecord));
-  cacheFlush();
+  if(sizeof(stateRecord) < paramOffset - stateOffset) {
+    stateRecord.crc = stateRecordCrc(&stateRecord);
+    cacheWrite(stateOffset, (const uint8_t*) &stateRecord, sizeof(stateRecord));
+    cacheFlush();
+  } else
+    consoleNoteLn_P(PSTR("PANIC : State record exceeds partition size"));
 }
 

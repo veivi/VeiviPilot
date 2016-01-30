@@ -285,10 +285,8 @@ void dumpParams(struct ParamRecord *p)
   consolePrint_P(PSTR("; max ")); consolePrint(p->alphaMax*360);
   consolePrint_P(PSTR("; edefl ")); consolePrint(p->elevDefl*90);
   consolePrint_P(PSTR("; eneutral ")); consolePrint(p->elevNeutral*90);
-  consolePrint_P(PSTR("; ezero ")); consolePrint(p->elevZero*90);
   consolePrint_P(PSTR("; adefl ")); consolePrint(p->aileDefl*90);
   consolePrint_P(PSTR("; aneutral ")); consolePrint(p->aileNeutral*90);
-  consolePrint_P(PSTR("; azero ")); consolePrint(p->aileZero*90);
   consolePrint_P(PSTR("; fstep ")); consolePrint(p->flapStep*90);
   consolePrint_P(PSTR("; fneutral ")); consolePrint(p->flapNeutral*90);
   consolePrint_P(PSTR("; fneutral ")); consolePrint(p->flapNeutral*90); consolePrint(" "); consolePrint(p->flap2Neutral*90); 
@@ -526,8 +524,6 @@ typedef enum {
   c_flapservo,
   c_backup,
   c_echo,
-  c_ezero,
-  c_azero,
   c_bdefl,
   c_bneutral,
   c_bservo,
@@ -537,16 +533,12 @@ typedef enum {
   c_rpm,
   c_baud,
   c_dumpz,
-  c_stabilizer_pid,
   c_stabilizer_pid_zn,
-  c_stabilizer_pi_zn,
   c_outer_p,
   c_yd_p,
   c_rudder_pid_zn,
   c_rattle,
-  c_inner_pid,
   c_inner_pid_zn,
-  c_inner_pi_zn,
   c_arm,
   c_disarm,
   c_test,
@@ -563,8 +555,6 @@ const struct command commands[] = {
   { "adefl", c_adefl },
   { "eneutral", c_eneutral },
   { "aneutral", c_aneutral },
-  { "ezero", c_ezero },
-  { "azero", c_azero },
   { "zero", c_zero },
   { "alpha", c_alpha },
   { "max", c_max },
@@ -599,15 +589,11 @@ const struct command commands[] = {
   { "rpm", c_rpm },
   { "baud", c_baud },
   { "dumpz", c_dumpz },
-  { "stabilizer_pid", c_stabilizer_pid },
-  { "stabilizer_pid_zn", c_stabilizer_pid_zn },
-  { "stabilizer_pi_zn", c_stabilizer_pi_zn },
-  { "outer_p", c_outer_p },
-  { "yd_p", c_yd_p },
-  { "rudder_pid_zn", c_rudder_pid_zn },
-  { "inner_pid", c_inner_pid },
   { "inner_pid_zn", c_inner_pid_zn },
-  { "inner_pi_zn", c_inner_pi_zn },
+  { "outer_p", c_outer_p },
+  { "stabilizer_pid_zn", c_stabilizer_pid_zn },
+  { "rudder_pid_zn", c_rudder_pid_zn },
+  { "yd_p", c_yd_p },
   { "arm", c_arm },
   { "disarm", c_disarm },
   { "test", c_test },

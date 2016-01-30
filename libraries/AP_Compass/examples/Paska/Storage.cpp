@@ -1,5 +1,6 @@
 #include "Storage.h"
 #include "NewI2C.h"
+#include "Console.h"
 #include <AP_HAL/AP_HAL.h>
 
 extern const AP_HAL::HAL& hal;
@@ -113,10 +114,17 @@ static void cacheWriteLine(uint32_t addr, const uint8_t *value, int size)
 {  
   if(!cacheHit(addr))
     cacheAlloc(addr);
-    
+
+  addr &= ~PAGE_MASK;
+  
+  if(addr+size > EXT_EEPROM_PAGE) {
+    consoleNoteLn_P(PSTR("cacheWriteLine() crosses line border, panic"));
+    return;
+  }
+  
   for(int i = 0; i < size; i++) {
-    cacheData[(addr & ~PAGE_MASK) + i] = value[i];
-    cacheFlag[(addr & ~PAGE_MASK) + i] = true;
+    cacheData[addr + i] = value[i];
+    cacheFlag[addr + i] = true;
   }
   
   cacheValid = false;
@@ -126,13 +134,17 @@ static void cacheWriteLine(uint32_t addr, const uint8_t *value, int size)
 
 void cacheWrite(uint32_t addr, const uint8_t *value, int size)
 {
-  if(CACHE_TAG(addr) != CACHE_TAG(addr+size-1)) {
-    uint32_t split = CACHE_TAG(addr+size-1);
-    
-    cacheWriteLine(addr, value, split - addr);
-    cacheWriteLine(split, &value[split - addr], size - (split - addr));
-  } else
-    cacheWriteLine(addr, value, size);
+  uint32_t ptr = addr;
+  
+  while(CACHE_TAG(ptr) < CACHE_TAG(addr+size-1)) {
+    uint32_t line_end = CACHE_TAG(ptr) + EXT_EEPROM_PAGE;
+    cacheWriteLine(ptr, value, line_end - ptr);
+    value += line_end - ptr;
+    ptr = line_end;
+  }
+
+  if(ptr < addr+size)
+    cacheWriteLine(ptr, value, addr+size-ptr);
 }
 
 void cacheReadLine(uint32_t addr, uint8_t *value, int size) 
