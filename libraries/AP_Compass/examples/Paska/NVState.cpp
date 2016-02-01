@@ -11,7 +11,7 @@ extern "C" {
 struct NVStateRecord stateRecord;
 struct ParamRecord paramRecord;
 
-#define stateOffset 0
+#define stateOffset 0U
 #define paramOffset stateRecord.paramPartition
 
 const struct ParamRecord paramDefaults = {
@@ -84,9 +84,12 @@ void setModel(int model)
 void storeParams(void)
 {
   paramRecord.crc = paramRecordCrc(&paramRecord);
+  consoleNote_P(PSTR("Model record CRC = "));
+  consolePrintLn(paramRecord.crc);
   cacheWrite(paramOffset + sizeof(paramRecord)*stateRecord.model,
   	     (const uint8_t*) &paramRecord, sizeof(paramRecord));
   cacheFlush();
+  consoleNoteLn_P(PSTR("  Stored"));
 }
 
 void readNVState(void)

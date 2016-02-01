@@ -5,19 +5,19 @@
 
 extern const AP_HAL::HAL& hal;
 
-#define EXT_EEPROM_PAGE (1L<<6)
-#define PAGE_MASK ~(EXT_EEPROM_PAGE-1)
+#define CACHE_PAGE (1L<<6)
+#define PAGE_MASK ~(CACHE_PAGE-1)
 #define EEPROM_I2C_ADDR 80
 
 extern NewI2C I2c;
 
 static int eepromFailCount = 0;
 static uint32_t lastWriteTime;
-uint8_t cacheData[EXT_EEPROM_PAGE];
-bool cacheFlag[EXT_EEPROM_PAGE];
+uint8_t cacheData[CACHE_PAGE];
+bool cacheFlag[CACHE_PAGE];
 bool cacheValid, cacheModified;
 uint32_t cacheTag;
-long writeBytesCum;
+uint32_t writeBytesCum;
 
 bool eepromWarn = false, eepromFailed = false;
 
@@ -76,13 +76,13 @@ void cacheFlush(void)
   int i = 0;
   
   do {
-    while(!cacheFlag[i] && i < EXT_EEPROM_PAGE)
+    while(!cacheFlag[i] && i < CACHE_PAGE)
       i++;
     
-    if(i < EXT_EEPROM_PAGE) {
+    if(i < CACHE_PAGE) {
       int l = 0;
       
-      while(cacheFlag[i+l] && i+l < EXT_EEPROM_PAGE) {
+      while(cacheFlag[i+l] && i+l < CACHE_PAGE) {
         cacheFlag[i+l] = false;
         l++;
       }
@@ -91,7 +91,7 @@ void cacheFlush(void)
         
       i += l;
     }
-  } while(i < EXT_EEPROM_PAGE);
+  } while(i < CACHE_PAGE);
   
   cacheModified = false;
 }
@@ -110,15 +110,15 @@ static void cacheAlloc(uint32_t addr)
   cacheValid = false;
 }
 
-static void cacheWriteLine(uint32_t addr, const uint8_t *value, int size)
+static void cacheWritePrimitive(uint32_t addr, const uint8_t *value, int size)
 {  
   if(!cacheHit(addr))
     cacheAlloc(addr);
 
   addr &= ~PAGE_MASK;
   
-  if(addr+size > EXT_EEPROM_PAGE) {
-    consoleNoteLn_P(PSTR("cacheWriteLine() crosses line border, panic"));
+  if(addr+size > CACHE_PAGE) {
+    consoleNoteLn_P(PSTR("cacheWritePrimitive() crosses line border, panic"));
     return;
   }
   
@@ -134,27 +134,45 @@ static void cacheWriteLine(uint32_t addr, const uint8_t *value, int size)
 
 void cacheWrite(uint32_t addr, const uint8_t *value, int size)
 {
+  if(CACHE_TAG(addr) == CACHE_TAG(addr+size-1)) {
+    // Fits one line, fall back to primitive
+    cacheWritePrimitive(addr, value, size);
+    return;
+  }  
+     
   uint32_t ptr = addr;
   
-  while(CACHE_TAG(ptr) < CACHE_TAG(addr+size-1)) {
-    uint32_t line_end = CACHE_TAG(ptr) + EXT_EEPROM_PAGE;
-    cacheWriteLine(ptr, value, line_end - ptr);
-    value += line_end - ptr;
-    ptr = line_end;
+  if(CACHE_TAG(ptr) < ptr) {
+    // Starts with a partial line
+    
+    uint32_t extent = CACHE_TAG(ptr) + CACHE_PAGE - ptr;
+    cacheWritePrimitive(ptr, value, extent);
+    value += extent;
+    ptr += extent;
+  }
+  
+  while(ptr+CACHE_PAGE <= addr+size) {
+    // Full lines remain
+    
+    cacheWritePrimitive(ptr, value, CACHE_PAGE);
+    value += CACHE_PAGE;
+    ptr += CACHE_PAGE;
   }
 
   if(ptr < addr+size)
-    cacheWriteLine(ptr, value, addr+size-ptr);
+    // Partial line remains
+    
+    cacheWritePrimitive(ptr, value, addr+size-ptr);
 }
 
-void cacheReadLine(uint32_t addr, uint8_t *value, int size) 
+void cacheReadPrimitive(uint32_t addr, uint8_t *value, int size) 
 {
   if(cacheModified || !cacheHit(addr))
     cacheAlloc(addr);
   
   if(!cacheValid) {
-    if(readEEPROM(cacheTag, cacheData, EXT_EEPROM_PAGE)) {
-      for(int i = 0; i < EXT_EEPROM_PAGE; i++)
+    if(readEEPROM(cacheTag, cacheData, CACHE_PAGE)) {
+      for(int i = 0; i < CACHE_PAGE; i++)
         cacheData[i] = 0xFF;
     }
     cacheValid = true;
@@ -166,11 +184,33 @@ void cacheReadLine(uint32_t addr, uint8_t *value, int size)
 
 void cacheRead(uint32_t addr, uint8_t *value, int size) 
 {
-  if(CACHE_TAG(addr) != CACHE_TAG(addr+size-1)) {
-    uint32_t split = CACHE_TAG(addr+size-1);
+  if(CACHE_TAG(addr) == CACHE_TAG(addr+size-1)) {
+    // Fits one line, fall back to primitive
+    cacheReadPrimitive(addr, value, size);
+    return;
+  }  
+     
+  uint32_t ptr = addr;
+  
+  if(CACHE_TAG(ptr) < ptr) {
+    // Starts with a partial line
     
-    cacheReadLine(addr, value, split - addr);
-    cacheReadLine(split, &value[split - addr], size - (split - addr));
-  } else
-    cacheReadLine(addr, value, size);
+    uint32_t extent = CACHE_TAG(ptr) + CACHE_PAGE - ptr;
+    cacheReadPrimitive(ptr, value, extent);
+    value += extent;
+    ptr += extent;
+  }
+  
+  while(ptr+CACHE_PAGE <= addr+size) {
+    // Full lines remain
+    
+    cacheReadPrimitive(ptr, value, CACHE_PAGE);
+    value += CACHE_PAGE;
+    ptr += CACHE_PAGE;
+  }
+
+  if(ptr < addr+size)
+    // Partial line remains
+    
+    cacheReadPrimitive(ptr, value, addr+size-ptr);
 }

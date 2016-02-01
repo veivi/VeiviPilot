@@ -259,41 +259,76 @@ void printParams(struct ParamRecord *p)
   consolePrint_P(PSTR(" ("));
   consolePrint(p->flap2Neutral*90);
   consolePrintLn_P(PSTR(")"));
+  consoleNoteLn_P(PSTR("  Servo channels"));
+  consoleNote_P(PSTR("    A = "));
+  consolePrint(p->servoAile);
+  consolePrint_P(PSTR("  E = "));
+  consolePrint(p->servoElev);
+  consolePrint_P(PSTR("  R = "));
+  consolePrint(p->servoRudder);
+  consolePrint_P(PSTR("  F = ("));
+  consolePrint(p->servoFlap);
+  consolePrint_P(PSTR(", "));
+  consolePrint(p->servoFlap2);
+  consolePrint_P(PSTR(")  G = "));
+  consolePrint(p->servoGear);
+  consolePrint_P(PSTR("  B = "));
+  consolePrintLn(p->servoBrake);
 }
 
 void dumpParams(struct ParamRecord *p)
 {
-  consolePrint_P(PSTR("5048b_ref "));
+  consolePrint_P(PSTR("min ")); consolePrint(p->alphaMin*360);
+  consolePrint_P(PSTR("; max ")); consolePrint(p->alphaMax*360);
+  consolePrint_P(PSTR("; 5048b_ref "));
   consolePrint(p->alphaRef);
-  consolePrint_P(PSTR("; inner_pid_zn "));
-  consolePrint(p->i_Ku, 4);
+  consolePrintLn(" \\");
+  consolePrint_P(PSTR("inner_pid_zn "));
+  consolePrint(p->i_Ku, 3);
   consolePrint(" ");
-  consolePrint(p->i_Tu, 4);
+  consolePrint(p->i_Tu, 3);
   consolePrint_P(PSTR("; outer_p "));
   consolePrint(p->o_P);
-  consolePrint_P(PSTR("; stabilizer_pid_zn "));
-  consolePrint(p->s_Ku, 4);
+  consolePrintLn(" \\");
+  consolePrint_P(PSTR("stabilizer_pid_zn "));
+  consolePrint(p->s_Ku, 3);
   consolePrint(" ");
-  consolePrint(p->s_Tu, 4);
-  consolePrint_P(PSTR("; rudder_pid_zn "));
-  consolePrint(p->r_Ku, 4);
+  consolePrint(p->s_Tu, 3);
+  consolePrintLn(" \\");
+  consolePrint_P(PSTR("rudder_pid_zn "));
+  consolePrint(p->r_Ku, 3);
   consolePrint(" ");
-  consolePrint(p->r_Tu, 4);
+  consolePrint(p->r_Tu, 3);
   consolePrint_P(PSTR("; yd_p "));
-  consolePrint(p->yd_P, 4);
-  consolePrint_P(PSTR("; min ")); consolePrint(p->alphaMin*360);
-  consolePrint_P(PSTR("; max ")); consolePrint(p->alphaMax*360);
-  consolePrint_P(PSTR("; edefl ")); consolePrint(p->elevDefl*90);
-  consolePrint_P(PSTR("; eneutral ")); consolePrint(p->elevNeutral*90);
-  consolePrint_P(PSTR("; adefl ")); consolePrint(p->aileDefl*90);
-  consolePrint_P(PSTR("; aneutral ")); consolePrint(p->aileNeutral*90);
-  consolePrint_P(PSTR("; fstep ")); consolePrint(p->flapStep*90);
+  consolePrint(p->yd_P, 3);
+  consolePrintLn(" \\");
+  consolePrint_P(PSTR("edefl ")); consolePrint(p->elevDefl*90,3);
+  consolePrint_P(PSTR("; eneutral ")); consolePrint(p->elevNeutral*90,3);
+  consolePrint_P(PSTR("; ezero ")); consolePrint(p->elevZero*90,3);
+  consolePrint_P(PSTR("; eservo ")); consolePrint(p->servoElev);
+  consolePrintLn(" \\");
+  consolePrint_P(PSTR("adefl ")); consolePrint(p->aileDefl*90, 3);
+  consolePrint_P(PSTR("; aneutral ")); consolePrint(p->aileNeutral*90, 3);
+  consolePrint_P(PSTR("; azero ")); consolePrint(p->aileZero*90, 3);
+  consolePrint_P(PSTR("; aservo ")); consolePrint(p->servoAile);
+  consolePrintLn(" \\");
+  consolePrint_P(PSTR("fstep ")); consolePrint(p->flapStep*90);
   consolePrint_P(PSTR("; fneutral ")); consolePrint(p->flapNeutral*90);
-  consolePrint_P(PSTR("; fneutral ")); consolePrint(p->flapNeutral*90); consolePrint(" "); consolePrint(p->flap2Neutral*90); 
-  consolePrint_P(PSTR("; bdefl ")); consolePrint(p->brakeDefl*90);
+  consolePrint_P(PSTR(" ")); consolePrint(p->flap2Neutral*90); 
+  consolePrint_P(PSTR("; fservo ")); consolePrint(p->servoFlap);
+  consolePrint_P(PSTR(" ")); consolePrint(p->servoFlap2);
+  consolePrintLn(" \\");
+  consolePrint_P(PSTR("bdefl ")); consolePrint(p->brakeDefl*90);
   consolePrint_P(PSTR("; bneutral ")); consolePrint(p->brakeNeutral*90);
-  consolePrint_P(PSTR("; rdefl ")); consolePrint(p->rudderDefl*90);
-  consolePrint_P(PSTR("; rneutral ")); consolePrint(p->rudderNeutral*90);
+  consolePrint_P(PSTR("; bservo ")); consolePrint(p->servoBrake);
+  consolePrintLn(" \\");
+  consolePrint_P(PSTR("rdefl ")); consolePrint(p->rudderDefl*90, 3);
+  consolePrint_P(PSTR("; rneutral ")); consolePrint(p->rudderNeutral*90, 3);
+  consolePrint_P(PSTR("; rzero ")); consolePrint(p->rudderZero*90, 3);
+  consolePrint_P(PSTR("; rservo ")); consolePrint(p->servoRudder);
+  consolePrintLn(" \\");
+  consolePrint_P(PSTR("gservo ")); consolePrint(p->servoGear);
+  consolePrintLn(" \\");
 }
 
 const uint8_t addr5048B_c = 0x40;
@@ -496,6 +531,10 @@ bool readPressure(int16_t *result)
 
 typedef enum {
   c_,
+  c_5048b_ref,
+  c_ezero,
+  c_azero,
+  c_rzero,
   c_adefl,
   c_edefl,
   c_clear,
@@ -521,15 +560,12 @@ typedef enum {
   c_alpha,
   c_flapneutral,
   c_flapstep,
-  c_flapservo,
   c_backup,
   c_echo,
   c_bdefl,
   c_bneutral,
-  c_bservo,
   c_rdefl,
   c_rneutral,
-  c_rservo,
   c_rpm,
   c_baud,
   c_dumpz,
@@ -543,7 +579,14 @@ typedef enum {
   c_disarm,
   c_test,
   c_talk,
-  c_defaults } command_t;
+  c_defaults,
+  c_aservo,
+  c_eservo,
+  c_fservo,
+  c_rservo,
+  c_gservo,
+  c_bservo
+} command_t;
 
 struct command {
   const char *c_string;
@@ -551,6 +594,9 @@ struct command {
 };
 
 const struct command commands[] = {
+  { "ezero", c_ezero },
+  { "azero", c_azero },
+  { "rzero", c_rzero },
   { "edefl", c_edefl },
   { "adefl", c_adefl },
   { "eneutral", c_eneutral },
@@ -577,7 +623,6 @@ const struct command commands[] = {
   { "alpha", c_alpha },
   { "fneutral", c_flapneutral },
   { "fstep", c_flapstep },
-  { "fservo", c_flapservo },
   { "backup", c_backup },
   { "echo", c_echo },
   { "bdefl", c_bdefl },
@@ -585,7 +630,6 @@ const struct command commands[] = {
   { "bservo", c_bservo },
   { "rdefl", c_rdefl },
   { "rneutral", c_rneutral },
-  { "rservo", c_rservo },
   { "rpm", c_rpm },
   { "baud", c_baud },
   { "dumpz", c_dumpz },
@@ -601,6 +645,13 @@ const struct command commands[] = {
   { "talk", c_talk },
   { "rattle", c_rattle },
   { "defaults", c_defaults },
+  { "eservo", c_eservo },
+  { "aservo", c_aservo },
+  { "rservo", c_rservo },
+  { "gservo", c_gservo },
+  { "bservo", c_bservo },
+  { "fservo", c_fservo },
+  { "5048b_ref", c_5048b_ref },
   { "", c_ }
 };
 
@@ -785,6 +836,7 @@ void executeCommand(const char *buf, int bufLen)
   case c_center:
     paramRecord.elevZero = elevStickRaw;
     paramRecord.aileZero = aileStickRaw;
+    paramRecord.rudderZero = rudderStickRaw;
     consoleNoteLn_P(PSTR("Stick center set"));
     consolePrintLn(paramRecord.o_P);
     break;
@@ -807,6 +859,24 @@ void executeCommand(const char *buf, int bufLen)
     }
     break;
     
+  case c_ezero:
+    if(numParams > 0)
+      paramRecord.elevZero = param[0] / 90.0;
+    else {
+      consoleNote_P(PSTR("Elev zero = "));
+      consolePrintLn(paramRecord.elevZero*90.0);
+    }
+    break;
+    
+  case c_eservo:
+    if(numParams > 0)
+      paramRecord.servoElev = param[0];
+    else {
+      consoleNoteLn_P(PSTR("Elev servo ch = "));
+      consolePrintLn(paramRecord.servoElev);
+    }
+    break;
+    
   case c_aneutral:
     if(numParams > 0)
       paramRecord.aileNeutral = param[0]/90.0;
@@ -825,6 +895,24 @@ void executeCommand(const char *buf, int bufLen)
     }
     break;
 
+  case c_azero:
+    if(numParams > 0)
+      paramRecord.aileZero = param[0] / 90.0;
+    else {
+      consoleNote_P(PSTR("Aile zero = "));
+      consolePrintLn(paramRecord.aileZero*90.0);
+    }
+    break;
+    
+  case c_aservo:
+    if(numParams > 0)
+      paramRecord.servoAile = param[0];
+    else {
+      consoleNoteLn_P(PSTR("Aile servo ch = "));
+      consolePrintLn(paramRecord.servoAile);
+    }
+    break;
+    
   case c_bneutral:
     if(numParams > 0)
       paramRecord.brakeNeutral = param[0]/90.0;
@@ -843,6 +931,15 @@ void executeCommand(const char *buf, int bufLen)
     }
     break;
  
+  case c_bservo:
+    if(numParams > 0)
+      paramRecord.servoBrake = param[0];
+    else {
+      consoleNoteLn_P(PSTR("Brake servo ch = "));
+      consolePrintLn(paramRecord.servoBrake);
+    }
+    break;
+    
   case c_rneutral:
     if(numParams > 0)
       paramRecord.rudderNeutral = param[0]/90.0;
@@ -858,6 +955,15 @@ void executeCommand(const char *buf, int bufLen)
     else {
       consoleNoteLn_P(PSTR("Rudder defl = "));
       consolePrintLn(paramRecord.rudderDefl*90.0);
+    }
+    break;
+    
+  case c_rzero:
+    if(numParams > 0)
+      paramRecord.rudderZero = param[0] / 90.0;
+    else {
+      consoleNote_P(PSTR("Rudder zero = "));
+      consolePrintLn(paramRecord.rudderZero*90.0);
     }
     break;
     
@@ -883,7 +989,7 @@ void executeCommand(const char *buf, int bufLen)
     }
     break;
     
-  case c_flapservo:
+  case c_fservo:
     if(numParams > 0) {
       paramRecord.servoFlap = param[0];
       if(numParams > 1)
@@ -907,6 +1013,15 @@ void executeCommand(const char *buf, int bufLen)
     }
     break;
     
+  case c_gservo:
+    if(numParams > 0)
+      paramRecord.servoGear = param[0];
+    else {
+      consoleNoteLn_P(PSTR("Gear servo ch = "));
+      consolePrintLn(paramRecord.servoGear);
+    }
+    break;
+    
   case c_min:
     if(numParams > 0)
       paramRecord.alphaMin = param[0]/360.0;
@@ -917,6 +1032,11 @@ void executeCommand(const char *buf, int bufLen)
       maxAlpha = paramRecord.alphaMax = param[0]/360.0;
     break;
 
+  case c_5048b_ref:
+    if(numParams > 0)
+      paramRecord.alphaRef = (uint16_t) param[0];
+    break;
+    
   case c_zero:
     paramRecord.alphaRef += (int16_t) ((1L<<16) * alpha);
     break;
@@ -965,9 +1085,9 @@ void executeCommand(const char *buf, int bufLen)
     consolePrintLn("");
     consolePrint_P(PSTR("echo 0; model "));
     consolePrint(stateRecord.model);
-    consolePrint("; ");
+    consolePrintLn(" \\");
     dumpParams(&paramRecord);
-    consolePrintLn_P(PSTR("; echo 1; store"));
+    consolePrintLn_P(PSTR("echo 1; store"));
     consolePrintLn("");
     break;
 
@@ -1114,7 +1234,7 @@ void executeCommandSeries(const char *buffer, int len)
   while(index < len) {
     cmdBufLen = 0;
     
-    while(index < len && buffer[index] != ';') {
+    while(index < len && buffer[index] != ';' && buffer[index] != '\n') {
       if(cmdBufLen < maxCmdLen-1 && (buffer[index] != ' ' || cmdBufLen > 0)) {
         cmdBuf[cmdBufLen++] = buffer[index];
       }
@@ -1727,6 +1847,7 @@ int serialBufIndex = 0;
 void communicationTask(uint32_t currentMicros)
 {
   int len = 0;
+  bool concat = false;
        
   while((len = cliSerial->available()) > 0) {    
     int spaceLeft = serialBufLen - serialBufIndex;
@@ -1740,22 +1861,25 @@ void communicationTask(uint32_t currentMicros)
 
     while(len > 0) {
       char c =  cliSerial->read();
-      
-      if(c == '\n') {
-	looping = false;
-	executeCommandSeries(serialBuf, serialBufIndex);
-	serialBufIndex = 0;
-	controlCycleEnded = 0;
 
+      if(c == '\\') {
+	concat = true;
       } else if(c == '\b') {
 	if(serialBufIndex > 0) {
 	  consolePrint("\b \b");
 	  serialBufIndex--;
 	}
 	
-      } else {
+      } else if(c != '\n' || concat) {
 	consolePrintf("%c", c);
 	serialBuf[serialBufIndex++] = c;
+	concat = false;
+	
+      } else {
+	looping = false;
+	executeCommandSeries(serialBuf, serialBufIndex);
+	serialBufIndex = 0;
+	controlCycleEnded = 0;
       }
       
       len--;
@@ -2315,30 +2439,37 @@ AP_HAL_MAIN();
 /*
 
 //
-// MODEL 1 : Viper 2016/1/25
+// MODEL 1 : VIPER 2016/2/1
 //
-
-echo 0; model 1; 5048b_ref 25342; inner_pid 0.5100 4.6398 0.0140; outer_p 10.00; stabilizer_pid 0.4799 4.0000 0.013
-0; min -3.00; max 12.00; edefl 45.00; eneutral 0.00; ezero 3.33; adefl -30.00; aneutral 0.00; azero 6.00; fstep -23
-.00; fneutral 0.00; fneutral 0.00 -20.00; rdefl -45.00; rneutral 0.00; echo 1; store
  
+echo 0; model 1 \
+min -3.00; max 12.00; 5048b_ref 0 \
+inner_pid_zn 1.000 0.250; outer_p 10.00 \
+stabilizer_pid_zn 1.299 0.250 \
+rudder_pid_zn 1.000 0.330; yd_p 2.000 \
+edefl 45.000; eneutral 0.000; ezero 3.111; eservo 1 \
+adefl -45.000; aneutral 0.000; azero 6.000; aservo 0 \
+fstep -15.00; fneutral 0.00 -15.00; fservo 2 3 \
+bdefl 45.00; bneutral 0.00; bservo -1 \
+rdefl 45.000; rneutral 5.000; rzero 8.222; rservo 6 \
+gservo -1 \
+echo 1; store
+
 //
-// MODEL 0 : L-39 2016/1/25
+// MODEL 0 : L-39 2016/2/1
 //
-// inner_pid_zn 1.15 0.27
-// stabilizer_pid_zn 1.4 0.36
  
-echo 0; model 0; 5048b_ref 32268; inner_pid 0.6900 5.1111 0.0232; outer_p 10.00; stabilizer_pid 0.8400 4.6666 0.0378; 
-min -3.00; max 13.00; edefl -50.00; eneutral 0.00; ezero 0.00; adefl -35.00; aneutral 0.00; azero 0.00; fstep -27.00; 
-fneutral 45.00; fneutral 45.00 45.00; bdefl -45.00; bneutral -45.00; echo 1; store
-
- L-39 2015/12/15
-
-echo 0; model 0; 5048b_ref 39656; inner_pid 0.6900 5.1111 0.0232; outer_p 10.00; stabilizer_pid 0.8400 4.6666 0.0378; min -3.00; max 12.00; edefl -45.00; eneutral 0.00; ezero 0.00; adefl -35.00; aneutral 0.00; azero 0.00; fstep -27.00; fneutral 45.00; fneutral 45.00 45.00; bdefl -45.00; bneutral -45.00; echo 1; store
-
-//
-// Backup VIPER 2015/12/12
-
-echo 0; model 0; 5048b_ref 2068; inner_pid 0.5100 4.6398 0.0140; outer_p 10.00; stabilizer_pid 0.4799 4.0000 0.0130; min -3.00; max 12.00; edefl 45.00; eneutral -8.00; ezero 3.33; adefl -45.00; aneutral 0.00; azero 6.00; fstep -40.00; fneutral 55.00; fneutral 55.00 -80.00; bdefl -45.00; bneutral -45.00; echo 1; store
+echo 0; model 0 \
+min -3.00; max 13.00; 5048b_ref 32268 \
+inner_pid_zn 1.148 0.270; outer_p 10.00 \
+stabilizer_pid_zn 1.398 0.360 \
+rudder_pid_zn 1.000 0.330; yd_p 2.000 \
+edefl -50.000; eneutral 0.000; ezero 2.885; eservo 1 \
+adefl -35.000; aneutral 0.000; azero 5.555; aservo 0 \
+fstep 0.00; fneutral 45.00 45.00; fservo -1 -1 \
+bdefl -45.00; bneutral -45.00; bservo -1 \
+rdefl 45.000; rneutral 0.000; rzero -0.888; rservo -1 \
+gservo -1 \
+echo 1; store
 
  */
