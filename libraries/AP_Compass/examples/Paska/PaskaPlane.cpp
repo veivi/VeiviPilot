@@ -2044,7 +2044,7 @@ void controlTask(uint32_t currentMicros)
   // Rudder
     
   if(mode.autoRudder) {
-    float targetBall = rudderStick;
+    float targetBall = rudderStick/2;
       
     if(mode.autoBall)
       targetBall -= accY/9.81;
@@ -2437,6 +2437,24 @@ void loop()
 AP_HAL_MAIN();
 
 /*
+
+// Param backup L-39 2016/2/2
+//
+// MODEL 0
+//
+ 
+echo 0; model 0 \
+min -3.00; max 13.00; 5048b_ref 32268 \
+inner_pid_zn 1.148 0.270; outer_p 10.00 \
+stabilizer_pid_zn 1.398 0.360 \
+rudder_pid_zn 0.500 0.330; yd_p 2.000 \
+edefl -50.000; eneutral 0.000; ezero 3.111; eservo 1 \
+adefl -35.000; aneutral 0.000; azero 5.777; aservo 0 \
+fstep 0.00; fneutral 45.00 45.00; fservo -1 -1 \
+bdefl -45.00; bneutral -45.00; bservo -1 \
+rdefl 35.000; rneutral -5.000; rzero 8.444; rservo 2 \
+gservo -1 \
+echo 1; store
 
 //
 // MODEL 1 : VIPER 2016/2/1
