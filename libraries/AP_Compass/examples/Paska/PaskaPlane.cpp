@@ -154,7 +154,7 @@ struct ModeRecord {
   bool autoAlpha;
   bool autoTrim;
   bool autoRudder;
-  bool autoBall;
+  bool yawDamper;
   bool stabilizer;
   bool wingLeveler;
   bool bankLimiter;
@@ -191,7 +191,7 @@ bool armed = false;
 float neutralStick = 0.0, neutralAlpha, targetAlpha;
 float switchValue, tuningKnobValue, rpmOutput;
 Controller elevController, aileController, rudderController, yawRateController, pusher;
-float autoAlphaP, maxAlpha;
+float autoAlphaP, maxAlpha, yawDamperP;
 float accX, accY, accZ, altitude,  heading, rollAngle, pitchAngle, rollRate, pitchRate, yawRate;
 int cycleTimeCounter = 0;
 uint32_t prevMeasurement;
@@ -1312,10 +1312,6 @@ void receiverTask(uint32_t currentMicros)
   if(inputValid(&elevInput)) {
     elevStickRaw = decodePWM(inputValue(&elevInput));
     elevStick = clamp(elevStickRaw - paramRecord.elevZero, -1, 1);
-
-    if(mode.autoStick) {
-      elevStick = applyNullZone(elevStick - neutralStick);
-    }
   }
 
   if(inputValid(&switchInput))
@@ -1503,7 +1499,7 @@ void measurementTask(uint32_t currentMicros)
 
 float testGainExpo(float range)
 {
-  return exp(3*(parameter-1))*range;
+  return exp(log(3)*(2*parameter-1))*range;
 }
 
 float testGainLinear(float start, float stop)
@@ -1585,7 +1581,7 @@ void configurationTask(uint32_t currentMicros)
       if(pulsePolarity) {
         if(mode.sensorFailSafe) {
             mode.sensorFailSafe = false;
-            consoleNoteLn_P(PSTR("Failsafe DISABLED"));
+            consoleNoteLn_P(PSTR("Sensor failsafe DISABLED"));
             
         } else if(!armed) {
           consoleNoteLn_P(PSTR("We're now ARMED"));
@@ -1634,28 +1630,29 @@ void configurationTask(uint32_t currentMicros)
 
     consoleNoteLn_P(PSTR("Test mode ENABLED"));
     
-  } else if(testMode && parameter < 0.1) {
+  } else if(testMode && parameter < 0.05) {
     testMode = false;
     
     consoleNoteLn_P(PSTR("Test mode DISABLED"));
   }
 
-  if(mode.wingLeveler && absVal(aileStick) > 0.1)
-    mode.wingLeveler = false;
-  
   // Mode-to-feature mapping: first nominal values
       
   mode.stabilizer = true;
   mode.bankLimiter = switchStateLazy;
-  mode.autoStick = mode.autoAlpha = mode.autoTrim = false;
-  // mode.autoStick = mode.autoAlpha = mode.autoTrim = !gearOutput;
   mode.autoStick = mode.autoAlpha = mode.autoTrim = flapOutput > 0;
-  mode.autoRudder = true;
-  mode.autoBall = true;
+  mode.autoRudder = mode.yawDamper = !switchStateLazy;
+  
+  // Wing leveler disable when stick input detected
+  
+  if(mode.wingLeveler && absVal(aileStick) > 0.1) {
+    consoleNoteLn_P(PSTR("Wing leveler DISABLED"));
+    mode.wingLeveler = false;
+  }
   
   // Detect transmitter fail
 
-  if(mode.bankLimiter && aileStick < -0.90 && elevStick > 0.90) {
+  if(switchState && aileStick < -0.90 && elevStick > 0.90) {
     if(!mode.rxFailSafe) {
       consoleNoteLn_P(PSTR("Receiver failsafe mode ENABLED"));
       mode.rxFailSafe = true;
@@ -1666,8 +1663,13 @@ void configurationTask(uint32_t currentMicros)
     mode.rxFailSafe = false;
   }
 
-  if(mode.rxFailSafe)
-    mode.autoStick = mode.autoAlpha = true;
+  if(mode.rxFailSafe) {
+    // Receiver failsafe mode settings
+    
+    mode.autoStick = mode.autoAlpha = mode.bankLimiter = true;
+    mode.autoRudder = mode.yawDamper = false;
+    neutralStick = 0;
+  }
   
   // Default controller settings
      
@@ -1683,86 +1685,60 @@ void configurationTask(uint32_t currentMicros)
 
   autoAlphaP = paramRecord.o_P;
   maxAlpha = paramRecord.alphaMax;
+  yawDamperP = paramRecord.yd_P;
  
   // Then apply test modes
   
   if(testMode) {
      switch(stateRecord.testChannel) {
-       case 1:
-         // Wing stabilizer gain
+     case 1:
+       // Wing stabilizer gain
          
-         mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
-         aileController.setPID(testGain = testGainExpo(paramRecord.s_Ku), 0, 0);
-         break;
+       mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
+       aileController.setPID(testGain = testGainExpo(paramRecord.s_Ku), 0, 0);
+       break;
             
-       case 2:
-         // Elevator stabilizer gain, outer loop disabled
+     case 2:
+       // Elevator stabilizer gain, outer loop disabled
          
-         mode.autoStick = true;
-         mode.autoTrim = mode.autoAlpha = false;
-         elevController.setPID(testGain = testGainExpo(paramRecord.i_Ku), 0, 0);
-         break;
+       mode.autoStick = true;
+       mode.autoTrim = mode.autoAlpha = false;
+       elevController.setPID(testGain = testGainExpo(paramRecord.i_Ku), 0, 0);
+       break;
          
-       case 3:
-         // Elevator stabilizer gain, outer loop enabled
+     case 3:
+       // Elevator stabilizer gain, outer loop enabled
          
-         mode.autoStick = mode.autoTrim = mode.autoAlpha = true;
-         elevController.setPID(testGain = testGainExpo(paramRecord.i_Ku), 0, 0);
-         break;
+       mode.autoStick = mode.autoTrim = mode.autoAlpha = true;
+       elevController.setPID(testGain = testGainExpo(paramRecord.i_Ku), 0, 0);
+       break;
          
-       case 4:
-         // Auto alpha outer loop gain
+     case 4:
+       // Auto alpha outer loop gain
          
-         mode.autoStick = mode.autoTrim = mode.autoAlpha = true;
-         autoAlphaP = testGain = testGainExpo(paramRecord.o_P);
-         break;
+       mode.autoStick = mode.autoTrim = mode.autoAlpha = true;
+       autoAlphaP = testGain = testGainExpo(paramRecord.o_P);
+       break;
          
-       case 11:
-         // Elevator stabilizer gain, mode depends on config
+     case 7:
+       // Max alpha
          
-         testGain = testGainExpo(4);
-         elevController.setPID(testGain, 0, 0);
-         pusher.setPID(testGain, 0, 0);
-         break;
-         
-       case 12:
-         // Auto alpha outer loop gain, mode depends on config
-         
-         autoAlphaP = testGain = testGainExpo(15);
-         break;
+       maxAlpha = testGain = testGainLinear(10, 20);
+       break;         
 
-       case 21:
-         // Elevator stabilizer ZN gain = 0.3... 3, fixed period = 0.3
-         
-         testGain = testGainExpo(1);
-         elevController.setZieglerNicholsPID(testGain, 0.3);
-         pusher.setZieglerNicholsPID(testGain, 0.3);
-         break;
-         
-       case 22:
-         // Elevator stabilizer ZN period = 0.15... 1.5, fixed gain = 0.9
-         
-         testGain = testGainExpo(0.5);
-         elevController.setZieglerNicholsPID(0.9, testGain);
-         pusher.setZieglerNicholsPID(0.9, testGain);
-         break;
-         
-       case 31:
-         // Elevator stabilizer ZN empirical period
+     case 11:
+       // Yaw damper gain
 
-         float Ku, Tu;
-         elevController.getZieglerNicholsPID(&Ku, &Tu);
-         parameter *= neutralAlpha/maxAlpha;
-         testGain = testGainLinear(Tu, 0.5);
-         elevController.setZieglerNicholsPID(Ku, testGain);
-         pusher.setZieglerNicholsPID(Ku, testGain);
-         break;
-         
-       case 7:
-         // Max alpha
-         
-         maxAlpha = testGain = testGainLinear(10, 20);
-         break;         
+       mode.yawDamper = true;
+       yawDamperP = testGain = testGainExpo(paramRecord.yd_P);
+       break;
+
+     case 12:
+       // Autorudder gain
+
+       mode.yawDamper = mode.autoRudder = true;
+       rudderController.setPID(testGain = testGainExpo(paramRecord.r_Ku), 0, 0);
+       break;
      }
   }
       
@@ -1780,19 +1756,20 @@ void loopTask(uint32_t currentMicros)
   if(looping) {
     consolePrint("alpha = ");
     consolePrint(alpha*360);
-    consolePrint(" targAlpha = ");
+    /*    consolePrint(" targAlpha = ");
     consolePrint(targetAlpha*360);
     consolePrint(" dynPress = ");
     consolePrint(dynPressure);
+    */
 
-/*
     consolePrint(" ppmFreq = ");
     consolePrint(ppmFreq);
     consolePrint(" aileStick = ");
     consolePrint(aileStick);
     consolePrint(" elevStick = ");
     consolePrint(elevStick);
-*/    
+    consolePrint(" rudderStick = ");
+    consolePrint(rudderStick);
 
     consolePrint(" acc = (");
     consolePrint(accX, 2);
@@ -1834,8 +1811,10 @@ void loopTask(uint32_t currentMicros)
     consolePrint(" trim = ");
     consolePrint(neutralAlpha*360);
 */
-    //    consolePrint(" testGain = ");
-    // consolePrint(testGain);
+    consolePrint(" param = ");
+    consolePrint(parameter);
+    consolePrint(" testGain = ");
+    consolePrint(testGain);
     consolePrint("      \r");
   }
 }
@@ -2044,44 +2023,40 @@ void controlTask(uint32_t currentMicros)
   // Rudder
     
   if(mode.autoRudder) {
-    float targetBall = rudderStick/2;
-      
-    if(mode.autoBall)
-      targetBall -= accY/9.81;
-    
-    rudderController.input(targetBall, controlCycle);
-    rudderOutput = rudderController.output();
 
+    rudderController.input(rudderStick/2 - accY/9.81, controlCycle);
+    rudderOutput = rudderController.output();
   } else {
-    rudderController.reset(rudderStick, 0.0);
+    
     rudderOutput = rudderStick;
+    rudderController.reset(rudderOutput, 0.0);
   }
 
   // Yaw damper
 
-  rudderOutput -= yawRate * paramRecord.yd_P;
+  if(mode.yawDamper)
+    rudderOutput -= yawRate * yawDamperP;
   
   if(mode.sensorFailSafe)
     rudderOutput = rudderStick;
-    
-  else
     
   // Elevator control
     
   targetAlpha = 0.0;
 
   if(mode.autoStick) {
-    float targetRate = clamp(elevStick, -0.5, 0.5);
-
+    const float effStick = elevStick - neutralStick;
+    float targetRate = clamp(effStick, -0.5, 0.5);
+    
     if(mode.autoAlpha) {  
       if(mode.rxFailSafe)
 	targetAlpha = maxAutoAlpha;
       else {
 	const float fract_c = 1.0/3;
-	const float strength_c = max(elevStick-(1.0-fract_c), 0)/fract_c;
+	const float strength_c = max(effStick-(1.0-fract_c), 0)/fract_c;
 	const float maxTargetAlpha_c = mixValue(strength_c, maxAutoAlpha, maxAlpha);
 
-	targetAlpha = clamp(neutralAlpha + elevStick*maxAlpha/2,
+	targetAlpha = clamp(neutralAlpha + effStick*maxAlpha/2,
 			    paramRecord.alphaMin, maxTargetAlpha_c);
       }
 	
