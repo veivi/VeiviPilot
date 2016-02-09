@@ -269,7 +269,6 @@ static void logOutputVariableName(int stamp, const char *name)
 
 static void logOutputValue(float small, float large)
 {
-  valueCount++;  
   logOutputValue(tick ? small : large);
   tick = !tick;
 }
