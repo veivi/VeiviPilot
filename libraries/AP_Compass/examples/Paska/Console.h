@@ -1,17 +1,11 @@
-
 #include <stdint.h>
 #include <stdarg.h>
 #include <AP_ProgMem/AP_ProgMem.h>
 
 extern bool talk;
 
+void consoleFlush();
 void consolePrint(const char c);
-void consolevNotef(const char *s, va_list argp);
-void consoleNotef(const char *s, ...);
-void consoleNotefLn(const char *s, ...);
-void consolevPrintf(const char *s, va_list argp);
-void consolePrintf(const char *s, ...);
-void consolePrintfLn(const char *s, ...);
 void consoleNote_P(const prog_char_t *s);
 void consoleNote(const char *s);
 void consoleNoteLn_P(const prog_char_t *s);
@@ -38,3 +32,12 @@ void consolePrintLn(unsigned int v);
 void consolePrintLn(uint8_t v);
 void consolePrintLn(long v);
 void consolePrintLn(unsigned long v);
+
+#ifdef CONSOLE_PRIVATE_H
+void consolevNotef(const char *s, va_list argp);
+void consoleNotef(const char *s, ...);
+void consoleNotefLn(const char *s, ...);
+void consolevPrintf(const char *s, va_list argp);
+void consolePrintf(const char *s, ...);
+void consolePrintfLn(const char *s, ...);
+#endif

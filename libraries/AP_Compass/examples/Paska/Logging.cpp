@@ -2,6 +2,7 @@
 #include "Logging.h"
 #include "NVState.h"
 #include "Filter.h"
+#include "Datagram.h"
 #include <stdarg.h>
 #include <AP_HAL/AP_HAL.h>
 
@@ -249,7 +250,10 @@ static void logOutputString(const char *s)
     col = 0;
   }
 
-  consolePrintf("\"%s\"", s);
+  consolePrint("\"");
+  consolePrint(s);
+  consolePrint("\"");
+  
   col += strlen(s) + 2;
 
   first = false;
@@ -267,7 +271,11 @@ static void logOutputVariableName(int stamp, const char *name)
     col = 0;
   }
 
-  consolePrintf("fdr_%d_%s", stamp, name);
+  consolePrint("fdr_");
+  consolePrint(stamp);
+  consolePrint("_");
+  consolePrint(name);
+  
   col += 4 + 3 + 1 + strlen(name);
 
   first = false;
@@ -434,39 +442,6 @@ void logDump(int ch)
   consolePrintLn(" ]");
 }
 
-uint16_t crcState;
-
-void datagramStart(void)
-{
-  hal.uartA->write((const uint8_t) 0x00);
-  hal.uartA->write((const uint8_t) 0x00);
-  hal.uartA->write((const uint8_t) 0x01);
-
-  crcState = 0xFFFF;
-}
-
-void binaryOutput(const uint8_t c)
-{
-  hal.uartA->write(c);
-    
-  if(c == 0x00)
-    hal.uartA->write((const uint8_t) 0xFF);
-}
-
-void binaryOutputCRC(const uint8_t c)
-{
-  binaryOutput(c);
-  crcState = crc16_update(crcState, c);
-}
-
-void datagramEnd(void)
-{
-  binaryOutput(crcState>>8);
-  binaryOutput(crcState & 0xFF);
-  hal.uartA->write((const uint8_t) 0x00);
-  hal.uartA->write((const uint8_t) 0x00);
-}
-
 void logDumpBinary(void)
 {
   for(int32_t i = 0; i < logSize; i++) {
@@ -476,8 +451,8 @@ void logDumpBinary(void)
     }
       
     const uint16_t buf = logRead(i);
-    binaryOutputCRC(buf & 0xFF);
-    binaryOutputCRC(buf>>8);
+    datagramOutput(buf & 0xFF);
+    datagramOutput(buf>>8);
   }
 
   datagramEnd();

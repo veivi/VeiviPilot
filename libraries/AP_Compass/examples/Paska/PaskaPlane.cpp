@@ -680,8 +680,11 @@ int indexOf(const char *s, const char c)
 
 void executeCommand(const char *buf, int bufLen)
 {
-  if(echoEnabled)
-    consolePrintf("\r// %% %s          \n", buf);  
+  if(echoEnabled) {
+    consolePrint("\r// %% ");
+    consolePrint(buf);  
+    consolePrintLn("          ");
+  }
   
   const int maxParams = 8;
 
@@ -1636,13 +1639,6 @@ void configurationTask(uint32_t currentMicros)
     consoleNoteLn_P(PSTR("Test mode DISABLED"));
   }
 
-  // Mode-to-feature mapping: first nominal values
-      
-  mode.stabilizer = true;
-  mode.bankLimiter = switchStateLazy;
-  mode.autoStick = mode.autoAlpha = mode.autoTrim = flapOutput > 0;
-  mode.autoRudder = mode.yawDamper = !switchStateLazy;
-  
   // Wing leveler disable when stick input detected
   
   if(mode.wingLeveler && absVal(aileStick) > 0.1) {
@@ -1650,7 +1646,14 @@ void configurationTask(uint32_t currentMicros)
     mode.wingLeveler = false;
   }
   
-  // Detect transmitter fail
+  // Mode-to-feature mapping: first nominal values
+      
+  mode.stabilizer = true;
+  mode.bankLimiter = switchStateLazy;
+  mode.autoStick = mode.autoAlpha = mode.autoTrim = flapOutput > 0;
+  mode.autoRudder = mode.yawDamper = !switchStateLazy;
+  
+  // Receiver fail detection
 
   if(switchState && aileStick < -0.90 && elevStick > 0.90) {
     if(!mode.rxFailSafe) {
@@ -1662,8 +1665,8 @@ void configurationTask(uint32_t currentMicros)
     consoleNoteLn_P(PSTR("Receiver failsafe mode DISABLED"));
     mode.rxFailSafe = false;
   }
-
-  if(mode.rxFailSafe) {
+  
+  if(mode.rxFailSafe) {    
     // Receiver failsafe mode settings
     
     mode.autoStick = mode.autoAlpha = mode.bankLimiter = true;
@@ -1762,7 +1765,7 @@ void loopTask(uint32_t currentMicros)
     consolePrint(dynPressure);
     */
 
-    consolePrint(" ppmFreq = ");
+    /*    consolePrint(" ppmFreq = ");
     consolePrint(ppmFreq);
     consolePrint(" aileStick = ");
     consolePrint(aileStick);
@@ -1770,7 +1773,7 @@ void loopTask(uint32_t currentMicros)
     consolePrint(elevStick);
     consolePrint(" rudderStick = ");
     consolePrint(rudderStick);
-
+    */
     consolePrint(" acc = (");
     consolePrint(accX, 2);
     consolePrint(", ");
@@ -1778,7 +1781,7 @@ void loopTask(uint32_t currentMicros)
     consolePrint(", ");
     consolePrint(accZ, 2);
     consolePrint(")");
-    /*    
+
     consolePrint(" roll = ");
     consolePrint(rollAngle, 2);
     consolePrint(" (rate = ");
@@ -1788,7 +1791,7 @@ void loopTask(uint32_t currentMicros)
     consolePrint(" (rate = ");
     consolePrint(pitchRate*360, 1);
     consolePrint(")");
-    */
+
     /*
     consolePrint(" rpm = ");
     consolePrint(readRPM());
@@ -1811,11 +1814,14 @@ void loopTask(uint32_t currentMicros)
     consolePrint(" trim = ");
     consolePrint(neutralAlpha*360);
 */
+    /*
     consolePrint(" param = ");
     consolePrint(parameter);
     consolePrint(" testGain = ");
     consolePrint(testGain);
+    */
     consolePrint("      \r");
+    consoleFlush();
   }
 }
 
@@ -1846,11 +1852,14 @@ void communicationTask(uint32_t currentMicros)
       } else if(c == '\b') {
 	if(serialBufIndex > 0) {
 	  consolePrint("\b \b");
+	  consoleFlush();
 	  serialBufIndex--;
 	}
 	
       } else if(c != '\n' || concat) {
-	consolePrintf("%c", c);
+	const char buf[] = { c, 0 };
+	consolePrint(buf);
+	consoleFlush();
 	serialBuf[serialBufIndex++] = c;
 	concat = false;
 	
@@ -2293,7 +2302,7 @@ void setup() {
   
   consoleNoteLn_P(PSTR("Project | Alpha"));   
   consoleNote_P(PSTR("Init Free RAM: "));
-  consolePrintfLn("%u", hal.util->available_memory());
+  consolePrintLn((unsigned long) hal.util->available_memory());
 
   // I2C
   
@@ -2376,6 +2385,7 @@ void setup() {
   consolePrintLn_P(PSTR("  done"));
   
   consoleNote_P(PSTR("Initializing INS / AHRS... "));
+  consoleFlush();
   
   ins.init(AP_InertialSensor::COLD_START, AP_InertialSensor::RATE_100HZ);
   ahrs.init();

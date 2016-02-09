@@ -1,5 +1,7 @@
 #include <AP_HAL/AP_HAL.h>
+#define CONSOLE_PRIVATE_H
 #include "Console.h"
+#include "Serial.h"
 #include <stdarg.h>
 
 extern const AP_HAL::HAL& hal;
@@ -7,8 +9,16 @@ extern const AP_HAL::HAL& hal;
 static void newline(void);
 bool talk = true;
 
-#define printChar(c) hal.uartA->write(c)
-#define printDigit(d) printChar('0'+d)
+static void newline(void)
+{
+  consolePrint("\n");
+  serialFlush();
+}
+
+void consoleFlush()
+{
+  serialFlush();
+}  
 
 void consoleNote(const char *s)
 {
@@ -83,49 +93,44 @@ void consolePrintfLn(const char *s, ...)
 void consolevPrintf(const char *s, va_list argp)
 {
   if(talk)
-#ifdef ARDUINO
-    Serial.print(s);
-#else
-    hal.console->vprintf(s, argp);
-#endif
+    consolePrint(s);
+  //    hal.console->vprintf(s, argp);
 }
 
 void consolePrint(const char *s)
 {
-  if(talk)
-#ifdef ARDUINO
-    Serial.print(s);
-#else
+  if(!talk)
+    return;
+
   while(*s)
-    printChar(*s++);
-  //    hal.console->printf("%s", s);
-#endif
+    serialOut(*s++);
 }
 
 void consolePrint_P(const prog_char_t *s)
 {
-  if(talk)
-#ifdef ARDUINO
-    Serial.print(s);
-#else
-  hal.console->printf_P(s);
-#endif
+  if(!talk)
+    return;
+  
+  uint8_t c = 0;
+
+  while((c = pgm_read_byte(s++)))
+    serialOut(c);
 }
+
+#define printDigit(d) serialOut('0'+d)
+// #define USE_PRINTF
 
 void consolePrint(float v, int p)
 {
   if(!talk)
     return;
      
-#ifdef ARDUINO
-  Serial.print(v, p);
-#else
 #ifdef USE_PRINTF
   const char fmt[] = {'%', '.', '0'+p, 'f', '\0'};
   hal.console->printf(fmt, (double) v);
 #else
   if(v < 0.0) {
-    printChar('-');
+    serialOut('-');
     v = -v;
   }
 
@@ -145,12 +150,11 @@ void consolePrint(float v, int p)
     }
   }
 #endif  
-#endif
 }
 
 void consolePrint(const char c)
 {
-  printChar(c);
+  serialOut(c);
 }  
 
 void consolePrint(float v)
@@ -183,19 +187,12 @@ void consolePrint(long v)
   if(!talk)
     return;
   
-#ifdef ARDUINO
-  Serial.print(v);
-#else
-
   if(v < 0) {
     v = -v;
-    printChar('-');
+    serialOut('-');
   }
 
   consolePrint((unsigned long) v);
-
-  //  hal.console->printf("%ld", v);
-#endif
 }
 
 void consolePrint(unsigned long v)
@@ -203,9 +200,6 @@ void consolePrint(unsigned long v)
   if(!talk)
     return;
   
-#ifdef ARDUINO
-  Serial.print(v);
-#else
   uint8_t buf[20];
   int l = 0;
 
@@ -219,19 +213,11 @@ void consolePrint(unsigned long v)
       printDigit(buf[--l]);
   else
     printDigit(0);
-  
-  //  hal.console->printf("%lu", v);
-#endif
 }
 
 void consolePrint(uint8_t v)
 {
   consolePrint((unsigned int) v);
-}
-
-void newline(void)
-{
-  consolePrint("\n");
 }
 
 void consolePrintLn(const char *s)

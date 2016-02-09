@@ -37,20 +37,20 @@ bool handleFailure(const char *name, bool fail, bool *warn, bool *failed, int *c
   if(fail) {
     *warn = true;
     
-    consoleNote("Bad ");
+    consoleNote_P(PSTR("Bad "));
     consolePrintLn(name);
     
     if(++(*count) > 10) {
       consoleNote("");
       consolePrint(name);
-      consolePrintLn(" failed");
+      consolePrintLn_P(PSTR(" failed"));
       *failed = true;
     }
   } else {    
     if(*count > 0) {
       consoleNote("");
       consolePrint(name);
-      consolePrintLn(" recovered");
+      consolePrintLn_P(PSTR(" recovered"));
       *count = 0;
     }
   }
