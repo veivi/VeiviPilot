@@ -1,10 +1,9 @@
+#include <stdarg.h>
 #include <AP_HAL/AP_HAL.h>
 #include "Logging.h"
 #include "NVState.h"
 #include "Filter.h"
 #include "Datagram.h"
-#include <stdarg.h>
-#include <AP_HAL/AP_HAL.h>
 
 extern "C" {
 #include "CRC16.h"
@@ -225,19 +224,6 @@ static void logOutputValue(float v)
   first = false;
 }
 
-static void logPrint(const char *s)
-{  
-  if(col > 72) {
-    consolePrintLn("");
-    col = 0;
-  }
-
-  consolePrint(s);
-  col += strlen(s);
-
-  first = false;
-}
-
 static void logOutputString(const char *s)
 {  
   if(!first) {
@@ -328,7 +314,7 @@ void logDump(int ch)
     return;
   }
   
-  int32_t len = logLen, notFirst = 0;
+  int32_t len = logLen;
 
   if(len < 0) {
     consoleNote_P(PSTR("Looking for log start..."));
