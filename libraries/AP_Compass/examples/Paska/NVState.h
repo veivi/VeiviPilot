@@ -28,7 +28,7 @@ struct ParamRecord {
 struct NVStateRecord {
   uint16_t crc;
   uint16_t paramPartition, logPartition;
-  int logStamp;
+  uint16_t logStamp;
   int model;
   bool logRPM;
   int testChannel;

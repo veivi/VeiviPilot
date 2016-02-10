@@ -2,6 +2,7 @@
 #define CONSOLE_PRIVATE_H
 #include "Console.h"
 #include "Serial.h"
+#include "Datagram.h"
 #include <stdarg.h>
 
 extern const AP_HAL::HAL& hal;
@@ -9,16 +10,36 @@ extern const AP_HAL::HAL& hal;
 static void newline(void);
 bool talk = true;
 
-static void newline(void)
-{
-  consolePrint("\n");
-  serialFlush();
-}
+#define BUF_SIZE (1<<6)
+
+uint8_t outputBuf[BUF_SIZE];
+uint8_t bufPtr;
 
 void consoleFlush()
 {
-  serialFlush();
-}  
+  datagramStart(DG_CONSOLE_OUT);
+  
+  for(uint8_t i = 0; i < bufPtr; i++)
+    datagramOut(outputBuf[i]);
+
+  datagramEnd();
+  
+  bufPtr = 0;
+}
+
+void consoleOut(const uint8_t c)
+{
+  if(bufPtr > BUF_SIZE-1)
+    consoleFlush();
+
+  outputBuf[bufPtr++] = c;
+}
+
+static void newline(void)
+{
+  consolePrint("\n");
+  consoleFlush();
+}
 
 void consoleNote(const char *s)
 {
@@ -93,8 +114,8 @@ void consolePrintfLn(const char *s, ...)
 void consolevPrintf(const char *s, va_list argp)
 {
   if(talk)
+    // Sorry, a bit crap
     consolePrint(s);
-  //    hal.console->vprintf(s, argp);
 }
 
 void consolePrint(const char *s)
@@ -103,7 +124,7 @@ void consolePrint(const char *s)
     return;
 
   while(*s)
-    serialOut(*s++);
+    consoleOut(*s++);
 }
 
 void consolePrint_P(const prog_char_t *s)
@@ -114,10 +135,10 @@ void consolePrint_P(const prog_char_t *s)
   uint8_t c = 0;
 
   while((c = pgm_read_byte(s++)))
-    serialOut(c);
+    consoleOut(c);
 }
 
-#define printDigit(d) serialOut('0'+d)
+#define printDigit(d) consoleOut('0'+d)
 // #define USE_PRINTF
 
 void consolePrint(float v, int p)
@@ -130,7 +151,7 @@ void consolePrint(float v, int p)
   hal.console->printf(fmt, (double) v);
 #else
   if(v < 0.0) {
-    serialOut('-');
+    consoleOut('-');
     v = -v;
   }
 
@@ -154,7 +175,7 @@ void consolePrint(float v, int p)
 
 void consolePrint(const char c)
 {
-  serialOut(c);
+  consoleOut(c);
 }  
 
 void consolePrint(float v)
@@ -189,7 +210,7 @@ void consolePrint(long v)
   
   if(v < 0) {
     v = -v;
-    serialOut('-');
+    consoleOut('-');
   }
 
   consolePrint((unsigned long) v);
@@ -208,10 +229,10 @@ void consolePrint(unsigned long v)
     v /= 10;
   }
 
-  if(l > 0) 
+  if(l > 0) {
     while(l > 0)
       printDigit(buf[--l]);
-  else
+  } else
     printDigit(0);
 }
 

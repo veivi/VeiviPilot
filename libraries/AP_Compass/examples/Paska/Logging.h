@@ -4,12 +4,20 @@
 #include <stdint.h>
 #include "Storage.h"
 #include "Console.h"
+
+extern "C" {
 #include "Log.h"
+}
 
 extern bool logEnabled;
 extern long logBytesCum;
+extern int32_t logPtr, logLen, logSize;
 
+#define logIndex(i) ((logPtr + logSize + (i)) % logSize)
+
+bool logReady(void);
 bool logInit(uint32_t);
+uint16_t logRead(int32_t index);
 void logClear(void);
 void logDump(int ch);
 void logDumpBinary(void);

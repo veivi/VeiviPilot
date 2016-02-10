@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include "Serial.h"
+#include "Datagram.h"
 
 extern "C" {
 #include "CRC16.h"
@@ -13,14 +14,14 @@ void outputBreak()
   serialOut((const uint8_t) 0x00);
 }
 
-void datagramStart(void)
+void datagramStart(uint8_t dg)
 {
   outputBreak();
-  serialOut((const uint8_t) 0x01);
   crcState = 0xFFFF;
+  datagramOut((const uint8_t) dg);
 }
 
-void datagramOutput(const uint8_t c)
+void datagramOut(const uint8_t c)
 {
   serialOut(c);
     
@@ -30,11 +31,17 @@ void datagramOutput(const uint8_t c)
   crcState = crc16_update(crcState, c);
 }
 
+void datagramOut(const uint8_t *data, int l)
+{
+  while(l-- > 0)
+    datagramOut(*data++);
+}
+
 void datagramEnd(void)
 {
   uint16_t buf = crcState;
-  datagramOutput(buf>>8);
-  datagramOutput(buf & 0xFF);
+  datagramOut(buf>>8);
+  datagramOut(buf & 0xFF);
   outputBreak();
 }
 

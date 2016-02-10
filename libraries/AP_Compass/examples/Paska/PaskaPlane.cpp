@@ -446,7 +446,7 @@ bool readSwitch()
   static bool state = false;
   const float value = decodePWM(switchValue);
   
-  if(absVal(value) > 0.3)
+  if(fabs(value) > 0.3)
     state = value < 0.0;
   
   return state;
@@ -1067,7 +1067,6 @@ void executeCommand(const char *buf, int bufLen)
     break;
     
   case c_dump:
-    consoleNoteLn_P(PSTR("Log contents:"));
     if(numParams > 0)
       logDump(param[0]);
     else
@@ -1075,7 +1074,6 @@ void executeCommand(const char *buf, int bufLen)
     break;
     
   case c_dumpz:
-    consoleNoteLn_P(PSTR("Compressed log contents:"));
     logDumpBinary();
     break;
     
@@ -1641,7 +1639,7 @@ void configurationTask(uint32_t currentMicros)
 
   // Wing leveler disable when stick input detected
   
-  if(mode.wingLeveler && absVal(aileStick) > 0.1) {
+  if(mode.wingLeveler && fabs(aileStick) > 0.1) {
     consoleNoteLn_P(PSTR("Wing leveler DISABLED"));
     mode.wingLeveler = false;
   }
@@ -1849,14 +1847,14 @@ void communicationTask(uint32_t currentMicros)
 
       if(c == '\\') {
 	concat = true;
-      } else if(c == '\b') {
+      } else if(c == '\b' || c == 127) {
 	if(serialBufIndex > 0) {
 	  consolePrint("\b \b");
 	  consoleFlush();
 	  serialBufIndex--;
 	}
 	
-      } else if(c != '\n' || concat) {
+      } else if((c != '\n' && c != '\r') || concat) {
 	const char buf[] = { c, 0 };
 	consolePrint(buf);
 	consoleFlush();
@@ -2191,7 +2189,7 @@ void actuatorTask(uint32_t currentMicros)
 
 void trimTask(uint32_t currentMicros)
 {
-  if(mode.autoTrim && absVal(rollAngle) < 30) {
+  if(mode.autoTrim && fabs(rollAngle) < 30) {
     neutralAlpha += clamp((min(targetAlpha, maxAutoAlpha) - neutralAlpha)/2/TRIM_HZ,
       -1.5/360/TRIM_HZ, 1.5/360/TRIM_HZ);
 //    neutralAlpha = clamp(neutralAlpha, paramRecord.alphaMin, maxAlpha*0.9);

@@ -1,6 +1,7 @@
 #ifndef LOG_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
 typedef enum {  lc_alpha, 
                 lc_dynpressure, 
@@ -38,7 +39,7 @@ struct LogChannel {
 };
 
 #define TOKEN_MASK (1U<<15)
-#define VALUE_MASK (~TOKEN_MASK)
+#define VALUE_MASK (TOKEN_MASK-1)
 #define DELTA_MASK (VALUE_MASK>>1)
 #define ENTRY_TOKEN(t) (TOKEN_MASK | (t))
 #define ENTRY_VALUE(v) (((uint16_t) v) & VALUE_MASK)
