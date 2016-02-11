@@ -4,6 +4,7 @@
 #include "Serial.h"
 #include "Datagram.h"
 #include <stdarg.h>
+#include <math.h>
 
 extern const AP_HAL::HAL& hal;
 
@@ -17,12 +18,9 @@ uint8_t bufPtr;
 
 void consoleFlush()
 {
-  datagramStart(DG_CONSOLE_OUT);
-  
-  for(uint8_t i = 0; i < bufPtr; i++)
-    datagramOut(outputBuf[i]);
-
-  datagramEnd();
+  datagramTxStart(DG_CONSOLE_OUT);
+  datagramTxOut(outputBuf, bufPtr);
+  datagramTxEnd();
   
   bufPtr = 0;
 }
@@ -155,6 +153,8 @@ void consolePrint(float v, int p)
     v = -v;
   }
 
+  v += 0.5*pow(0.1, p);
+  
   uint32_t i = (uint32_t) v;
 
   consolePrint(i);

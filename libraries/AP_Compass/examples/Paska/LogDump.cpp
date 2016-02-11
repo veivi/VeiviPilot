@@ -137,27 +137,6 @@ void logDump(int ch)
     return;
   }
   
-  int32_t len = logLen;
-
-  if(len < 0) {
-    consoleNote_P(PSTR("Looking for log start..."));
-    
-    len = 0;
-    
-    while(len < logSize-1 && logRead(logIndex(-len-1)) != ENTRY_TOKEN(t_start)) {
-      if(len % 5000 == 0) 
-        consolePrint("."); {
-	consoleFlush();
-      }
-      len++;
-    }
-        
-    consolePrint(" found, log length = ");
-    consolePrintLn(len);
-  
-    logLen = len;
-  }
-  
   consoleNote_P(PSTR("CHANNEL "));
   consolePrint(ch);
   consolePrint(" (");

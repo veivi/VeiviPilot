@@ -14,14 +14,14 @@ void outputBreak()
   serialOut((const uint8_t) 0x00);
 }
 
-void datagramStart(uint8_t dg)
+void datagramTxStart(uint8_t dg)
 {
   outputBreak();
   crcState = 0xFFFF;
-  datagramOut((const uint8_t) dg);
+  datagramTxOutByte((const uint8_t) dg);
 }
 
-void datagramOut(const uint8_t c)
+void datagramTxOutByte(const uint8_t c)
 {
   serialOut(c);
     
@@ -31,17 +31,16 @@ void datagramOut(const uint8_t c)
   crcState = crc16_update(crcState, c);
 }
 
-void datagramOut(const uint8_t *data, int l)
+void datagramTxOut(const uint8_t *data, int l)
 {
   while(l-- > 0)
-    datagramOut(*data++);
+    datagramTxOutByte(*data++);
 }
 
-void datagramEnd(void)
+void datagramTxEnd(void)
 {
   uint16_t buf = crcState;
-  datagramOut(buf>>8);
-  datagramOut(buf & 0xFF);
+  datagramTxOut((const uint8_t*) &buf, sizeof(buf));
   outputBreak();
 }
 

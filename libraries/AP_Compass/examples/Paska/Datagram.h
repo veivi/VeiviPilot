@@ -1,13 +1,13 @@
 #include <stdint.h>
 
-void datagramStart(uint8_t );
-void datagramOut(const uint8_t c);
-void datagramOut(const uint8_t *data, int l);
-void datagramEnd(void);
+void datagramTxStart(uint8_t );
+void datagramTxOutByte(const uint8_t c);
+void datagramTxOut(const uint8_t *data, int l);
+void datagramTxEnd(void);
 
 #define DG_HEARTBEAT     1
 #define DG_CONSOLE_OUT   2
-#define DG_LOG           3
-#define DG_STAMP         4
+#define DG_LOGDATA       3
+#define DG_LOGINFO       4
 
 

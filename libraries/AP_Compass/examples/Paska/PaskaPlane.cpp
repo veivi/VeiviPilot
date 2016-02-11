@@ -209,128 +209,6 @@ float elevOutput = 0, aileOutput = 0, flapOutput = 0, gearOutput = 1, brakeOutpu
 struct RxInputRecord rpmInput = { rpmPin };
 #endif
 
-void printParams(struct ParamRecord *p)
-{
-  consoleNote_P(PSTR(" AS5048B ref = "));
-  consolePrintLn(p->alphaRef);
-  consoleNoteLn_P(PSTR("  Autostick/pusher"));
-  consoleNote_P(PSTR("    Inner Ku = "));
-  consolePrint(p->i_Ku, 4);
-  consolePrint_P(PSTR(" Tu = "));
-  consolePrint(p->i_Tu, 4);
-  consolePrint_P(PSTR(" Outer P = "));
-  consolePrintLn(p->o_P, 4);
-  consoleNoteLn_P(PSTR("  Stabilizer"));
-  consoleNote_P(PSTR("    Ku = "));
-  consolePrint(p->s_Ku, 4);
-  consolePrint_P(PSTR(" Tu = "));
-  consolePrintLn(p->s_Tu, 4);
-  consoleNoteLn_P(PSTR(" Auto rudder"));
-  consoleNote_P(PSTR("    PID Ku = "));
-  consolePrint(p->r_Ku, 4);
-  consolePrint_P(PSTR(" Tu = "));
-  consolePrintLn(p->i_Tu, 4);
-  consoleNote_P(PSTR("    Yaw damper P = "));
-  consolePrintLn(p->yd_P, 4);
-  consoleNote_P(PSTR("  Alpha min = "));
-  consolePrint(p->alphaMin*360);
-  consolePrint_P(PSTR("  max = "));
-  consolePrintLn(p->alphaMax*360);
-  consoleNoteLn_P(PSTR("  Elevator"));
-  consoleNote_P(PSTR("    deflection = "));
-  consolePrint(p->elevDefl*90);
-  consolePrint_P(PSTR(" neutral = "));
-  consolePrintLn(p->elevNeutral*90);
-  consoleNoteLn_P(PSTR("  Aileron"));
-  consoleNote_P(PSTR("    deflection = "));
-  consolePrint(p->aileDefl*90);
-  consolePrint_P(PSTR(" neutral = "));
-  consolePrintLn(p->aileNeutral*90);
-  consoleNoteLn_P(PSTR("  Rudder"));
-  consoleNote_P(PSTR("    deflection = "));
-  consolePrint(p->rudderDefl*90);
-  consolePrint_P(PSTR(" neutral = "));
-  consolePrintLn(p->rudderNeutral*90);
-  consoleNoteLn_P(PSTR("  Flap"));
-  consoleNote_P(PSTR("    step = "));
-  consolePrint(p->flapStep*90);
-  consolePrint_P(PSTR(" neutral = "));
-  consolePrint(p->flapNeutral*90);
-  consolePrint_P(PSTR(" ("));
-  consolePrint(p->flap2Neutral*90);
-  consolePrintLn_P(PSTR(")"));
-  consoleNoteLn_P(PSTR("  Servo channels"));
-  consoleNote_P(PSTR("    A = "));
-  consolePrint(p->servoAile);
-  consolePrint_P(PSTR("  E = "));
-  consolePrint(p->servoElev);
-  consolePrint_P(PSTR("  R = "));
-  consolePrint(p->servoRudder);
-  consolePrint_P(PSTR("  F = ("));
-  consolePrint(p->servoFlap);
-  consolePrint_P(PSTR(", "));
-  consolePrint(p->servoFlap2);
-  consolePrint_P(PSTR(")  G = "));
-  consolePrint(p->servoGear);
-  consolePrint_P(PSTR("  B = "));
-  consolePrintLn(p->servoBrake);
-}
-
-void dumpParams(struct ParamRecord *p)
-{
-  consolePrint_P(PSTR("min ")); consolePrint(p->alphaMin*360);
-  consolePrint_P(PSTR("; max ")); consolePrint(p->alphaMax*360);
-  consolePrint_P(PSTR("; 5048b_ref "));
-  consolePrint(p->alphaRef);
-  consolePrintLn(" \\");
-  consolePrint_P(PSTR("inner_pid_zn "));
-  consolePrint(p->i_Ku, 3);
-  consolePrint(" ");
-  consolePrint(p->i_Tu, 3);
-  consolePrint_P(PSTR("; outer_p "));
-  consolePrint(p->o_P);
-  consolePrintLn(" \\");
-  consolePrint_P(PSTR("stabilizer_pid_zn "));
-  consolePrint(p->s_Ku, 3);
-  consolePrint(" ");
-  consolePrint(p->s_Tu, 3);
-  consolePrintLn(" \\");
-  consolePrint_P(PSTR("rudder_pid_zn "));
-  consolePrint(p->r_Ku, 3);
-  consolePrint(" ");
-  consolePrint(p->r_Tu, 3);
-  consolePrint_P(PSTR("; yd_p "));
-  consolePrint(p->yd_P, 3);
-  consolePrintLn(" \\");
-  consolePrint_P(PSTR("edefl ")); consolePrint(p->elevDefl*90,3);
-  consolePrint_P(PSTR("; eneutral ")); consolePrint(p->elevNeutral*90,3);
-  consolePrint_P(PSTR("; ezero ")); consolePrint(p->elevZero*90,3);
-  consolePrint_P(PSTR("; eservo ")); consolePrint(p->servoElev);
-  consolePrintLn(" \\");
-  consolePrint_P(PSTR("adefl ")); consolePrint(p->aileDefl*90, 3);
-  consolePrint_P(PSTR("; aneutral ")); consolePrint(p->aileNeutral*90, 3);
-  consolePrint_P(PSTR("; azero ")); consolePrint(p->aileZero*90, 3);
-  consolePrint_P(PSTR("; aservo ")); consolePrint(p->servoAile);
-  consolePrintLn(" \\");
-  consolePrint_P(PSTR("fstep ")); consolePrint(p->flapStep*90);
-  consolePrint_P(PSTR("; fneutral ")); consolePrint(p->flapNeutral*90);
-  consolePrint_P(PSTR(" ")); consolePrint(p->flap2Neutral*90); 
-  consolePrint_P(PSTR("; fservo ")); consolePrint(p->servoFlap);
-  consolePrint_P(PSTR(" ")); consolePrint(p->servoFlap2);
-  consolePrintLn(" \\");
-  consolePrint_P(PSTR("bdefl ")); consolePrint(p->brakeDefl*90);
-  consolePrint_P(PSTR("; bneutral ")); consolePrint(p->brakeNeutral*90);
-  consolePrint_P(PSTR("; bservo ")); consolePrint(p->servoBrake);
-  consolePrintLn(" \\");
-  consolePrint_P(PSTR("rdefl ")); consolePrint(p->rudderDefl*90, 3);
-  consolePrint_P(PSTR("; rneutral ")); consolePrint(p->rudderNeutral*90, 3);
-  consolePrint_P(PSTR("; rzero ")); consolePrint(p->rudderZero*90, 3);
-  consolePrint_P(PSTR("; rservo ")); consolePrint(p->servoRudder);
-  consolePrintLn(" \\");
-  consolePrint_P(PSTR("gservo ")); consolePrint(p->servoGear);
-  consolePrintLn(" \\");
-}
-
 const uint8_t addr5048B_c = 0x40;
 const uint8_t addr4525_c = 0x28;
 
@@ -446,7 +324,7 @@ bool readSwitch()
   static bool state = false;
   const float value = decodePWM(switchValue);
   
-  if(fabs(value) > 0.3)
+  if(fabsf(value) > 0.3)
     state = value < 0.0;
   
   return state;
@@ -585,7 +463,8 @@ typedef enum {
   c_fservo,
   c_rservo,
   c_gservo,
-  c_bservo
+  c_bservo,
+  c_name
 } command_t;
 
 struct command {
@@ -652,6 +531,7 @@ const struct command commands[] = {
   { "bservo", c_bservo },
   { "fservo", c_fservo },
   { "5048b_ref", c_5048b_ref },
+  { "name", c_name },
   { "", c_ }
 };
 
@@ -690,6 +570,7 @@ void executeCommand(const char *buf, int bufLen)
 
   int index = 0, prevIndex = 0, numParams = 0, tokenLen = bufLen;
   float param[maxParams];
+  const char *paramText[maxParams];
 
   for(int i = 0; i < maxParams; i++)
     param[i] = 0.0;
@@ -704,13 +585,14 @@ void executeCommand(const char *buf, int bufLen)
       
       if(index < 0)
         index = bufLen;
-        
+
+      paramText[numParams] = &buf[prevIndex+1];
       float value = 0.0;
       int exponent = 0;
       bool sign = false, deci = false;
 
-      for(int i = prevIndex+1; i < index; i++) {
-        char c = buf[i];
+      for(int i = 0; i < index-prevIndex-1; i++) {
+        char c = paramText[numParams][i];
 
         switch(c) {
           case '-':
@@ -738,10 +620,6 @@ void executeCommand(const char *buf, int bufLen)
                value += (float) (c - '0');
             }
             break;
-            
-          default:
-            consoleNote_P(PSTR("weird char = "));
-            consolePrintLn(c);
         }
       }
             
@@ -1078,18 +956,7 @@ void executeCommand(const char *buf, int bufLen)
     break;
     
   case c_backup:
-    consoleNoteLn_P(PSTR("Param backup"));
-    consolePrintLn("//");
-    consoleNote_P(PSTR("MODEL "));
-    consolePrintLn(stateRecord.model);
-    consolePrintLn("//");
-    consolePrintLn("");
-    consolePrint_P(PSTR("echo 0; model "));
-    consolePrint(stateRecord.model);
-    consolePrintLn(" \\");
-    dumpParams(&paramRecord);
-    consolePrintLn_P(PSTR("echo 1; store"));
-    consolePrintLn("");
+    dumpParams();
     break;
 
   case c_stamp:
@@ -1112,6 +979,18 @@ void executeCommand(const char *buf, int bufLen)
       if(param[0] > MAX_MODELS-1)
         param[0] = MAX_MODELS-1;
       setModel(param[0]);
+      if(echoEnabled)
+	storeNVState();
+    }
+    break;
+
+  case c_name:
+    if(numParams < 1) {
+      consoleNote_P(PSTR("Current model name is "));
+      consolePrintLn(paramRecord.name); 
+    } else {
+      strncpy(paramRecord.name, paramText[0], NAME_LEN-1);
+      paramRecord.name[NAME_LEN-1]=0;
       if(echoEnabled)
 	storeNVState();
     }
@@ -1218,7 +1097,7 @@ void executeCommand(const char *buf, int bufLen)
      consoleNote_P(PSTR("SETTINGS (MODEL "));
       consolePrint(stateRecord.model);
       consolePrintLn(")");
-      printParams(&paramRecord);
+      printParams();
       break;
 
   default:
@@ -1639,7 +1518,7 @@ void configurationTask(uint32_t currentMicros)
 
   // Wing leveler disable when stick input detected
   
-  if(mode.wingLeveler && fabs(aileStick) > 0.1) {
+  if(mode.wingLeveler && fabsf(aileStick) > 0.1) {
     consoleNoteLn_P(PSTR("Wing leveler DISABLED"));
     mode.wingLeveler = false;
   }
@@ -2189,7 +2068,7 @@ void actuatorTask(uint32_t currentMicros)
 
 void trimTask(uint32_t currentMicros)
 {
-  if(mode.autoTrim && fabs(rollAngle) < 30) {
+  if(mode.autoTrim && fabsf(rollAngle) < 30) {
     neutralAlpha += clamp((min(targetAlpha, maxAutoAlpha) - neutralAlpha)/2/TRIM_HZ,
       -1.5/360/TRIM_HZ, 1.5/360/TRIM_HZ);
 //    neutralAlpha = clamp(neutralAlpha, paramRecord.alphaMin, maxAlpha*0.9);
@@ -2324,10 +2203,6 @@ void setup() {
   
   setModel(stateRecord.model);
 
-  consoleNote_P(PSTR("MODEL "));
-  consolePrintLn(stateRecord.model);
-  printParams(&paramRecord);    
-
   // Set I2C speed
   
   TWBR = paramRecord.i2c_clkDiv;
@@ -2402,7 +2277,7 @@ void setup() {
 
   // Done
   
-  consoleNoteLn_P(PSTR("READY."));
+  consoleNoteLn_P(PSTR("Initialized"));
 }
 
 void loop() 
@@ -2421,23 +2296,112 @@ AP_HAL_MAIN();
 
 /*
 
+// Param backup 2016/2/11
+// 
+// MODEL 0 L-39
+// 
+
+model 0
+name L-39
+min -3.00
+max 13.00
+5048b_ref 32268
+inner_pid_zn 1.140 0.270
+outer_p 10.000
+stabilizer_pid_zn 1.390 0.360
+rudder_pid_zn 0.500 0.330
+yd_p 2.000
+edefl -50.00
+eneutral 0.00
+ezero 3.08
+eservo 1
+adefl -35.00
+aneutral 0.00
+azero 5.77
+aservo 0
+rdefl 35.00
+rneutral -5.00
+rzero 8.42
+rservo 2
+fstep 0.00
+fneutral 45.00 45.00
+fservo -1 -1
+bdefl -45.00
+bneutral -45.00
+bservo -1
+gservo -1
+store
+
+// 
+// MODEL 1 Viper
+// 
+
+model 1
+name Viper
+min -3.00
+max 12.00
+5048b_ref 0
+inner_pid_zn 1.000 0.250
+outer_p 10.000
+stabilizer_pid_zn 1.299 0.250
+rudder_pid_zn 1.000 0.330
+yd_p 2.000
+edefl 45.00
+eneutral 0.00
+ezero 0.00
+eservo 1
+adefl -45.00
+aneutral 0.00
+azero 0.00
+aservo 0
+rdefl 45.00
+rneutral 0.00
+rzero 0.00
+rservo 6
+fstep -15.00
+fneutral 0.00 -15.00
+fservo 2 3
+bdefl 45.00
+bneutral 0.00
+bservo -1
+gservo -1
+store
+
 // Param backup L-39 2016/2/2
 //
 // MODEL 0
 //
  
-echo 0; model 0 \
-min -3.00; max 13.00; 5048b_ref 32268 \
-inner_pid_zn 1.148 0.270; outer_p 10.00 \
-stabilizer_pid_zn 1.398 0.360 \
-rudder_pid_zn 0.500 0.330; yd_p 2.000 \
-edefl -50.000; eneutral 0.000; ezero 3.111; eservo 1 \
-adefl -35.000; aneutral 0.000; azero 5.777; aservo 0 \
-fstep 0.00; fneutral 45.00 45.00; fservo -1 -1 \
-bdefl -45.00; bneutral -45.00; bservo -1 \
-rdefl 35.000; rneutral -5.000; rzero 8.444; rservo 2 \
-gservo -1 \
-echo 1; store
+model 0
+name L-39
+min -3.00
+max 13.00
+5048b_ref 32268
+inner_pid_zn 1.14 0.27000
+outer_p 10.00000
+stabilizer_pid_zn 1.39000 0.36000
+rudder_pid_zn 0.50000 0.33000
+yd_p 2.00000
+edefl -50.00
+eneutral 0.00
+ezero 3.08
+eservo 1
+adefl -35.00
+aneutral 0.00
+azero 5.77
+aservo 0
+rdefl 35.00
+rneutral -5.00
+rzero 8.42
+rservo 2
+fstep 0.00
+fneutral 45.00 45.00
+fservo -1 -1
+bdefl -45.00
+bneutral -45.00
+bservo -1
+gservo -1
+store
 
 //
 // MODEL 1 : VIPER 2016/2/1

@@ -1,7 +1,15 @@
 #ifndef LOG_H
+#define LOG_H
 
 #include <stdint.h>
 #include <stdbool.h>
+
+#define NAME_LEN  8
+
+struct LogInfo {
+    uint16_t stamp;
+    char name[NAME_LEN];
+};
 
 typedef enum {  lc_alpha, 
                 lc_dynpressure, 

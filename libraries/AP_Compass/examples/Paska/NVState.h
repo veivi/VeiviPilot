@@ -4,11 +4,13 @@
 #include <stdint.h>
 
 #define MAX_MODELS   4
+#define NAME_LEN     8
 
 // Parameters and non-volatile state
 
 struct ParamRecord {
   uint16_t crc;
+  char name[NAME_LEN];
   uint8_t i2c_clkDiv;
   uint8_t i2c_5048B, i2c_24L256;
   uint16_t alphaRef;
@@ -42,5 +44,7 @@ void setModel(int model);
 void storeParams(void);
 void readNVState(void);
 void storeNVState(void);
+void printParams(void);
+void dumpParams(void);
 
 #endif

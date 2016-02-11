@@ -11,7 +11,7 @@ extern "C" {
 
 extern const AP_HAL::HAL& hal;
 
-typedef enum { invalid_c, init_c, stop_c, run_c, failed_c } logState_t;
+typedef enum { invalid_c, find_stamp_c, find_start_c, ready_c, stop_c, run_c, failed_c } logState_t;
 
 logState_t logState;
 int32_t logPtr, logLen, logSize;
@@ -41,8 +41,6 @@ static void logWrite(int32_t index, const uint16_t *value, int count)
     cacheWrite(logOffset, (const uint8_t*) &value[p], (count-p)*sizeof(uint16_t));
   } else
     cacheWrite(logOffset + index*sizeof(uint16_t), (const uint8_t*) value, count*sizeof(uint16_t));
-  
-  logLen = -1L;
 }
 
 static void logWrite(int32_t index, const uint16_t value)
@@ -62,14 +60,18 @@ uint16_t logRead(int32_t index)
   return entry;
 }
 
-static void logCommit(int bytes)
+static void logCommit(int count)
 {
   if(!logReady())
     return;
     
-  logPtr = logIndex(bytes);
+  logPtr = logIndex(count);
+  logBytesCum += count*sizeof(uint16_t);
 
-  logBytesCum += bytes;
+  logLen += count;
+  
+  if(logLen > logSize)
+    logLen = logSize;
 }
 
 bool logDirty = false;
@@ -101,6 +103,7 @@ void logClear(void)
     
   logEnter(ENTRY_TOKEN(t_start));
 
+  logLen = 0;
   stateRecord.logStamp++;
   storeNVState();
 }
@@ -179,55 +182,35 @@ void logDisable()
 
 void logDumpBinary(void)
 {
-  int32_t len = logLen;
+  struct LogInfo info = { stateRecord.logStamp };
+  strncpy(info.name, paramRecord.name, NAME_LEN);
 
-  if(len < 0) {
-    consoleNote_P(PSTR("Looking for log start..."));
-    
-    len = 0;
-    
-    while(len < logSize-1 && logRead(logIndex(-len-1)) != ENTRY_TOKEN(t_start)) {
-      if(len % 1000 == 0) 
-        consolePrint("."); {
-	consoleFlush();
-      }
-      len++;
-    }
-        
-    consolePrint(" found, log length = ");
-    consolePrintLn(len);
-  
-    logLen = len;
-  }
-  
-  datagramStart(DG_STAMP);
-  datagramOut((const uint8_t*) &stateRecord.logStamp,
-	      sizeof(stateRecord.logStamp));
-  datagramEnd();
+  datagramTxStart(DG_LOGINFO);    
+  datagramTxOut((const uint8_t*) &info, sizeof(info));
+  datagramTxEnd();
       
   for(int32_t i = 0; i < logLen; i++) {
     if((i & ((1UL<<9)-1)) == 0) {
-      datagramEnd();
-      datagramStart(DG_LOG);
+      datagramTxEnd();
+      datagramTxStart(DG_LOGDATA);
     }
       
     const uint16_t buf = logRead(logIndex(-logLen+i));
-    datagramOut(buf & 0xFF);
-    datagramOut(buf>>8);
+    datagramTxOut((uint8_t*) &buf, sizeof(buf));
   }
 
-  datagramEnd();
+  datagramTxEnd();
 
   // Finish with an empty block
   
-  datagramStart(DG_LOG);
-  datagramEnd();
+  datagramTxStart(DG_LOGDATA);
+  datagramTxEnd();
 }
 
 bool logInit(uint32_t maxDuration)
 {
   uint32_t current = hal.scheduler->micros();
-  static int32_t endPtr = -1, searchPtr = 0;
+  static int32_t endPtr = -1, startPtr = -1, searchPtr = 0;
   static bool endFound = false;
   uint32_t eepromSize = 0;
   uint8_t dummy;
@@ -248,7 +231,7 @@ bool logInit(uint32_t maxDuration)
       consolePrint(logSize%(1<<10));
       consolePrintLn(" entries");
       
-      logState = init_c;
+      logState = find_stamp_c;
       logLen = -1;
 
         return false;
@@ -258,17 +241,19 @@ bool logInit(uint32_t maxDuration)
     }
     break;
 
-  case init_c:
+  case find_stamp_c:
     while(searchPtr < logSize) {
-      if(logRead(searchPtr) == ENTRY_TOKEN(t_stamp)) {
+      if(searchPtr % (1<<12) == 0) {
+	consoleNote_P(PSTR("  Searching for log STAMP at "));
+	consolePrint(searchPtr);
+	consolePrintLn("...");
+      }
+        
+      if(logRead(searchPtr) == ENTRY_TOKEN(t_start)) {
+	startPtr = searchPtr;
+      } else if(logRead(searchPtr) == ENTRY_TOKEN(t_stamp)) {
         uint16_t stamp = logRead(logIndex(searchPtr+1));
 
-        if(stamp % 100 == 0) {
-          consoleNote_P(PSTR("  Searching for log end at "));
-          consolePrint(searchPtr);
-          consolePrintLn("...");
-        }
-        
         if(endFound && stamp != ENTRY_VALUE(logEndStamp+1))
           break;
             
@@ -286,22 +271,56 @@ bool logInit(uint32_t maxDuration)
         return false;
     }
 
-    logState = stop_c;
-      
     if(endFound && endPtr < logSize) {
       logPtr = endPtr;
     
-      consoleNoteLn_P(PSTR("LOG READY"));
+      if(startPtr < 0) {
+	// Don't know the log length yet
+	consoleNoteLn_P(PSTR("Log STAMP found, looking for START"));
+	logState = find_start_c;
+      }	else {
+	logState = ready_c;
+       }
     } else {
       consoleNoteLn_P(PSTR("*** The log is corrupt and is being cleared ***"));
       logEndStamp = 0;
-      logPtr = logSize-1;  
+      logPtr = logSize-1;
+      logLen = 0;
       logClear();
+      logState = ready_c;
     }
     break;
+
+  case find_start_c:
+    while(searchPtr < logSize) {
+      if(searchPtr % (1<<12) == 0) {
+       	consoleNote_P(PSTR("  Searching for log START at "));
+	consolePrint(searchPtr);
+	consolePrintLn("...");
+      }
+	
+      if(logRead(searchPtr) == ENTRY_TOKEN(t_start))
+	startPtr = searchPtr;
+      
+      searchPtr++;
+      
+      if(hal.scheduler->micros() - current > maxDuration)
+        // Stop for now
+        return false;
+    }
+
+    logState = ready_c;
+    break;
+
+  case ready_c:
+    logLen = (logSize + endPtr - startPtr - 1) % logSize;
+    consoleNote_P(PSTR("Log ready, length = "));
+    consolePrintLn(logLen);
+    logState = stop_c;
+    return true;
   }
 
-  return true;
+  return false;
 }
 
 void logSave(void (*logStartCB)())
