@@ -313,7 +313,11 @@ bool logInit(uint32_t maxDuration)
     break;
 
   case ready_c:
-    logLen = (logSize + endPtr - startPtr - 1) % logSize;
+    if(startPtr < 0)
+      logLen = logSize;
+    else
+      logLen = (logSize + endPtr - startPtr - 1) % logSize;
+    
     consoleNote_P(PSTR("Log ready, length = "));
     consolePrintLn(logLen);
     logState = stop_c;
