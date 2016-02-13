@@ -30,6 +30,11 @@ bool logReady(void)
   return false;
 }
 
+uint32_t logAddr(int32_t index)
+{
+  return logOffset + index*sizeof(uint16_t);
+}
+
 static void logWrite(int32_t index, const uint16_t *value, int count)
 {
   if(logSize < 1)
@@ -37,10 +42,10 @@ static void logWrite(int32_t index, const uint16_t *value, int count)
 
   if(index+count > logSize) {
     int32_t p = logSize - index;
-    cacheWrite(logOffset + index*sizeof(uint16_t), (const uint8_t*) value, p*sizeof(uint16_t));
-    cacheWrite(logOffset, (const uint8_t*) &value[p], (count-p)*sizeof(uint16_t));
+    cacheWrite(logAddr(index), (const uint8_t*) value, p*sizeof(uint16_t));
+    cacheWrite(logAddr(0), (const uint8_t*) &value[p], (count-p)*sizeof(uint16_t));
   } else
-    cacheWrite(logOffset + index*sizeof(uint16_t), (const uint8_t*) value, count*sizeof(uint16_t));
+    cacheWrite(logAddr(index), (const uint8_t*) value, count*sizeof(uint16_t));
 }
 
 static void logWrite(int32_t index, const uint16_t value)
@@ -55,7 +60,7 @@ uint16_t logRead(int32_t index)
     
   uint16_t entry = 0;
   
-  cacheRead(logOffset + index*sizeof(entry), (uint8_t*) &entry, sizeof(entry));
+  cacheRead(logAddr(index), (uint8_t*) &entry, sizeof(entry));
   
   return entry;
 }
@@ -182,21 +187,37 @@ void logDisable()
 
 void logDumpBinary(void)
 {
+  if(!logReady())
+    return;
+  
   struct LogInfo info = { stateRecord.logStamp };
   strncpy(info.name, paramRecord.name, NAME_LEN);
 
   datagramTxStart(DG_LOGINFO);    
   datagramTxOut((const uint8_t*) &info, sizeof(info));
   datagramTxEnd();
+
+  int32_t total = 0, block = 0;
+
+  datagramTxStart(DG_LOGDATA);
       
-  for(int32_t i = 0; i < logLen; i++) {
-    if((i & ((1UL<<9)-1)) == 0) {
+  while(total < logLen) {
+    uint8_t *buffer = NULL;
+
+    int good = cacheReadIndirect(logAddr(logIndex(total-logLen)),
+				 &buffer, sizeof(uint16_t)*(logLen-total));
+
+    datagramTxOut(buffer, good);
+
+    block += good;
+    
+    if(block > 1024-1) {
       datagramTxEnd();
       datagramTxStart(DG_LOGDATA);
+      block = 0;
     }
-      
-    const uint16_t buf = logRead(logIndex(-logLen+i));
-    datagramTxOut((uint8_t*) &buf, sizeof(buf));
+
+    total += good/sizeof(uint16_t);
   }
 
   datagramTxEnd();

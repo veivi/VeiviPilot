@@ -165,52 +165,37 @@ void cacheWrite(uint32_t addr, const uint8_t *value, int size)
     cacheWritePrimitive(ptr, value, addr+size-ptr);
 }
 
-void cacheReadPrimitive(uint32_t addr, uint8_t *value, int size) 
+int32_t cacheReadIndirect(uint32_t addr, uint8_t **value, int32_t size)
 {
   if(cacheModified || !cacheHit(addr))
     cacheAlloc(addr);
   
   if(!cacheValid) {
-    if(readEEPROM(cacheTag, cacheData, CACHE_PAGE)) {
-      for(int i = 0; i < CACHE_PAGE; i++)
-        cacheData[i] = 0xFF;
-    }
+    if(readEEPROM(cacheTag, cacheData, CACHE_PAGE))
+      memset(cacheData, 0xFF, sizeof(cacheData));
+
     cacheValid = true;
   }
+
+  *value = &cacheData[addr-cacheTag];
+
+  int32_t good = CACHE_PAGE-(addr-cacheTag);
   
-  for(int i = 0; i < size; i++)
-    value[i] = cacheData[(addr & ~PAGE_MASK) + i];  
+  if(good < size)
+    size = good;
+  
+  return size;
 }
 
-void cacheRead(uint32_t addr, uint8_t *value, int size) 
+void cacheRead(uint32_t addr, uint8_t *value, int32_t size) 
 {
-  if(CACHE_TAG(addr) == CACHE_TAG(addr+size-1)) {
-    // Fits one line, fall back to primitive
-    cacheReadPrimitive(addr, value, size);
-    return;
-  }  
-     
-  uint32_t ptr = addr;
-  
-  if(CACHE_TAG(ptr) < ptr) {
-    // Starts with a partial line
+  while(size > 0) {
+    uint8_t *buffer = NULL;
+    int good = cacheReadIndirect(addr, &buffer, size);
     
-    uint32_t extent = CACHE_TAG(ptr) + CACHE_PAGE - ptr;
-    cacheReadPrimitive(ptr, value, extent);
-    value += extent;
-    ptr += extent;
+    memcpy(value, buffer, good);
+    value += good;
+    addr += good;
+    size -= good;
   }
-  
-  while(ptr+CACHE_PAGE <= addr+size) {
-    // Full lines remain
-    
-    cacheReadPrimitive(ptr, value, CACHE_PAGE);
-    value += CACHE_PAGE;
-    ptr += CACHE_PAGE;
-  }
-
-  if(ptr < addr+size)
-    // Partial line remains
-    
-    cacheReadPrimitive(ptr, value, addr+size-ptr);
 }

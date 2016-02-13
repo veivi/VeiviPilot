@@ -16,6 +16,7 @@
 #include "NVState.h"
 #include "PWMOutput.h"
 #include "PPM.h"
+#include "Datagram.h"
 #include <AP_Progmem/AP_Progmem.h>
 #include <AP_HAL/AP_HAL.h>
 #include <AP_HAL_AVR/AP_HAL_AVR.h>
@@ -1705,6 +1706,7 @@ void loopTask(uint32_t currentMicros)
 const int serialBufLen = 1<<9;
 char serialBuf[serialBufLen];
 int serialBufIndex = 0;
+int commandCount = 0;
 
 void communicationTask(uint32_t currentMicros)
 {
@@ -1745,6 +1747,7 @@ void communicationTask(uint32_t currentMicros)
 	executeCommandSeries(serialBuf, serialBufIndex);
 	serialBufIndex = 0;
 	controlCycleEnded = 0;
+	commandCount++;
       }
       
       len--;
@@ -2089,6 +2092,18 @@ void backgroundTask(uint32_t durationMicros)
   idleMicros += hal.scheduler->micros() - idleStart;
 }
 
+void heartBeatTask(uint32_t durationMicros)
+{  
+  static uint32_t count;
+ 
+  if(logReady()) {
+    count++;   
+    datagramTxStart(DG_HEARTBEAT);
+    datagramTxOut((uint8_t*) &count, sizeof(count));
+    datagramTxEnd();
+  }
+}
+
 void blinkTask(uint32_t currentMicros)
 {
   float ledRatio = testMode ? 0.0 : !logInitialized ? 1.0 : (mode.sensorFailSafe || !armed) ? 0.5 : alpha > 0.0 ? 0.90 : 0.10;
@@ -2136,6 +2151,8 @@ struct Task taskList[] = {
   { cacheTask,
     HZ_TO_PERIOD(LOG_HZ_SLOW) },
   { measurementTask,
+    HZ_TO_PERIOD(1) },
+  { heartBeatTask,
     HZ_TO_PERIOD(1) },
   { loopTask,
     HZ_TO_PERIOD(10) },
