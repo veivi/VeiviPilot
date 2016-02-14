@@ -12,6 +12,7 @@ void consoleNoteLn_P(const prog_char_t *s);
 void consoleNoteLn(const char *s);
 void consolePrint_P(const prog_char_t *s);
 void consolePrint(const char *s);
+void consolePrint(const char *s, int);
 void consolePrint(float v, int p);
 void consolePrint(float v);
 void consolePrint(double v, int p);

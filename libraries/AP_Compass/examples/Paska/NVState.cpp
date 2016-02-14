@@ -1,6 +1,9 @@
+#include <string.h>
 #include "NVState.h"
 #include "Console.h"
 #include "Storage.h"
+#include "Datagram.h"
+#include "Command.h"
 
 extern "C" {
 #include "CRC16.h"
@@ -26,7 +29,7 @@ const struct ParamRecord paramDefaults = {
   0, -15.0/90, -15.0/90,
   0, 45.0/90,
   0, 45.0/90,
-  0, 1, 2, 3, -1, 6, -1,
+  0, 1, 2, -1, -1, -1, -1,
   -3.0/360,  12.0/360,
   1.0, 0.25, 10.0, 
   1.3, 0.25, 
@@ -153,17 +156,23 @@ void printParams()
   consoleNote_P(PSTR("    deflection = "));
   consolePrint(paramRecord.elevDefl*90);
   consolePrint_P(PSTR(" neutral = "));
-  consolePrintLn(paramRecord.elevNeutral*90);
+  consolePrint(paramRecord.elevNeutral*90);
+  consolePrint_P(PSTR(" center = "));
+  consolePrintLn(paramRecord.elevZero*90);
   consoleNoteLn_P(PSTR("  Aileron"));
   consoleNote_P(PSTR("    deflection = "));
   consolePrint(paramRecord.aileDefl*90);
   consolePrint_P(PSTR(" neutral = "));
-  consolePrintLn(paramRecord.aileNeutral*90);
+  consolePrint(paramRecord.aileNeutral*90);
+  consolePrint_P(PSTR(" center = "));
+  consolePrintLn(paramRecord.aileZero*90);
   consoleNoteLn_P(PSTR("  Rudder"));
   consoleNote_P(PSTR("    deflection = "));
   consolePrint(paramRecord.rudderDefl*90);
   consolePrint_P(PSTR(" neutral = "));
-  consolePrintLn(paramRecord.rudderNeutral*90);
+  consolePrint(paramRecord.rudderNeutral*90);
+  consolePrint_P(PSTR(" center = "));
+  consolePrintLn(paramRecord.rudderZero*90);
   consoleNoteLn_P(PSTR("  Flap"));
   consoleNote_P(PSTR("    step = "));
   consolePrint(paramRecord.flapStep*90);
@@ -189,80 +198,37 @@ void printParams()
   consolePrintLn(paramRecord.servoBrake);
 }
 
-#define MAX_PARAMS 4
-
-typedef enum { e_int8, e_uint16, e_angle90, e_angle360, e_float, e_string } entry_t;
-
-struct BackupEntry {
-  const char *name;
-  entry_t type;
-  int numParams;
-  void *param[MAX_PARAMS];
-};
-
-const struct BackupEntry entry[] PROGMEM = {
-  { "model", e_uint16, 1, &stateRecord.model },
-  { "name", e_string, 1, &paramRecord.name },
-  { "min", e_angle360, 1, &paramRecord.alphaMin },
-  { "max", e_angle360, 1, &paramRecord.alphaMax },
-  { "5048b_ref", e_uint16, 1, &paramRecord.alphaRef },
-  { "inner_pid_zn", e_float, 2, &paramRecord.i_Ku, &paramRecord.i_Tu },
-  { "outer_p", e_float, 1, &paramRecord.o_P },
-  { "stabilizer_pid_zn", e_float, 2, &paramRecord.s_Ku, &paramRecord.s_Tu },
-  { "rudder_pid_zn", e_float, 2, &paramRecord.r_Ku, &paramRecord.r_Tu },
-  { "yd_p", e_float, 1, &paramRecord.yd_P },
-  { "edefl", e_angle90, 1, &paramRecord.elevDefl },
-  { "eneutral", e_angle90, 1, &paramRecord.elevNeutral },
-  { "ezero", e_angle90, 1, &paramRecord.elevZero },
-  { "eservo", e_int8, 1, &paramRecord.servoElev },
-  { "adefl", e_angle90, 1, &paramRecord.aileDefl },
-  { "aneutral", e_angle90, 1, &paramRecord.aileNeutral },
-  { "azero", e_angle90, 1, &paramRecord.aileZero },
-  { "aservo", e_int8, 1, &paramRecord.servoAile },
-  { "rdefl", e_angle90, 1, &paramRecord.rudderDefl },
-  { "rneutral", e_angle90, 1, &paramRecord.rudderNeutral },
-  { "rzero", e_angle90, 1, &paramRecord.rudderZero },
-  { "rservo", e_int8, 1, &paramRecord.servoRudder },
-  { "fstep", e_angle90, 1, &paramRecord.flapStep },
-  { "fneutral", e_angle90, 2, &paramRecord.flapNeutral, &paramRecord.flap2Neutral },
-  { "fservo", e_int8, 2, &paramRecord.servoFlap, &paramRecord.servoFlap2 },
-  { "bdefl", e_angle90, 1, &paramRecord.brakeDefl },
-  { "bneutral", e_angle90, 1, &paramRecord.brakeNeutral },
-  { "bservo", e_int8, 1, &paramRecord.servoBrake },
-  { "gservo", e_int8, 1, &paramRecord.servoGear }
-};
-
-static void dumpParamEntry(const struct BackupEntry *e)
+static void dumpParamEntry(const Command *e)
 {
   consolePrint(e->name);
 
-  for(int i = 0; i < e->numParams; i++) {
+  for(int i = 0; e->var[i]; i++) {
     consolePrint(" ");
-    switch(e->type) {
+    switch(e->varType) {
     case e_string:
-      consolePrint((const char*) e->param[i]);
+      consolePrint((const char*) e->var[i]);
       break;
       
     case e_uint16:
-      consolePrint(*((uint16_t*) e->param[i]));
+      consolePrint(*((uint16_t*) e->var[i]));
       break;
       
     case e_int8:
-      consolePrint(*((int8_t*) e->param[i]));
+      consolePrint(*((int8_t*) e->var[i]));
       break;
       
     case e_float:
-      consolePrint(*((float*) e->param[i]), 3);
+      consolePrint(*((float*) e->var[i]), 3);
       break;
 
     case e_angle90:
-      consolePrint(*((float*) e->param[i])*90);
+      consolePrint(*((float*) e->var[i])*90);
       break;
 
     case e_angle360:
-      consolePrint(*((float*) e->param[i])*360);
+      consolePrint(*((float*) e->var[i])*360);
       break;
-}
+    }
   }
 
   consolePrintLn("");
@@ -270,6 +236,10 @@ static void dumpParamEntry(const struct BackupEntry *e)
 
 void dumpParams()
 {
+  datagramTxStart(DG_PARAMS);
+  datagramTxOut((const uint8_t*) paramRecord.name, strlen(paramRecord.name));
+  datagramTxEnd();
+  
   consoleNoteLn_P(PSTR("Param backup"));
   consoleNoteLn("");
   consoleNote_P(PSTR("MODEL "));
@@ -279,12 +249,22 @@ void dumpParams()
   consoleNoteLn("");
   consolePrintLn("");
 
-  for(int i = 0; i < sizeof(entry)/sizeof(struct BackupEntry); i++) {
-    struct BackupEntry buf;
-    memcpy_P(&buf, &entry[i], sizeof(buf));
-    dumpParamEntry(&buf);    
+  consolePrint("model ");
+  consolePrintLn(stateRecord.model);
+
+  int i = 0;
+  
+  while(1) {
+    struct Command cache;
+    memcpy_P(&cache, &commands[i++], sizeof(cache));
+    if(cache.token == c_invalid)
+      break;
+    if(cache.var[0])
+      dumpParamEntry(&cache);    
   }
 
   consolePrintLn_P(PSTR("store"));
-  consolePrintLn("");
+
+  datagramTxStart(DG_PARAMS);
+  datagramTxEnd();  
 }

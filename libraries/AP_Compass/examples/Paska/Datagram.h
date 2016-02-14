@@ -9,5 +9,6 @@ void datagramTxEnd(void);
 #define DG_CONSOLE_OUT   2
 #define DG_LOGDATA       3
 #define DG_LOGINFO       4
+#define DG_PARAMS        5
 
 

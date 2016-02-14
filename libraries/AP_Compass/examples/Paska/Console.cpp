@@ -18,15 +18,20 @@ uint8_t bufPtr;
 
 void consoleFlush()
 {
-  datagramTxStart(DG_CONSOLE_OUT);
-  datagramTxOut(outputBuf, bufPtr);
-  datagramTxEnd();
+  if(bufPtr > 0) {
+    datagramTxStart(DG_CONSOLE_OUT);
+    datagramTxOut(outputBuf, bufPtr);
+    datagramTxEnd();
+  }
   
   bufPtr = 0;
 }
 
 void consoleOut(const uint8_t c)
 {
+  if(!talk)
+    return;
+  
   if(bufPtr > BUF_SIZE-1)
     consoleFlush();
 
@@ -111,25 +116,23 @@ void consolePrintfLn(const char *s, ...)
 
 void consolevPrintf(const char *s, va_list argp)
 {
-  if(talk)
-    // Sorry, a bit crap
-    consolePrint(s);
+  consolePrint(s);
 }
 
 void consolePrint(const char *s)
 {
-  if(!talk)
-    return;
-
   while(*s)
+    consoleOut(*s++);
+}
+
+void consolePrint(const char *s, int l)
+{
+  while(*s && l-- > 0)
     consoleOut(*s++);
 }
 
 void consolePrint_P(const prog_char_t *s)
 {
-  if(!talk)
-    return;
-  
   uint8_t c = 0;
 
   while((c = pgm_read_byte(s++)))
@@ -141,9 +144,6 @@ void consolePrint_P(const prog_char_t *s)
 
 void consolePrint(float v, int p)
 {
-  if(!talk)
-    return;
-     
 #ifdef USE_PRINTF
   const char fmt[] = {'%', '.', '0'+p, 'f', '\0'};
   hal.console->printf(fmt, (double) v);
@@ -205,9 +205,6 @@ void consolePrint(unsigned int v)
 
 void consolePrint(long v)
 {
-  if(!talk)
-    return;
-  
   if(v < 0) {
     v = -v;
     consoleOut('-');
@@ -218,9 +215,6 @@ void consolePrint(long v)
 
 void consolePrint(unsigned long v)
 {
-  if(!talk)
-    return;
-  
   uint8_t buf[20];
   int l = 0;
 

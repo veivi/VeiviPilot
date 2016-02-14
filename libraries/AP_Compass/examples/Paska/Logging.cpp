@@ -21,13 +21,19 @@ long logBytesCum;
 
 #define logOffset stateRecord.logPartition
 
-bool logReady(void)
+bool logReady(bool verbose)
 {
   if(logState == stop_c || logState == run_c)
     return true;
 
-  consoleNoteLn_P(PSTR("Log not ready"));
+  if(verbose)
+    consoleNoteLn_P(PSTR("Log not ready"));
   return false;
+}
+
+bool logReady(void)
+{
+  return logReady(true);
 }
 
 uint32_t logAddr(int32_t index)
@@ -196,6 +202,14 @@ void logDumpBinary(void)
   datagramTxStart(DG_LOGINFO);    
   datagramTxOut((const uint8_t*) &info, sizeof(info));
   datagramTxEnd();
+
+  consoleNoteLn_P(PSTR("PARAMETER RECORD"));
+  printParams();
+  
+  consolePrintLn("");
+  consoleNote_P(PSTR("TEST CH = "));
+  consolePrintLn(stateRecord.testChannel);
+  consolePrintLn("");
 
   int32_t total = 0, block = 0;
 

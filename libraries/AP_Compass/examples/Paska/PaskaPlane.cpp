@@ -17,6 +17,7 @@
 #include "PWMOutput.h"
 #include "PPM.h"
 #include "Datagram.h"
+#include "Command.h"
 #include <AP_Progmem/AP_Progmem.h>
 #include <AP_HAL/AP_HAL.h>
 #include <AP_HAL_AVR/AP_HAL_AVR.h>
@@ -203,7 +204,8 @@ AlphaBuffer alphaBuffer, pressureBuffer;
 float controlCycle = 10.0e-3;
 uint32_t idleMicros;
 float idleAvg, logBandWidth, ppmFreq;
-
+bool looping;
+    
 float elevOutput = 0, aileOutput = 0, flapOutput = 0, gearOutput = 1, brakeOutput = 0, rudderOutput = 0;
 
 #ifdef rpmPin
@@ -408,140 +410,6 @@ bool readPressure(int16_t *result)
   return true;
 }
 
-typedef enum {
-  c_,
-  c_5048b_ref,
-  c_ezero,
-  c_azero,
-  c_rzero,
-  c_adefl,
-  c_edefl,
-  c_clear,
-  c_dump,
-  c_min,
-  c_max,
-  c_zero,
-  c_eneutral,
-  c_aneutral,
-  c_store,
-  c_report,
-  c_stop,
-  c_cycle,
-  c_read,
-  c_write,
-  c_start,
-  c_params,
-  c_reset,
-  c_center,
-  c_loop,
-  c_stamp,
-  c_model,
-  c_alpha,
-  c_flapneutral,
-  c_flapstep,
-  c_backup,
-  c_echo,
-  c_bdefl,
-  c_bneutral,
-  c_rdefl,
-  c_rneutral,
-  c_rpm,
-  c_baud,
-  c_dumpz,
-  c_stabilizer_pid_zn,
-  c_outer_p,
-  c_yd_p,
-  c_rudder_pid_zn,
-  c_rattle,
-  c_inner_pid_zn,
-  c_arm,
-  c_disarm,
-  c_test,
-  c_talk,
-  c_defaults,
-  c_aservo,
-  c_eservo,
-  c_fservo,
-  c_rservo,
-  c_gservo,
-  c_bservo,
-  c_name
-} command_t;
-
-struct command {
-  const char *c_string;
-  command_t c_token;
-};
-
-const struct command commands[] = {
-  { "ezero", c_ezero },
-  { "azero", c_azero },
-  { "rzero", c_rzero },
-  { "edefl", c_edefl },
-  { "adefl", c_adefl },
-  { "eneutral", c_eneutral },
-  { "aneutral", c_aneutral },
-  { "zero", c_zero },
-  { "alpha", c_alpha },
-  { "max", c_max },
-  { "min", c_min },
-  { "dump", c_dump },
-  { "clear", c_clear },
-  { "store", c_store },
-  { "report", c_report },
-  { "stop", c_stop },
-  { "cycle", c_cycle },
-  { "read", c_read },
-  { "write", c_write },
-  { "start", c_start },
-  { "params", c_params },
-  { "reset", c_reset },
-  { "center", c_center },
-  { "loop", c_loop },
-  { "stamp", c_stamp },
-  { "model", c_model },
-  { "alpha", c_alpha },
-  { "fneutral", c_flapneutral },
-  { "fstep", c_flapstep },
-  { "backup", c_backup },
-  { "echo", c_echo },
-  { "bdefl", c_bdefl },
-  { "bneutral", c_bneutral },
-  { "bservo", c_bservo },
-  { "rdefl", c_rdefl },
-  { "rneutral", c_rneutral },
-  { "rpm", c_rpm },
-  { "baud", c_baud },
-  { "dumpz", c_dumpz },
-  { "inner_pid_zn", c_inner_pid_zn },
-  { "outer_p", c_outer_p },
-  { "stabilizer_pid_zn", c_stabilizer_pid_zn },
-  { "rudder_pid_zn", c_rudder_pid_zn },
-  { "yd_p", c_yd_p },
-  { "arm", c_arm },
-  { "disarm", c_disarm },
-  { "test", c_test },
-  { "cycle", c_cycle },
-  { "talk", c_talk },
-  { "rattle", c_rattle },
-  { "defaults", c_defaults },
-  { "eservo", c_eservo },
-  { "aservo", c_aservo },
-  { "rservo", c_rservo },
-  { "gservo", c_gservo },
-  { "bservo", c_bservo },
-  { "fservo", c_fservo },
-  { "5048b_ref", c_5048b_ref },
-  { "name", c_name },
-  { "", c_ }
-};
-
-bool looping;
-    
-const int maxCmdLen = 40;
-char cmdBuf[maxCmdLen];
-int cmdBufLen;
-
 int indexOf(const char *s, const char c, int index)
 {
   while(s[index] != '\0') {
@@ -562,8 +430,8 @@ int indexOf(const char *s, const char c)
 void executeCommand(const char *buf, int bufLen)
 {
   if(echoEnabled) {
-    consolePrint("\r// %% ");
-    consolePrint(buf);  
+    consolePrint("\r// % ");
+    consolePrint(buf, bufLen);  
     consolePrintLn("          ");
   }
   
@@ -587,512 +455,181 @@ void executeCommand(const char *buf, int bufLen)
       if(index < 0)
         index = bufLen;
 
-      paramText[numParams] = &buf[prevIndex+1];
-      float value = 0.0;
-      int exponent = 0;
-      bool sign = false, deci = false;
-
-      for(int i = 0; i < index-prevIndex-1; i++) {
-        char c = paramText[numParams][i];
-
-        switch(c) {
-          case '-':
-            sign = true;
-            break;
-            
-          case '.':
-            deci = true;
-            break;
-            
-          case '0':
-          case '1':
-          case '2':
-          case '3':
-          case '4':
-          case '5':
-          case '6':
-          case '7':
-          case '8':
-          case '9':
-            if(deci) {
-              value += (float) (c - '0') / pow(10, ++exponent);
-            } else {
-               value *= (float) 10;
-               value += (float) (c - '0');
-            }
-            break;
-        }
-      }
-            
-      if(sign)
-        value = -value;
-    
-      if(numParams < maxParams)
-        param[numParams++] = value;
+      if(numParams < maxParams) {
+	paramText[numParams] = &buf[prevIndex+1];
+        param[numParams] = atof(paramText[numParams]);
+	numParams++;
+      }	
     } while(index < bufLen);
   }
   
-  int j = 0;
+  int matches = 0, j = 0;
+  struct Command command;
   
-  while(commands[j].c_token != c_) {
-    if(!strncmp(buf, commands[j].c_string, tokenLen))
-      break;
-    j++;
-  }
+  while(1) {
+    struct Command cache;
+  
+    memcpy_P(&cache, &commands[j++], sizeof(cache));
 
-  switch(commands[j].c_token) {
-  case c_arm:
-    rattling = false;
-    armed = true;
-    break;
+    if(cache.token == c_invalid)
+      break;
     
-  case c_rattle:
-    rattling = true;
-    armed = false;
-    break;
+    if(!strncmp(buf, cache.name, tokenLen)) {
+      command = cache;
+      matches++;
+    }
+  }
+  
+  if(matches < 1) {
+    consolePrint_P(PSTR("Command not recognized: \""));
+    consolePrint(buf, tokenLen);
+    consolePrintLn("\"");
     
-  case c_disarm:
-    armed = false;
-    consoleNoteLn_P(PSTR("We're DISARMED"));
-    break;
+  } else if(matches > 1) {
+    consolePrint_P(PSTR("Ambiguos command: \""));
+    consolePrint(buf, tokenLen);
+    consolePrintLn("\"");
     
-  case c_talk:
-    talk = true;
-    consoleNoteLn_P(PSTR("Hello world"));
-    break;
+  } else if(command.var[0]) {
+    //
+    // Simple variable
+    //
     
-  case c_test:
-    if(numParams > 0)
-      stateRecord.testChannel = param[0];
-    else {
+    for(int i = 0; command.var[i]; i++) {
+      switch(command.varType) {
+      case e_string:
+	strncpy((char*) command.var[i], paramText[i], NAME_LEN-1);
+	break;
+      
+      case e_uint16:
+	*((uint16_t*) command.var[i]) = (uint16_t) param[i];
+	break;
+      
+      case e_int8:
+	*((int8_t*) command.var[i]) = (uint8_t) param[i];
+	break;
+      
+      case e_float:
+	*((float*) command.var[i]) = param[i];
+	break;
+
+      case e_angle90:
+	*((float*) command.var[i]) = param[i]/90;
+	break;
+
+      case e_angle360:
+	*((float*) command.var[i]) = param[i]/360;
+	break;
+      }
+    }
+  } else {
+    //
+    // Complex
+    //
+    
+    switch(command.token) {
+    case c_arm:
+      rattling = false;
+      armed = true;
+      break;
+    
+    case c_rattle:
+      rattling = true;
+      armed = false;
+      break;
+    
+    case c_disarm:
+      armed = false;
+      consoleNoteLn_P(PSTR("We're DISARMED"));
+      break;
+    
+    case c_talk:
+      talk = true;
+      consoleNoteLn_P(PSTR("Hello world"));
+      break;
+    
+    case c_test:
+      if(numParams > 0) {
+	stateRecord.testChannel = param[0];
+	storeNVState();
+      }
+
       consoleNote_P(PSTR("Current test channel = "));
       consolePrintLn(stateRecord.testChannel);
-    }
-    break;
+      break;
 
-  case c_stabilizer_pid_zn:
-    if(numParams > 0) {
-      paramRecord.s_Ku = param[0];
-      if(numParams > 1)
-	paramRecord.s_Tu = param[1];
-      
-      consoleNoteLn_P(PSTR("Stabilizer PID set"));
-    }
-    break;
+    case c_center:
+      paramRecord.elevZero = elevStickRaw;
+      paramRecord.aileZero = aileStickRaw;
+      paramRecord.rudderZero = rudderStickRaw;
+      consoleNoteLn_P(PSTR("Stick center set"));
+      break;
     
-  case c_inner_pid_zn:
-    if(numParams > 0) {
-      paramRecord.i_Ku = param[0];
-      if(numParams > 1)
-	paramRecord.i_Tu = param[1];
-      
-      consoleNoteLn_P(PSTR("Elevator inner PID set"));
-    }
-    break;
-    
-  case c_yd_p:
-    if(numParams > 0) {
-      paramRecord.yd_P = param[0];
-      consoleNoteLn_P(PSTR("Yaw damper P set"));
-    }
-    break;
-    
-  case c_rudder_pid_zn:
-    if(numParams > 0) {
-      paramRecord.r_Ku = param[0];
-      if(numParams > 1)
-	paramRecord.r_Tu = param[1];
-      
-      consoleNoteLn_P(PSTR("AutoRudder PID set"));
-    }
-    break;
-    
-  case c_outer_p:
-    if(numParams > 0)
-      autoAlphaP = paramRecord.o_P = param[0];
+    case c_zero:
+      paramRecord.alphaRef += (int16_t) ((1L<<16) * alpha);
+      consoleNoteLn_P(PSTR("Alpha zero set"));
+      break;
 
-    consoleNote_P(PSTR("Autostick outer P = "));
-    consolePrintLn(paramRecord.o_P);
-    break;
+    case c_alpha:
+      if(numParams > 0) {
+	paramRecord.alphaRef +=
+	  (int16_t) ((1L<<16) * (alpha - (float) param[0] / 360));
+	consoleNoteLn_P(PSTR("Alpha calibrated"));
+      }
+      break;
 
-  case c_center:
-    paramRecord.elevZero = elevStickRaw;
-    paramRecord.aileZero = aileStickRaw;
-    paramRecord.rudderZero = rudderStickRaw;
-    consoleNoteLn_P(PSTR("Stick center set"));
-    consolePrintLn(paramRecord.o_P);
-    break;
+    case c_loop:
+      looping = true;
+      rpmMeasure(true);
+      break;
     
-  case c_eneutral:
-    if(numParams > 0)
-      paramRecord.elevNeutral = param[0]/90.0;
-    else {
-      consoleNote_P(PSTR("Elev neutral = "));
-      consolePrintLn(paramRecord.elevNeutral*90.0);
-    }
-    break;
-    
-  case c_edefl:
-    if(numParams > 0)
-      paramRecord.elevDefl = param[0] / 90.0;
-    else {
-      consoleNote_P(PSTR("Elev defl = "));
-      consolePrintLn(paramRecord.elevDefl*90.0);
-    }
-    break;
-    
-  case c_ezero:
-    if(numParams > 0)
-      paramRecord.elevZero = param[0] / 90.0;
-    else {
-      consoleNote_P(PSTR("Elev zero = "));
-      consolePrintLn(paramRecord.elevZero*90.0);
-    }
-    break;
-    
-  case c_eservo:
-    if(numParams > 0)
-      paramRecord.servoElev = param[0];
-    else {
-      consoleNoteLn_P(PSTR("Elev servo ch = "));
-      consolePrintLn(paramRecord.servoElev);
-    }
-    break;
-    
-  case c_aneutral:
-    if(numParams > 0)
-      paramRecord.aileNeutral = param[0]/90.0;
-    else {
-      consoleNote_P(PSTR("Aile neutral = "));
-      consolePrintLn(paramRecord.aileNeutral*90.0);
-    }
-    break;
-    
-  case c_adefl:
-    if(numParams > 0)
-      paramRecord.aileDefl = param[0] / 90.0;
-    else {
-      consoleNote_P(PSTR("Aile defl = "));
-      consolePrintLn(paramRecord.aileDefl*90.0);
-    }
-    break;
-
-  case c_azero:
-    if(numParams > 0)
-      paramRecord.aileZero = param[0] / 90.0;
-    else {
-      consoleNote_P(PSTR("Aile zero = "));
-      consolePrintLn(paramRecord.aileZero*90.0);
-    }
-    break;
-    
-  case c_aservo:
-    if(numParams > 0)
-      paramRecord.servoAile = param[0];
-    else {
-      consoleNoteLn_P(PSTR("Aile servo ch = "));
-      consolePrintLn(paramRecord.servoAile);
-    }
-    break;
-    
-  case c_bneutral:
-    if(numParams > 0)
-      paramRecord.brakeNeutral = param[0]/90.0;
-    else {
-      consoleNote_P(PSTR("Brake neutral = "));
-      consolePrintLn(paramRecord.brakeNeutral*90.0);
-    }
-    break;
-    
-  case c_bdefl:
-    if(numParams > 0)
-      paramRecord.brakeDefl = param[0] / 90.0;
-    else {
-      consoleNoteLn_P(PSTR("Brake defl = "));
-      consolePrintLn(paramRecord.brakeDefl*90.0);
-    }
-    break;
- 
-  case c_bservo:
-    if(numParams > 0)
-      paramRecord.servoBrake = param[0];
-    else {
-      consoleNoteLn_P(PSTR("Brake servo ch = "));
-      consolePrintLn(paramRecord.servoBrake);
-    }
-    break;
-    
-  case c_rneutral:
-    if(numParams > 0)
-      paramRecord.rudderNeutral = param[0]/90.0;
-    else {
-      consoleNote_P(PSTR("Rudder neutral = "));
-      consolePrintLn(paramRecord.rudderNeutral*90.0);
-    }
-    break;
-    
-  case c_rdefl:
-    if(numParams > 0)
-      paramRecord.rudderDefl = param[0] / 90.0;
-    else {
-      consoleNoteLn_P(PSTR("Rudder defl = "));
-      consolePrintLn(paramRecord.rudderDefl*90.0);
-    }
-    break;
-    
-  case c_rzero:
-    if(numParams > 0)
-      paramRecord.rudderZero = param[0] / 90.0;
-    else {
-      consoleNote_P(PSTR("Rudder zero = "));
-      consolePrintLn(paramRecord.rudderZero*90.0);
-    }
-    break;
-    
-  case c_rservo:
-    if(numParams > 0)
-      paramRecord.servoRudder = param[0];
-    else {
-      consoleNoteLn_P(PSTR("Rudder servo ch = "));
-      consolePrintLn(paramRecord.servoRudder);
-    }
-    break;
-    
-  case c_flapneutral:
-    if(numParams > 0) {
-      paramRecord.flapNeutral = param[0] / 90.0;
-      if(numParams > 1)
-	paramRecord.flap2Neutral = param[1] / 90.0;
-    } else {
-      consoleNote_P(PSTR("Flap neutral = "));
-      consolePrint(paramRecord.flapNeutral*90.0);
-      consolePrint_P(PSTR(", "));
-      consolePrintLn(paramRecord.flap2Neutral*90.0);
-    }
-    break;
-    
-  case c_fservo:
-    if(numParams > 0) {
-      paramRecord.servoFlap = param[0];
-      if(numParams > 1)
-	paramRecord.servoFlap2 = param[1];
-      else
-	paramRecord.servoFlap2 = -1;
-    } else {
-      consoleNote_P(PSTR("Flap servo ch = "));
-      consolePrint(paramRecord.servoFlap);
-      consolePrint_P(PSTR(", "));
-      consolePrintLn(paramRecord.servoFlap2);
-    }
-    break;
-    
-  case c_flapstep:
-    if(numParams > 0)
-      paramRecord.flapStep = param[0] / 90.0;
-    else {
-      consoleNote_P(PSTR("Flap step = "));
-      consolePrintLn(paramRecord.flapStep*90.0);
-    }
-    break;
-    
-  case c_gservo:
-    if(numParams > 0)
-      paramRecord.servoGear = param[0];
-    else {
-      consoleNoteLn_P(PSTR("Gear servo ch = "));
-      consolePrintLn(paramRecord.servoGear);
-    }
-    break;
-    
-  case c_min:
-    if(numParams > 0)
-      paramRecord.alphaMin = param[0]/360.0;
-    break;
-
-  case c_max:
-    if(numParams > 0)
-      maxAlpha = paramRecord.alphaMax = param[0]/360.0;
-    break;
-
-  case c_5048b_ref:
-    if(numParams > 0)
-      paramRecord.alphaRef = (uint16_t) param[0];
-    break;
-    
-  case c_zero:
-    paramRecord.alphaRef += (int16_t) ((1L<<16) * alpha);
-    break;
-
-  case c_alpha:
-    if(numParams > 0)
-      paramRecord.alphaRef += (int16_t) ((1L<<16) * (alpha - (float) param[0] / 360));
-    break;
-
-  case c_loop:
-    looping = true;
-    rpmMeasure(true);
-    break;
-    
-  case c_store:
-    consoleNoteLn_P(PSTR("Params & NV state stored"));
-    storeParams();
-    storeNVState();
-    break;
-
-  case c_defaults:
-    consoleNoteLn_P(PSTR("Default params restored"));
-    defaultParams();
-    storeNVState();
-    break;
-    
-  case c_dump:
-    if(numParams > 0)
-      logDump(param[0]);
-    else
-      logDump(-1);
-    break;
-    
-  case c_dumpz:
-    logDumpBinary();
-    break;
-    
-  case c_backup:
-    dumpParams();
-    break;
-
-  case c_stamp:
-    if(numParams > 0) {
-      consoleNote_P(PSTR("Log stamp set to "));
-      consolePrintLn(param[0]);  
-      stateRecord.logStamp = param[0];
+    case c_store:
+      consoleNoteLn_P(PSTR("Params & NV state stored"));
+      storeParams();
       storeNVState();
-    } else {
+      break;
+
+    case c_defaults:
+      consoleNoteLn_P(PSTR("Default params restored"));
+      defaultParams();
+      storeNVState();
+      break;
+    
+    case c_dump:
+      if(numParams > 0)
+	logDump(param[0]);
+      else
+	logDump(-1);
+      break;
+    
+    case c_dumpz:
+      logDumpBinary();
+      break;
+    
+    case c_backup:
+      dumpParams();
+      break;
+
+    case c_stamp:
+      if(numParams > 0) {
+	stateRecord.logStamp = param[0];
+	storeNVState();
+      }
       consoleNote_P(PSTR("Current log stamp is "));
       consolePrintLn(stateRecord.logStamp);  
-    }
-    break;
+      break;
 
-  case c_model:
-    if(numParams < 1) {
-      consoleNote_P(PSTR("Current model is "));
-      consolePrintLn(stateRecord.model); 
-    } else { 
-      if(param[0] > MAX_MODELS-1)
-        param[0] = MAX_MODELS-1;
-      setModel(param[0]);
-      if(echoEnabled)
+    case c_model:
+      if(numParams > 0) {
+	if(param[0] > MAX_MODELS-1)
+	  param[0] = MAX_MODELS-1;
+	setModel(param[0]);
 	storeNVState();
-    }
-    break;
-
-  case c_name:
-    if(numParams < 1) {
-      consoleNote_P(PSTR("Current model name is "));
-      consolePrintLn(paramRecord.name); 
-    } else {
-      strncpy(paramRecord.name, paramText[0], NAME_LEN-1);
-      paramRecord.name[NAME_LEN-1]=0;
-      if(echoEnabled)
-	storeNVState();
-    }
-    break;
-
-  case c_echo:
-    if(numParams > 0 && param[0] < 1.0) 
-      echoEnabled = talk = false;
-    else {
-      consoleNoteLn_P(PSTR("Echo enabled"));
-      echoEnabled = talk = true;
-    }
-    break;
-    
-  case c_clear:
-    logClear();
-    cycleMin = cycleMax = cycleCum = cycleMean = -1;
-    cycleTimesValid = false;
-    cycleTimePtr = 0;
-    break;
-
-  case c_stop:
-    logDisable();
-    break;
-
-  case c_start:
-    logEnable();
-    break;
-
-  case c_cycle:
-    cycleTimeCounter = 0;
-    break;
-
-  case c_report:
-    consoleNote_P(PSTR("Idle avg = "));
-    consolePrintLn(idleAvg*100,1);
-    consoleNote_P(PSTR("PPM frequency = "));
-    consolePrintLn(ppmFreq);
-    consoleNote_P(PSTR("Alpha = "));
-    consolePrint(360*alpha);
-    if(alphaFailed)
-      consolePrintLn_P(PSTR(" FAIL"));
-    else
-      consolePrintLn_P(PSTR(" OK"));
-      
-    consoleNoteLn_P(PSTR("Cycle time (ms)"));
-    consoleNote_P(PSTR("  median     = "));
-    consolePrintLn(controlCycle*1e3);
-    consoleNote_P(PSTR("  min        = "));
-    consolePrintLn(cycleMin*1e3);
-    consoleNote_P(PSTR("  max        = "));
-    consolePrintLn(cycleMax*1e3);
-    consoleNote_P(PSTR("  mean       = "));
-    consolePrintLn(cycleMean*1e3);
-    consoleNote_P(PSTR("  cum. value = "));
-    consolePrintLn(cycleCum*1e3);
-    consoleNote_P(PSTR("Warning flags :"));
-    if(pciWarn)
-      consolePrint_P(PSTR(" SPURIOUS_PCINT"));
-    if(alphaWarn)
-      consolePrint_P(PSTR(" ALPHA_SENSOR"));
-    if(ppmWarnShort)
-      consolePrint_P(PSTR(" PPM_SHORT"));
-    if(ppmWarnSlow)
-      consolePrint_P(PSTR(" PPM_SLOW"));
-    if(eepromWarn)
-      consolePrint_P(PSTR(" EEPROM"));
-    if(eepromFailed)
-      consolePrint_P(PSTR(" EEPROM_FAILED"));
-    if(iasWarn)
-      consolePrint_P(PSTR(" IAS_WARN"));
-    if(iasFailed)
-      consolePrint_P(PSTR(" IAS_FAILED"));
-    if(alphaBuffer.warn)
-      consolePrint_P(PSTR(" ALPHA_BUFFER"));
-    if(pusher.warn)
-      consolePrint_P(PSTR(" PUSHER"));
-    if(elevController.warn)
-      consolePrint_P(PSTR(" AUTOSTICK"));
-      
-    consolePrintLn("");
-
-    consoleNote_P(PSTR("Log write bandwidth = "));
-    consolePrint(logBandWidth);
-    consolePrintLn_P(PSTR(" bytes/sec"));
-    break;
-
-  case c_reset:
-    pciWarn = alphaWarn = alphaFailed = pusher.warn = elevController.warn
-      = alphaBuffer.warn = eepromWarn = eepromFailed = ppmWarnShort
-      = ppmWarnSlow = false;
-    consoleNoteLn_P(PSTR("Warning flags reset"));
-    break;
-    
-  case c_rpm:
-    stateRecord.logRPM = param[0] > 0.5 ? true : false;
-    consoleNote_P(PSTR("RPM logging "));
-    consolePrintLn(stateRecord.logRPM ? "ENABLED" : "DISABLED");
-    rpmMeasure(stateRecord.logRPM);
-    storeNVState();
-    break;
+      } else { 
+	consoleNote_P(PSTR("Current model is "));
+	consolePrintLn(stateRecord.model); 
+      }
+      break;
     
    case c_params:
      consoleNote_P(PSTR("SETTINGS (MODEL "));
@@ -1101,39 +638,101 @@ void executeCommand(const char *buf, int bufLen)
       printParams();
       break;
 
-  default:
-    consolePrintLn_P(PSTR("Command not recognized"));
-    break;
-  }
-}
+    case c_clear:
+      logClear();
+      cycleMin = cycleMax = cycleCum = cycleMean = -1;
+      cycleTimesValid = false;
+      cycleTimePtr = 0;
+      break;
 
-void executeCommandSeries(const char *buffer, int len)
-{
-  int index = 0;
-  bool nothing = true;
+    case c_stop:
+      logDisable();
+      break;
+
+    case c_start:
+      logEnable();
+      break;
+
+    case c_cycle:
+      cycleTimeCounter = 0;
+      break;
+
+    case c_report:
+      consoleNote_P(PSTR("Idle avg = "));
+      consolePrintLn(idleAvg*100,1);
+      consoleNote_P(PSTR("PPM frequency = "));
+      consolePrintLn(ppmFreq);
+      consoleNote_P(PSTR("Alpha = "));
+      consolePrint(360*alpha);
+      if(alphaFailed)
+	consolePrintLn_P(PSTR(" FAIL"));
+      else
+	consolePrintLn_P(PSTR(" OK"));
+      
+      consoleNoteLn_P(PSTR("Cycle time (ms)"));
+      consoleNote_P(PSTR("  median     = "));
+      consolePrintLn(controlCycle*1e3);
+      consoleNote_P(PSTR("  min        = "));
+      consolePrintLn(cycleMin*1e3);
+      consoleNote_P(PSTR("  max        = "));
+      consolePrintLn(cycleMax*1e3);
+      consoleNote_P(PSTR("  mean       = "));
+      consolePrintLn(cycleMean*1e3);
+      consoleNote_P(PSTR("  cum. value = "));
+      consolePrintLn(cycleCum*1e3);
+      consoleNote_P(PSTR("Warning flags :"));
+      if(pciWarn)
+	consolePrint_P(PSTR(" SPURIOUS_PCINT"));
+      if(alphaWarn)
+	consolePrint_P(PSTR(" ALPHA_SENSOR"));
+      if(ppmWarnShort)
+	consolePrint_P(PSTR(" PPM_SHORT"));
+      if(ppmWarnSlow)
+	consolePrint_P(PSTR(" PPM_SLOW"));
+      if(eepromWarn)
+	consolePrint_P(PSTR(" EEPROM"));
+      if(eepromFailed)
+	consolePrint_P(PSTR(" EEPROM_FAILED"));
+      if(iasWarn)
+	consolePrint_P(PSTR(" IAS_WARN"));
+      if(iasFailed)
+	consolePrint_P(PSTR(" IAS_FAILED"));
+      if(alphaBuffer.warn)
+	consolePrint_P(PSTR(" ALPHA_BUFFER"));
+      if(pusher.warn)
+	consolePrint_P(PSTR(" PUSHER"));
+      if(elevController.warn)
+	consolePrint_P(PSTR(" AUTOSTICK"));
+      
+      consolePrintLn("");
+
+      consoleNote_P(PSTR("Log write bandwidth = "));
+      consolePrint(logBandWidth);
+      consolePrintLn_P(PSTR(" bytes/sec"));
+      break;
+
+    case c_reset:
+      pciWarn = alphaWarn = alphaFailed = pusher.warn = elevController.warn
+	= alphaBuffer.warn = eepromWarn = eepromFailed = ppmWarnShort
+	= ppmWarnSlow = false;
+      consoleNoteLn_P(PSTR("Warning flags reset"));
+      break;
     
-  while(index < len) {
-    cmdBufLen = 0;
-    
-    while(index < len && buffer[index] != ';' && buffer[index] != '\n') {
-      if(cmdBufLen < maxCmdLen-1 && (buffer[index] != ' ' || cmdBufLen > 0)) {
-        cmdBuf[cmdBufLen++] = buffer[index];
-      }
-      index++;
+    case c_rpm:
+      stateRecord.logRPM = param[0] > 0.5 ? true : false;
+      consoleNote_P(PSTR("RPM logging "));
+      consolePrintLn(stateRecord.logRPM ? "ENABLED" : "DISABLED");
+      rpmMeasure(stateRecord.logRPM);
+      storeNVState();
+      break;
+      
+    default:
+      consolePrint_P(PSTR("Sorry, command not implemented: \""));
+      consolePrint(buf, tokenLen);
+      consolePrintLn("\"");
+      break;
     }
-        
-    cmdBuf[cmdBufLen] = '\0';
-    
-    if(cmdBufLen > 0) {
-      executeCommand(cmdBuf, cmdBufLen);
-      nothing = false;
-    }
-
-    index++;    
   }
-
-  if(nothing)
-    consolePrintLn("// %");
 }
 
 void cacheTask(uint32_t currentMicros)
@@ -1256,10 +855,6 @@ void sensorTaskSlow(uint32_t currentMicros)
   const float factor_c = pascalsPerPSI_c * range_c / (1L<<(8*sizeof(uint16_t)));
     
   dynPressure = pressureBuffer.output() * factor_c;
-  
-  /*
-  acc = (float) imu.accSmooth[2] / (1<<9);
-  */
 }
 
 const int numPoles = 4;
@@ -1351,11 +946,12 @@ void measurementTask(uint32_t currentMicros)
 
   logBandWidth = 1.0e6 * writeBytesCum / (currentMicros - prevMeasurement);
   writeBytesCum = 0;
+  
   prevMeasurement = currentMicros;
 
   // Cycle time monitoring
   
-  if(cycleTimeCounter > 5)
+  if(cycleTimeCounter > 3)
     return;
     
   if(cycleTimesValid) {
@@ -1571,6 +1167,7 @@ void configurationTask(uint32_t currentMicros)
   // Then apply test modes
   
   if(testMode) {
+    testGain = testGainLinear(0, 1);
      switch(stateRecord.testChannel) {
      case 1:
        // Wing stabilizer gain
@@ -1659,7 +1256,7 @@ void loopTask(uint32_t currentMicros)
     consolePrint(", ");
     consolePrint(accZ, 2);
     consolePrint(")");
-
+    /*
     consolePrint(" roll = ");
     consolePrint(rollAngle, 2);
     consolePrint(" (rate = ");
@@ -1669,7 +1266,7 @@ void loopTask(uint32_t currentMicros)
     consolePrint(" (rate = ");
     consolePrint(pitchRate*360, 1);
     consolePrint(")");
-
+    */
     /*
     consolePrint(" rpm = ");
     consolePrint(readRPM());
@@ -1703,15 +1300,13 @@ void loopTask(uint32_t currentMicros)
   }
 }
 
-const int serialBufLen = 1<<9;
-char serialBuf[serialBufLen];
+const int serialBufLen = 1<<6;
+char serialBuf[serialBufLen+1];
 int serialBufIndex = 0;
-int commandCount = 0;
 
 void communicationTask(uint32_t currentMicros)
 {
   int len = 0;
-  bool concat = false;
        
   while((len = cliSerial->available()) > 0) {    
     int spaceLeft = serialBufLen - serialBufIndex;
@@ -1726,28 +1321,33 @@ void communicationTask(uint32_t currentMicros)
     while(len > 0) {
       char c =  cliSerial->read();
 
-      if(c == '\\') {
-	concat = true;
-      } else if(c == '\b' || c == 127) {
+      if(c == '\b' || c == 127) {
 	if(serialBufIndex > 0) {
 	  consolePrint("\b \b");
 	  consoleFlush();
 	  serialBufIndex--;
 	}
 	
-      } else if((c != '\n' && c != '\r') || concat) {
-	const char buf[] = { c, 0 };
+      } else if(c == '\n' || c == '\r') {
+	looping = false;
+
+	if(serialBufIndex < 1)
+	  consolePrintLn("// %");
+	else if(serialBuf[0] == '/')
+	  consolePrintLn("\n// %");
+	else {
+	  serialBuf[serialBufIndex] = '\0';
+	  executeCommand(serialBuf, serialBufIndex);
+	}
+
+	serialBufIndex = 0;
+	controlCycleEnded = 0;
+	
+      } else if(c != ' ' || serialBufIndex > 0) {
+	const char buf[] = { c, '\0' };
 	consolePrint(buf);
 	consoleFlush();
 	serialBuf[serialBufIndex++] = c;
-	concat = false;
-	
-      } else {
-	looping = false;
-	executeCommandSeries(serialBuf, serialBufIndex);
-	serialBufIndex = 0;
-	controlCycleEnded = 0;
-	commandCount++;
       }
       
       len--;
@@ -1934,8 +1534,8 @@ void controlTask(uint32_t currentMicros)
   targetAlpha = 0.0;
 
   if(mode.autoStick) {
-    const float effStick = elevStick - neutralStick;
-    float targetRate = clamp(effStick, -0.5, 0.5);
+    const float effStick = applyNullZone(elevStick - neutralStick);
+    float targetRate = 0.5*effStick;
     
     if(mode.autoAlpha) {  
       if(mode.rxFailSafe)
@@ -1943,9 +1543,11 @@ void controlTask(uint32_t currentMicros)
       else {
 	const float fract_c = 1.0/3;
 	const float strength_c = max(effStick-(1.0-fract_c), 0)/fract_c;
-	const float maxTargetAlpha_c = mixValue(strength_c, maxAutoAlpha, maxAlpha);
+	const float maxTargetAlpha_c =
+	  mixValue(strength_c, maxAutoAlpha, maxAlpha);
 
-	targetAlpha = clamp(neutralAlpha + effStick*maxAlpha/2,
+	targetAlpha = clamp(neutralAlpha
+			    + effStick*(maxAlpha-paramRecord.alphaMin)/2,
 			    paramRecord.alphaMin, maxTargetAlpha_c);
       }
 	
@@ -2095,13 +1697,17 @@ void backgroundTask(uint32_t durationMicros)
 void heartBeatTask(uint32_t durationMicros)
 {  
   static uint32_t count;
- 
-  if(logReady()) {
-    count++;   
+
+  if(!talk)
+    return;
+  
+  if(logReady(false)) {
     datagramTxStart(DG_HEARTBEAT);
     datagramTxOut((uint8_t*) &count, sizeof(count));
     datagramTxEnd();
-  }
+    count++;   
+  } else
+    count = 1;
 }
 
 void blinkTask(uint32_t currentMicros)
@@ -2250,8 +1856,6 @@ void setup() {
 #ifdef rpmPin
   pinMode(rpmPin, INPUT_PULLUP);  
   rpmMeasure(stateRecord.logRPM);
-#dndif
-
 #endif
 
   // Servos
@@ -2274,10 +1878,10 @@ void setup() {
   
   consolePrintLn_P(PSTR("  done"));
   
-  consoleNote_P(PSTR("Initializing INS / AHRS... "));
+  consoleNote_P(PSTR("Initializing INS/AHRS... "));
   consoleFlush();
   
-  ins.init(AP_InertialSensor::COLD_START, AP_InertialSensor::RATE_100HZ);
+  ins.init(AP_InertialSensor::COLD_START, AP_InertialSensor::RATE_50HZ);
   ahrs.init();
 
   consoleNoteLn_P(PSTR("  done"));

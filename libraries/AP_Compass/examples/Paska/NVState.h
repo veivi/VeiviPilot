@@ -10,7 +10,7 @@
 
 struct ParamRecord {
   uint16_t crc;
-  char name[NAME_LEN];
+  char name[NAME_LEN+1];
   uint8_t i2c_clkDiv;
   uint8_t i2c_5048B, i2c_24L256;
   uint16_t alphaRef;
@@ -20,7 +20,7 @@ struct ParamRecord {
   float flapNeutral, flap2Neutral, flapStep;
   float rudderNeutral, rudderDefl;
   float brakeNeutral, brakeDefl;
-  int8_t servoAile, servoElev, servoFlap, servoFlap2, servoGear, servoRudder, servoBrake;
+  int8_t servoAile, servoElev, servoRudder, servoFlap, servoFlap2, servoGear, servoBrake;
   float alphaMin, alphaMax;
   float i_Ku, i_Tu, o_P;
   float s_Ku, s_Tu;

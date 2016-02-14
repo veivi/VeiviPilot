@@ -15,6 +15,7 @@ extern int32_t logPtr, logLen, logSize;
 
 #define logIndex(i) ((logPtr + logSize + (i)) % logSize)
 
+bool logReady(bool verbose);
 bool logReady(void);
 bool logInit(uint32_t);
 uint16_t logRead(int32_t index);

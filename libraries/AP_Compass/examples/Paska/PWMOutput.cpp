@@ -18,7 +18,7 @@ void pwmTimerInit(const struct HWTimer *timer[], int num)
    
    *(timer[i]->ICR) = TIMER_HZ/PWM_HZ - 1;
 
-   // Output set to nil by default
+   // Output set to 1.5 ms by default
 
    for(int j = 0; j < 3; j++)
      *(timer[i]->OCR[j]) = ~0U;
@@ -37,8 +37,9 @@ void pwmDisable(const struct PWMOutput *output)
 
 void pwmOutputInit(const struct PWMOutput *output)
 {
-   pwmEnable(output);
-   configureOutput(&output->pin);
+  configureOutput(&output->pin);
+  pwmOutputWrite(output, 1500);
+  pwmEnable(output);
 }
 
 void pwmOutputInitList(const struct PWMOutput output[], int num)
