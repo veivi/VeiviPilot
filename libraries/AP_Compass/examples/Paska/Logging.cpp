@@ -41,6 +41,9 @@ uint32_t logAddr(int32_t index)
   return logOffset + index*sizeof(uint16_t);
 }
 
+static int uncommitted = 0;
+static uint16_t nextStamp;
+
 static void logWrite(int32_t index, const uint16_t *value, int count)
 {
   if(logSize < 1)
@@ -52,11 +55,8 @@ static void logWrite(int32_t index, const uint16_t *value, int count)
     cacheWrite(logAddr(0), (const uint8_t*) &value[p], (count-p)*sizeof(uint16_t));
   } else
     cacheWrite(logAddr(index), (const uint8_t*) value, count*sizeof(uint16_t));
-}
 
-static void logWrite(int32_t index, const uint16_t value)
-{
-  logWrite(index, &value, 1);
+  uncommitted = count;
 }
 
 uint16_t logRead(int32_t index)
@@ -71,33 +71,34 @@ uint16_t logRead(int32_t index)
   return entry;
 }
 
-static void logCommit(int count)
+static void logCommit(void)
 {
-  if(!logReady())
+  if(!logReady(false) || !uncommitted)
     return;
     
-  logPtr = logIndex(count);
-  logBytesCum += count*sizeof(uint16_t);
+  logPtr = logIndex(uncommitted);
+  logBytesCum += uncommitted*sizeof(uint16_t);
 
-  logLen += count;
+  logLen += uncommitted;
   
   if(logLen > logSize)
     logLen = logSize;
-}
 
-bool logDirty = false;
+  uncommitted = 0;
+}
 
 static void logEnter(const uint16_t *value, int count)
 {
-  if(!logReady())
+  if(!logReady(false))
     return;
     
-  logWrite(logIndex(0), value, count);
-  uint16_t buffer[2] = { ENTRY_TOKEN(t_stamp), logEndStamp };
-  logWrite(logIndex(count), buffer, 2);
-  logCommit(count);
-  
-  logDirty = true;
+  logWrite(logPtr, value, count);
+  logCommit();
+
+  nextStamp = ENTRY_VALUE(logEndStamp+1);
+  uint16_t buffer[] = { ENTRY_TOKEN(t_stamp), nextStamp };
+
+  logWrite(logPtr, buffer, sizeof(buffer) / sizeof(uint16_t));
 }
 
 static void logEnter(uint16_t value)
@@ -109,14 +110,15 @@ void logClear(void)
 {
   if(!logReady())
     return;
-    
-  consoleNoteLn_P(PSTR("Log being CLEARED"));
-    
-  logEnter(ENTRY_TOKEN(t_start));
 
-  logLen = 0;
-  stateRecord.logStamp++;
-  storeNVState();
+  if(logLen > 0) {
+    logEnter(ENTRY_TOKEN(t_start));
+    logLen = 0;
+    stateRecord.logStamp++;
+    storeNVState();
+
+    consoleNoteLn_P(PSTR("Log being CLEARED"));
+  }
 }
   
 static int prevCh = -1;
@@ -145,8 +147,8 @@ static void logWithCh(int ch, uint16_t value)
   } else {
     // Set channel first
     
-    uint16_t buffer[2] = { ENTRY_TOKEN(t_channel + ch), value };
-    logEnter(buffer, 2);
+    uint16_t buffer[] = { ENTRY_TOKEN(t_channel + ch), value };
+    logEnter(buffer, sizeof(buffer)/sizeof(uint16_t));
   }
     
   logChannels[ch].value = value;
@@ -267,9 +269,10 @@ bool logInit(uint32_t maxDuration)
       consolePrintLn(" entries");
       
       logState = find_stamp_c;
+      logPtr = 0;
       logLen = -1;
 
-        return false;
+      return false;
     } else {
       consoleNoteLn_P(PSTR("Log EEPROM failed"));
       logState = failed_c;
@@ -283,18 +286,20 @@ bool logInit(uint32_t maxDuration)
 	consolePrint(searchPtr);
 	consolePrintLn("...");
       }
-        
-      if(logRead(searchPtr) == ENTRY_TOKEN(t_start)) {
+
+      uint16_t entry = logRead(searchPtr);
+      
+      if(entry == ENTRY_TOKEN(t_start)) {
 	startPtr = searchPtr;
-      } else if(logRead(searchPtr) == ENTRY_TOKEN(t_stamp)) {
+      } else if(entry == ENTRY_TOKEN(t_stamp)) {
         uint16_t stamp = logRead(logIndex(searchPtr+1));
 
         if(endFound && stamp != ENTRY_VALUE(logEndStamp+1))
           break;
             
         endPtr = searchPtr;
-        endFound = true;
         logEndStamp = stamp;
+        endFound = true;
 
         searchPtr++;
       }
@@ -306,9 +311,9 @@ bool logInit(uint32_t maxDuration)
         return false;
     }
 
-    if(endFound && endPtr < logSize) {
-      logPtr = endPtr;
-    
+    if(endFound) {
+      logPtr = logIndex(endPtr+2);
+      
       if(startPtr < 0) {
 	// Don't know the log length yet
 	consoleNoteLn_P(PSTR("Log STAMP found, looking for START"));
@@ -352,10 +357,18 @@ bool logInit(uint32_t maxDuration)
       logLen = logSize;
     else
       logLen = (logSize + endPtr - startPtr - 1) % logSize;
-    
-    consoleNote_P(PSTR("Log ready, length = "));
+
+    consoleNote_P(PSTR("LOG READY, PTR = "));
+    consolePrintLn(logPtr);
+    consoleNote_P(PSTR("  LENGTH = "));
     consolePrintLn(logLen);
+    consoleNote_P(PSTR("  STAMP = "));
+    consolePrintLn(logEndStamp);
+    
     logState = stop_c;
+    return true;
+
+  default:
     return true;
   }
 
@@ -364,29 +377,29 @@ bool logInit(uint32_t maxDuration)
 
 void logSave(void (*logStartCB)())
 {
-  switch(logState) {
-    case stop_c:
-      if(logEnabled) {
-        consoleNoteLn_P(PSTR("Logging STARTED"));
-      
-        logState = run_c;
+  if(logState == stop_c && logEnabled) {
+    logState = run_c;
     
-        for(int i = 0; i < 4; i++)
-          logMark();
+    for(int i = 0; i < 4; i++)
+      logMark();
 
-	(*logStartCB)();
-      }
-      break;
+    (*logStartCB)();
+
+    consoleNoteLn_P(PSTR("Logging STARTED"));
       
-    case run_c:
-      if(!logEnabled) {
-        consoleNoteLn_P(PSTR("Logging STOPPED"));
-        logState = stop_c;
-      } else if(logDirty) {
-        logDirty = false;
-        logCommit(2);
-        logEndStamp = ENTRY_VALUE(logEndStamp + 1);
-      }
-      break;
+  } else if(logState == run_c) {
+
+    if(!logEnabled) {
+      logState = stop_c;
+      consoleNoteLn_P(PSTR("Logging STOPPED"));
+
+    } else if(uncommitted > 0) {
+      logCommit();
+      cacheFlush();
+      logEndStamp = nextStamp;
+
+      consoleNote_P(PSTR("Log COMMIT, STAMP = "));
+      consolePrintLn(logEndStamp);
+    }
   }
 }

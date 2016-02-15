@@ -295,12 +295,14 @@ void logInput(void)
 {
   logGeneric(lc_ailestick, aileStick);
   logGeneric(lc_elevstick, elevStick);
+  logGeneric(lc_rudstick, rudderStick);
 }
 
 void logActuator(void)
 {
   logGeneric(lc_aileron, aileOutput);
   logGeneric(lc_elevator, elevOutput);
+  logGeneric(lc_rudder, rudderOutput);
 }
 
 void logRPM(void)
@@ -765,7 +767,7 @@ void alphaTask(uint32_t currentMicros)
     alphaBuffer.input((float) raw / (1L<<(8*sizeof(raw))));
 }
 
-#define NULLZONE 0.075
+#define NULLZONE 0.1
 
 float applyNullZone(float value)
 {
@@ -1207,6 +1209,7 @@ void configurationTask(uint32_t currentMicros)
      case 11:
        // Yaw damper gain
 
+       mode.autoRudder = false;
        mode.yawDamper = true;
        yawDamperP = testGain = testGainExpo(paramRecord.yd_P);
        break;
