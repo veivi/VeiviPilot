@@ -49,7 +49,7 @@ typedef enum {
   c_stabilizer_pid_zn,
   c_outer_p,
   c_yd_p,
-  c_rudder_pid_zn,
+  c_yd_tau,
   c_rattle,
   c_inner_pid_zn,
   c_arm,

@@ -138,7 +138,8 @@ static void logWithCh(int ch, uint16_t value)
   if(ch == prevCh) {
     // Same channel as previous, store as delta
     
-    logEnter(ENTRY_TOKEN(t_delta) | (DELTA_MASK & ((value - logChannels[ch].value)>>1)));
+    logEnter(ENTRY_TOKEN(t_delta)
+	     | (DELTA_MASK & ((value - logChannels[ch].value)>>1)));
     
   } else if(prevCh > -1 && ch == prevCh + 1) {
     // Channel prediction good, just store value
@@ -159,7 +160,9 @@ void logGeneric(int ch, float value)
 {
   float small = logChannels[ch].small, large = logChannels[ch].large;
   
-  logWithCh(ch, (uint16_t) ((float) VALUE_MASK*((value-small)/(large-small))));
+  logWithCh(ch, (uint16_t)
+	    clamp((float) VALUE_MASK*((value-small)/(large-small)),
+		  0, VALUE_MASK));
 }
 
 void logMark(void)
@@ -389,17 +392,15 @@ void logSave(void (*logStartCB)())
       
   } else if(logState == run_c) {
 
-    if(!logEnabled) {
-      logState = stop_c;
-      consoleNoteLn_P(PSTR("Logging STOPPED"));
-
-    } else if(uncommitted > 0) {
+    if(uncommitted > 0) {
       logCommit();
       cacheFlush();
       logEndStamp = nextStamp;
-
-      consoleNote_P(PSTR("Log COMMIT, STAMP = "));
-      consolePrintLn(logEndStamp);
+    }
+    
+    if(!logEnabled) {
+      logState = stop_c;
+      consoleNoteLn_P(PSTR("Logging STOPPED"));
     }
   }
 }

@@ -24,7 +24,7 @@ struct ParamRecord {
   float alphaMin, alphaMax;
   float i_Ku, i_Tu, o_P;
   float s_Ku, s_Tu;
-  float yd_P, r_Ku, r_Tu;
+  float yd_P, yd_Tau, dummy1;
   };
 
 struct NVStateRecord {

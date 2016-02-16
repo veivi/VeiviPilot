@@ -192,7 +192,7 @@ int initCount = 5;
 bool armed = false;
 float neutralStick = 0.0, neutralAlpha, targetAlpha;
 float switchValue, tuningKnobValue, rpmOutput;
-Controller elevController, aileController, rudderController, yawRateController, pusher;
+Controller elevController, aileController, pusher;
 float autoAlphaP, maxAlpha, yawDamperP;
 float accX, accY, accZ, altitude,  heading, rollAngle, pitchAngle, rollRate, pitchRate, yawRate;
 int cycleTimeCounter = 0;
@@ -200,6 +200,7 @@ uint32_t prevMeasurement;
 float parameter;  
 NewI2C I2c = NewI2C();
 RunningAvgFilter alphaFilter;
+DecayFilter yawFilter;
 AlphaBuffer alphaBuffer, pressureBuffer;
 float controlCycle = 10.0e-3;
 uint32_t idleMicros;
@@ -1067,11 +1068,11 @@ void configurationTask(uint32_t currentMicros)
           armed = true;
           talk = false;
           
-        } else if(testMode) {
+        } /* else if(testMode) {
           consoleNote_P(PSTR("Test channel incremented to "));
           consolePrintLn(++stateRecord.testChannel);
 
-        } else if(paramRecord.servoGear < 0 || gearOutput > 0) {
+	  } */ else if(paramRecord.servoGear < 0 || gearOutput > 0) {
           if(flapOutput > 0) {
             flapOutput--;
             consoleNote_P(PSTR("Flaps RETRACTED to "));
@@ -1082,10 +1083,11 @@ void configurationTask(uint32_t currentMicros)
           gearOutput = 1;
         }
       } else {
-        if(testMode) {
+	/* if(testMode) {
           consoleNoteLn_P(PSTR("Test channel RESET"));
           // stateRecord.testChannel = 0;
-        } else if(paramRecord.servoGear > -1 && gearOutput > 0) {
+	  } else */
+	if(paramRecord.servoGear > -1 && gearOutput > 0) {
           consoleNoteLn_P(PSTR("Gear DOWN"));
           gearOutput = 0;
         } else if(flapOutput < 3) {
@@ -1127,7 +1129,8 @@ void configurationTask(uint32_t currentMicros)
   mode.stabilizer = true;
   mode.bankLimiter = switchStateLazy;
   mode.autoStick = mode.autoAlpha = mode.autoTrim = flapOutput > 0;
-  mode.autoRudder = mode.yawDamper = !switchStateLazy;
+  mode.autoRudder = false;
+  mode.yawDamper = !switchStateLazy;
   
   // Receiver fail detection
 
@@ -1159,13 +1162,11 @@ void configurationTask(uint32_t currentMicros)
   aileController
     .setZieglerNicholsPID(paramRecord.s_Ku, paramRecord.s_Tu);
 
-  rudderController
-    .setZieglerNicholsPID(paramRecord.r_Ku, paramRecord.r_Tu);
-
   autoAlphaP = paramRecord.o_P;
   maxAlpha = paramRecord.alphaMax;
   yawDamperP = paramRecord.yd_P;
- 
+  yawFilter.setTau(paramRecord.yd_Tau/log(CONTROL_HZ));
+  
   // Then apply test modes
   
   if(testMode) {
@@ -1209,16 +1210,15 @@ void configurationTask(uint32_t currentMicros)
      case 11:
        // Yaw damper gain
 
-       mode.autoRudder = false;
        mode.yawDamper = true;
        yawDamperP = testGain = testGainExpo(paramRecord.yd_P);
        break;
 
      case 12:
-       // Autorudder gain
+       // Yaw damper tau
 
-       mode.yawDamper = mode.autoRudder = true;
-       rudderController.setPID(testGain = testGainExpo(paramRecord.r_Ku), 0, 0);
+       mode.yawDamper = true;
+       yawFilter.setTau((testGain = testGainLinear(0, 1)) / log(CONTROL_HZ));
        break;
      }
   }
@@ -1292,12 +1292,12 @@ void loopTask(uint32_t currentMicros)
     consolePrint(" trim = ");
     consolePrint(neutralAlpha*360);
 */
-    /*
+    
     consolePrint(" param = ");
     consolePrint(parameter);
     consolePrint(" testGain = ");
     consolePrint(testGain);
-    */
+    
     consolePrint("      \r");
     consoleFlush();
   }
@@ -1514,20 +1514,14 @@ void controlTask(uint32_t currentMicros)
   
   // Rudder
     
-  if(mode.autoRudder) {
-
-    rudderController.input(rudderStick/2 - accY/9.81, controlCycle);
-    rudderOutput = rudderController.output();
-  } else {
-    
-    rudderOutput = rudderStick;
-    rudderController.reset(rudderOutput, 0.0);
-  }
+  rudderOutput = rudderStick;
 
   // Yaw damper
 
+  yawFilter.input(yawRate);
+  
   if(mode.yawDamper)
-    rudderOutput -= yawRate * yawDamperP;
+    rudderOutput -= yawFilter.output() * yawDamperP;
   
   if(mode.sensorFailSafe)
     rudderOutput = rudderStick;

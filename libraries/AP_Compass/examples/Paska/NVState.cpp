@@ -141,13 +141,10 @@ void printParams()
   consolePrint(paramRecord.s_Ku, 4);
   consolePrint_P(PSTR(" Tu = "));
   consolePrintLn(paramRecord.s_Tu, 4);
-  consoleNoteLn_P(PSTR("  Auto rudder"));
-  consoleNote_P(PSTR("    PID Ku = "));
-  consolePrint(paramRecord.r_Ku, 4);
-  consolePrint_P(PSTR(" Tu = "));
-  consolePrintLn(paramRecord.i_Tu, 4);
   consoleNote_P(PSTR("    Yaw damper P = "));
-  consolePrintLn(paramRecord.yd_P, 4);
+  consolePrint(paramRecord.yd_P, 4);
+  consolePrint_P(PSTR(" Tau = "));
+  consolePrintLn(paramRecord.yd_Tau, 4);
   consoleNote_P(PSTR("  Alpha min = "));
   consolePrint(paramRecord.alphaMin*360);
   consolePrint_P(PSTR("  max = "));

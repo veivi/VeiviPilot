@@ -27,6 +27,16 @@ class RunningAvgFilter {
     int ptr;
 };
 
+class DecayFilter {
+  public:
+    void setTau(float tau);
+    float input(float v);
+    float output();
+    
+  private:
+    float tau, in, avg;
+};
+
 const int MedianWindow_c = 3;
   
 class Median3Filter {  

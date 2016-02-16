@@ -44,6 +44,23 @@ float Median3Filter::output(void)
   return max(min(memory[0],memory[1]), min(max(memory[0],memory[1]),memory[2]));
 }
 
+float DecayFilter::input(float v)
+{
+  in = v;
+  avg = mixValue(tau, in, avg);
+  return output();
+}
+
+float DecayFilter::output(void)
+{
+  return in - avg;
+}
+
+void DecayFilter::setTau(float tauValue)
+{
+  tau = tauValue;
+}
+
 void RunningAvgFilter::setWindowLen(int a) 
 {
   if(a < 1 || a > windowLenMax)
