@@ -64,7 +64,8 @@ typedef enum {
   c_rservo,
   c_gservo,
   c_bservo,
-  c_name
+  c_name,
+  c_ff
 } token_t;
 
 typedef enum

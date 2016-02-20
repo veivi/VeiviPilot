@@ -25,6 +25,7 @@ struct ParamRecord {
   float i_Ku, i_Tu, o_P;
   float s_Ku, s_Tu;
   float yd_P, yd_Tau, r_Mix;
+  float ff_A, ff_B;
   };
 
 struct NVStateRecord {

@@ -1513,32 +1513,33 @@ void controlTask(uint32_t currentMicros)
   targetAlpha = 0.0;
   elevOutput = elevStick;
  
-  if(mode.autoAlpha) {
-    const float effStick = applyNullZone(elevStick - neutralStick);
+  const float effStick = applyNullZone(elevStick - neutralStick);
     
-    if(mode.rxFailSafe)
-      targetAlpha = maxAutoAlpha;
-    else {
-      const float fract_c = 1.0/3;
-      const float strength_c = max(effStick-(1.0-fract_c), 0)/fract_c;
-      const float maxTargetAlpha_c =
-	mixValue(strength_c, maxAutoAlpha, maxAlpha);
+  if(mode.rxFailSafe)
+    targetAlpha = maxAutoAlpha;
+  else {
+    const float fract_c = 1.0/3;
+    const float strength_c = max(effStick-(1.0-fract_c), 0)/fract_c;
+    const float maxTargetAlpha_c =
+      mixValue(strength_c, maxAutoAlpha, maxAlpha);
 
-      targetAlpha = clamp(neutralAlpha
-			  + effStick*(maxAlpha-paramRecord.alphaMin)/2,
-			  paramRecord.alphaMin, maxTargetAlpha_c);
-    }
-	
-    float targetRate = (targetAlpha - alpha) * autoAlphaP;      
-      
-    elevController.input(targetRate - pitchRate, controlCycle);
-  } else {
-    elevController.reset(elevStick, 0.0);
+    targetAlpha = clamp(neutralAlpha
+			+ effStick*(maxAlpha-paramRecord.alphaMin)/2,
+			paramRecord.alphaMin, maxTargetAlpha_c);
   }
+	
+  float targetPitchRate = (targetAlpha - alpha) * autoAlphaP;      
+
+  float feedForward = targetAlpha*360/90*paramRecord.ff_A + paramRecord.ff_B;
+
+  if(mode.autoAlpha)
+    elevController.input(targetPitchRate - pitchRate, controlCycle);
+  else
+    elevController.reset(elevStick - feedForward, 0.0);
     
   if(!mode.sensorFailSafe && mode.autoAlpha) {
     // Feed-forward part
-    elevOutput = 0; // targetAlpga*paramRecord.ff_A + paramRecord.ff_B;
+    elevOutput = feedForward;
     
     if(!alphaFailed)
       // Feedback (PID output)
@@ -1555,7 +1556,7 @@ void controlTask(uint32_t currentMicros)
   // Aileron
     
   float maxBank = 45.0;
-  float targetRate = 270.0/360*aileStick;
+  float targetRollRate = 270.0/360*aileStick;
     
   if(mode.rxFailSafe)
     maxBank = 15.0;
@@ -1570,7 +1571,7 @@ void controlTask(uint32_t currentMicros)
     // Simple proportional wing leveler
         
     aileOutput = (aileStick*maxBank - rollAngle) / 90;
-    aileController.reset(aileOutput, targetRate - rollRate);
+    aileController.reset(aileOutput, targetRollRate - rollRate);
       
   } else {
     // Roll stabilizer enabled
@@ -1578,15 +1579,15 @@ void controlTask(uint32_t currentMicros)
     if(mode.wingLeveler)
       // Wing leveler enabled
         
-      targetRate = clamp((aileStick*maxBank - rollAngle) / 90, -0.75, 0.75);
+      targetRollRate = clamp((aileStick*maxBank - rollAngle) / 90, -0.75, 0.75);
     else if(mode.bankLimiter) {
       // No leveling but limit bank
                 
-      targetRate = clamp(targetRate,
+      targetRollRate = clamp(targetRollRate,
 			 (-maxBank - rollAngle) / 90, (maxBank - rollAngle) / 90);
     }
       
-    aileController.input(targetRate - rollRate, controlCycle);
+    aileController.input(targetRollRate - rollRate, controlCycle);
     aileOutput = aileController.output();
   }
  
@@ -1665,11 +1666,10 @@ void actuatorTask(uint32_t currentMicros)
 
 void trimTask(uint32_t currentMicros)
 {
-  if(mode.autoTrim && fabsf(rollAngle) < 20) {
-    neutralAlpha += clamp((min(targetAlpha, maxAutoAlpha) - neutralAlpha)/2/TRIM_HZ,
-      -1.5/360/TRIM_HZ, 1.5/360/TRIM_HZ);
-//    neutralAlpha = clamp(neutralAlpha, paramRecord.alphaMin, maxAlpha*0.9);
-  }
+  if(mode.autoTrim && fabsf(rollAngle) < 15)
+    neutralAlpha +=
+      clamp((min(targetAlpha, maxAutoAlpha) - neutralAlpha)/2/TRIM_HZ,
+	    -1.5/360/TRIM_HZ, 1.5/360/TRIM_HZ);
 }
 
 bool logInitialized = false;

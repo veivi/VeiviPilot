@@ -136,6 +136,11 @@ void printParams()
   consolePrint(paramRecord.i_Tu, 4);
   consolePrint_P(PSTR(" Outer P = "));
   consolePrintLn(paramRecord.o_P, 4);
+  consoleNoteLn_P(PSTR("  AutoAlpha feedforward Ax+B"));
+  consoleNote_P(PSTR("    A = "));
+  consolePrint(paramRecord.ff_A, 4);
+  consolePrint_P(PSTR(" B = "));
+  consolePrintLn(paramRecord.ff_B, 4);
   consoleNoteLn_P(PSTR("  Stabilizer"));
   consoleNote_P(PSTR("    Ku = "));
   consolePrint(paramRecord.s_Ku, 4);

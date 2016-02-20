@@ -10,6 +10,7 @@ const struct Command commands[] PROGMEM = {
   { "inner_pid_zn", c_inner_pid_zn,
     e_float, &paramRecord.i_Ku, &paramRecord.i_Tu },
   { "outer_p", c_outer_p, e_float, &paramRecord.o_P },
+  { "ff", c_ff, e_float, &paramRecord.ff_A, &paramRecord.ff_B },
   { "stabilizer_pid_zn", c_stabilizer_pid_zn,
     e_float, &paramRecord.s_Ku, &paramRecord.s_Tu },
   { "yd_p", c_yd_p, e_float, &paramRecord.yd_P },
