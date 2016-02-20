@@ -1665,7 +1665,7 @@ void actuatorTask(uint32_t currentMicros)
 
 void trimTask(uint32_t currentMicros)
 {
-  if(mode.autoTrim && fabsf(rollAngle) < 30) {
+  if(mode.autoTrim && fabsf(rollAngle) < 20) {
     neutralAlpha += clamp((min(targetAlpha, maxAutoAlpha) - neutralAlpha)/2/TRIM_HZ,
       -1.5/360/TRIM_HZ, 1.5/360/TRIM_HZ);
 //    neutralAlpha = clamp(neutralAlpha, paramRecord.alphaMin, maxAlpha*0.9);
