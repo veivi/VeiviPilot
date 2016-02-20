@@ -33,7 +33,7 @@ const struct ParamRecord paramDefaults = {
   -3.0/360,  12.0/360,
   1.0, 0.25, 10.0, 
   1.3, 0.25, 
-  2.0, 1.0, 0.33 };
+  2.0, 1.0, 0.1 };
 
 const struct NVStateRecord stateDefaults = { 0, 128, 1024, 400, 0, false, 0 };
 
@@ -168,6 +168,8 @@ void printParams()
   consolePrint(paramRecord.rudderDefl*90);
   consolePrint_P(PSTR(" neutral = "));
   consolePrint(paramRecord.rudderNeutral*90);
+  consolePrint_P(PSTR(" aile mix = "));
+  consolePrint(paramRecord.r_Mix);
   consolePrint_P(PSTR(" center = "));
   consolePrintLn(paramRecord.rudderZero*90);
   consoleNoteLn_P(PSTR("  Flap"));

@@ -193,7 +193,7 @@ bool armed = false;
 float neutralStick = 0.0, neutralAlpha, targetAlpha;
 float switchValue, tuningKnobValue, rpmOutput;
 Controller elevController, aileController, pusher;
-float autoAlphaP, maxAlpha, yawDamperP;
+float autoAlphaP, maxAlpha, yawDamperP, rudderMix;
 float accX, accY, accZ, altitude,  heading, rollAngle, pitchAngle, rollRate, pitchRate, yawRate;
 int cycleTimeCounter = 0;
 uint32_t prevMeasurement;
@@ -338,7 +338,7 @@ bool readSwitch()
 
 float readParameter()
 {
-  return (decodePWM(tuningKnobValue) + 1.0) / 2;
+  return ((decodePWM(tuningKnobValue) + 1.0) / 2 - 0.05) / 0.95;
 }
 
 float readRPM()
@@ -1111,7 +1111,7 @@ void configurationTask(uint32_t currentMicros)
 
     consoleNoteLn_P(PSTR("Test mode ENABLED"));
     
-  } else if(testMode && parameter < 0.05) {
+  } else if(testMode && parameter < 0) {
     testMode = false;
     
     consoleNoteLn_P(PSTR("Test mode DISABLED"));
@@ -1165,6 +1165,7 @@ void configurationTask(uint32_t currentMicros)
   autoAlphaP = paramRecord.o_P;
   maxAlpha = paramRecord.alphaMax;
   yawDamperP = paramRecord.yd_P;
+  rudderMix = paramRecord.r_Mix;
   yawFilter.setTau(paramRecord.yd_Tau/log(CONTROL_HZ));
   
   // Then apply test modes
@@ -1207,6 +1208,12 @@ void configurationTask(uint32_t currentMicros)
        maxAlpha = testGain = testGainLinear(10, 20);
        break;         
 
+     case 10:
+       // Aileron to rudder mix
+
+       rudderMix = testGain = testGainLinear(0, 1);
+       break;
+ 
      case 11:
        // Yaw damper gain
 
@@ -1220,7 +1227,7 @@ void configurationTask(uint32_t currentMicros)
        mode.yawDamper = true;
        yawFilter.setTau((testGain = testGainLinear(0, 1)) / log(CONTROL_HZ));
        break;
-     }
+    }
   }
       
   if(!mode.autoStick)
@@ -1512,20 +1519,6 @@ void controlTask(uint32_t currentMicros)
   
   controlCycleEnded = currentMicros;
   
-  // Rudder
-    
-  rudderOutput = rudderStick;
-
-  // Yaw damper
-
-  yawFilter.input(yawRate);
-  
-  if(mode.yawDamper)
-    rudderOutput -= yawFilter.output() * yawDamperP;
-  
-  if(mode.sensorFailSafe)
-    rudderOutput = rudderStick;
-    
   // Elevator control
     
   targetAlpha = 0.0;
@@ -1580,7 +1573,7 @@ void controlTask(uint32_t currentMicros)
     maxBank = 15.0;
 
   else if(mode.autoTrim)
-    maxBank -= 15.0*(neutralAlpha / maxAlpha);
+    maxBank -= 30.0*(neutralAlpha / maxAlpha);
 
   if(mode.sensorFailSafe)
     aileOutput = aileStick;
@@ -1609,6 +1602,20 @@ void controlTask(uint32_t currentMicros)
     aileOutput = aileController.output();
   }
  
+  // Rudder
+    
+  rudderOutput = rudderStick + aileOutput*rudderMix;
+
+  // Yaw damper
+
+  yawFilter.input(yawRate);
+  
+  if(mode.yawDamper)
+    rudderOutput -= yawFilter.output() * yawDamperP;
+  
+  if(mode.sensorFailSafe)
+    rudderOutput = rudderStick;
+    
   // Brake
     
   if(!mode.sensorFailSafe && gearOutput == 1)
