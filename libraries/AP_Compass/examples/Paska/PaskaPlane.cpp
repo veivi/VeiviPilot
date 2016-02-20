@@ -152,7 +152,6 @@ struct Task {
 struct ModeRecord {
   bool sensorFailSafe;
   bool rxFailSafe;
-  bool autoStick;
   bool autoAlpha;
   bool autoTrim;
   bool autoRudder;
@@ -269,7 +268,6 @@ void logConfig(void)
     + (mode.sensorFailSafe ? 16 : 0) 
     + (mode.wingLeveler ? 8 : 0) 
     + (mode.bankLimiter ? 4 : 0) 
-    + (mode.autoStick ? 2 : 0) 
     + (mode.autoAlpha ? 1 : 0)); 
     
   logGeneric(lc_target, targetAlpha*360);
@@ -1128,7 +1126,7 @@ void configurationTask(uint32_t currentMicros)
       
   mode.stabilizer = true;
   mode.bankLimiter = switchStateLazy;
-  mode.autoStick = mode.autoAlpha = mode.autoTrim = flapOutput > 0;
+  mode.autoAlpha = mode.autoTrim = flapOutput > 0;
   mode.autoRudder = false;
   mode.yawDamper = !switchStateLazy;
   
@@ -1148,7 +1146,7 @@ void configurationTask(uint32_t currentMicros)
   if(mode.rxFailSafe) {    
     // Receiver failsafe mode settings
     
-    mode.autoStick = mode.autoAlpha = mode.bankLimiter = true;
+    mode.autoAlpha = mode.bankLimiter = true;
     mode.autoRudder = mode.yawDamper = false;
     neutralStick = 0;
   }
@@ -1180,25 +1178,17 @@ void configurationTask(uint32_t currentMicros)
        aileController.setPID(testGain = testGainExpo(paramRecord.s_Ku), 0, 0);
        break;
             
-     case 2:
-       // Elevator stabilizer gain, outer loop disabled
-         
-       mode.autoStick = true;
-       mode.autoTrim = mode.autoAlpha = false;
-       elevController.setPID(testGain = testGainExpo(paramRecord.i_Ku), 0, 0);
-       break;
-         
      case 3:
        // Elevator stabilizer gain, outer loop enabled
          
-       mode.autoStick = mode.autoTrim = mode.autoAlpha = true;
+       mode.autoTrim = mode.autoAlpha = true;
        elevController.setPID(testGain = testGainExpo(paramRecord.i_Ku), 0, 0);
        break;
          
      case 4:
        // Auto alpha outer loop gain
          
-       mode.autoStick = mode.autoTrim = mode.autoAlpha = true;
+       mode.autoTrim = mode.autoAlpha = true;
        autoAlphaP = testGain = testGainExpo(paramRecord.o_P);
        break;
          
@@ -1230,13 +1220,12 @@ void configurationTask(uint32_t currentMicros)
     }
   }
       
-  if(!mode.autoStick)
-    neutralStick = elevStick;
-
   alphaFilter.input(alpha);
   
-  if(!mode.autoAlpha)
+  if(!mode.autoAlpha) { 
+    neutralStick = elevStick;
     neutralAlpha = clamp(alphaFilter.output(), paramRecord.alphaMin, maxAlpha);
+  }
 }
 
 void loopTask(uint32_t currentMicros)
@@ -1506,7 +1495,7 @@ float randomNum(float small, float large)
   return small + (large-small)*(float) (rand() % 1000) / 1000;
 }
 
-#define maxAutoAlpha (maxAlpha/square(1.1))
+#define maxAutoAlpha (maxAlpha/square(1.1))  // Stall speed + 10%
 
 void controlTask(uint32_t currentMicros)
 {
@@ -1522,39 +1511,39 @@ void controlTask(uint32_t currentMicros)
   // Elevator control
     
   targetAlpha = 0.0;
-
-  if(mode.autoStick) {
+  elevOutput = elevStick;
+ 
+  if(mode.autoAlpha) {
     const float effStick = applyNullZone(elevStick - neutralStick);
-    float targetRate = 0.5*effStick;
     
-    if(mode.autoAlpha) {  
-      if(mode.rxFailSafe)
-	targetAlpha = maxAutoAlpha;
-      else {
-	const float fract_c = 1.0/3;
-	const float strength_c = max(effStick-(1.0-fract_c), 0)/fract_c;
-	const float maxTargetAlpha_c =
-	  mixValue(strength_c, maxAutoAlpha, maxAlpha);
+    if(mode.rxFailSafe)
+      targetAlpha = maxAutoAlpha;
+    else {
+      const float fract_c = 1.0/3;
+      const float strength_c = max(effStick-(1.0-fract_c), 0)/fract_c;
+      const float maxTargetAlpha_c =
+	mixValue(strength_c, maxAutoAlpha, maxAlpha);
 
-	targetAlpha = clamp(neutralAlpha
-			    + effStick*(maxAlpha-paramRecord.alphaMin)/2,
-			    paramRecord.alphaMin, maxTargetAlpha_c);
-      }
+      targetAlpha = clamp(neutralAlpha
+			  + effStick*(maxAlpha-paramRecord.alphaMin)/2,
+			  paramRecord.alphaMin, maxTargetAlpha_c);
+    }
 	
-      targetRate = (targetAlpha - alpha) * autoAlphaP;
-      
-    } else
-      targetRate = min(targetRate, (maxAlpha - alpha) * autoAlphaP);
+    float targetRate = (targetAlpha - alpha) * autoAlphaP;      
       
     elevController.input(targetRate - pitchRate, controlCycle);
   } else {
     elevController.reset(elevStick, 0.0);
   }
     
-  if(mode.autoStick && !mode.sensorFailSafe && !alphaFailed)
-    elevOutput = elevController.output();
-  else
-    elevOutput = elevStick;
+  if(!mode.sensorFailSafe && mode.autoAlpha) {
+    // Feed-forward part
+    elevOutput = 0; // targetAlpga*paramRecord.ff_A + paramRecord.ff_B;
+    
+    if(!alphaFailed)
+      // Feedback (PID output)
+      elevOutput += elevController.output();
+  }
 
   // Pusher
 
@@ -1566,7 +1555,6 @@ void controlTask(uint32_t currentMicros)
   // Aileron
     
   float maxBank = 45.0;
-    
   float targetRate = 270.0/360*aileStick;
     
   if(mode.rxFailSafe)
