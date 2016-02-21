@@ -33,7 +33,9 @@ const struct ParamRecord paramDefaults = {
   -3.0/360,  12.0/360,
   1.0, 0.25, 10.0, 
   1.3, 0.25, 
-  2.0, 1.0, 0.1 };
+  2.0, 1.0, 0.1,
+  0.0, 0.0,
+  true };
 
 const struct NVStateRecord stateDefaults = { 0, 128, 1024, 400, 0, false, 0 };
 
@@ -150,6 +152,9 @@ void printParams()
   consolePrint(paramRecord.yd_P, 4);
   consolePrint_P(PSTR(" Tau = "));
   consolePrintLn(paramRecord.yd_Tau, 4);
+  consoleNote_P(PSTR("  Using "));
+  consolePrint_P(paramRecord.c_PID ? PSTR("PID") : PSTR("PI"));
+  consolePrintLn_P(PSTR(" controllers"));
   consoleNote_P(PSTR("  Alpha min = "));
   consolePrint(paramRecord.alphaMin*360);
   consolePrint_P(PSTR("  max = "));

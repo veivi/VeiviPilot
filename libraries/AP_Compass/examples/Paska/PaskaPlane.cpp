@@ -191,7 +191,7 @@ int initCount = 5;
 bool armed = false;
 float neutralStick = 0.0, neutralAlpha, targetAlpha;
 float switchValue, tuningKnobValue, rpmOutput;
-Controller elevController, aileController, pusher;
+Controller elevCtrl, aileCtrl, pushCtrl;
 float autoAlphaP, maxAlpha, yawDamperP, rudderMix;
 float accX, accY, accZ, altitude,  heading, rollAngle, pitchAngle, rollRate, pitchRate, yawRate;
 int cycleTimeCounter = 0;
@@ -496,7 +496,7 @@ void executeCommand(const char *buf, int bufLen)
     // Simple variable
     //
     
-    for(int i = 0; command.var[i]; i++) {
+    for(int i = 0; i < numParams && command.var[i]; i++) {
       switch(command.varType) {
       case e_string:
 	strncpy((char*) command.var[i], paramText[i], NAME_LEN-1);
@@ -700,10 +700,12 @@ void executeCommand(const char *buf, int bufLen)
 	consolePrint_P(PSTR(" IAS_FAILED"));
       if(alphaBuffer.warn)
 	consolePrint_P(PSTR(" ALPHA_BUFFER"));
-      if(pusher.warn)
+      if(pushCtrl.warn)
 	consolePrint_P(PSTR(" PUSHER"));
-      if(elevController.warn)
+      if(elevCtrl.warn)
 	consolePrint_P(PSTR(" AUTOSTICK"));
+      if(aileCtrl.warn)
+	consolePrint_P(PSTR(" STABILIZER"));
       
       consolePrintLn("");
 
@@ -713,9 +715,9 @@ void executeCommand(const char *buf, int bufLen)
       break;
 
     case c_reset:
-      pciWarn = alphaWarn = alphaFailed = pusher.warn = elevController.warn
+      pciWarn = alphaWarn = alphaFailed = pushCtrl.warn = elevCtrl.warn
 	= alphaBuffer.warn = eepromWarn = eepromFailed = ppmWarnShort
-	= ppmWarnSlow = false;
+	= ppmWarnSlow = aileCtrl.warn = false;
       consoleNoteLn_P(PSTR("Warning flags reset"));
       break;
     
@@ -1152,14 +1154,17 @@ void configurationTask(uint32_t currentMicros)
   }
   
   // Default controller settings
-     
-  elevController
-    .setZieglerNicholsPID(paramRecord.i_Ku, paramRecord.i_Tu);
-  pusher
-    .setZieglerNicholsPID(paramRecord.i_Ku, paramRecord.i_Tu);
-  aileController
-    .setZieglerNicholsPID(paramRecord.s_Ku, paramRecord.s_Tu);
 
+  if(paramRecord.c_PID) { 
+    elevCtrl.setZieglerNicholsPID(paramRecord.i_Ku, paramRecord.i_Tu);
+    pushCtrl.setZieglerNicholsPID(paramRecord.i_Ku, paramRecord.i_Tu);
+    aileCtrl.setZieglerNicholsPID(paramRecord.s_Ku, paramRecord.s_Tu);
+  } else  {
+    elevCtrl.setZieglerNicholsPI(paramRecord.i_Ku, paramRecord.i_Tu);
+    pushCtrl.setZieglerNicholsPI(paramRecord.i_Ku, paramRecord.i_Tu);
+    aileCtrl.setZieglerNicholsPI(paramRecord.s_Ku, paramRecord.s_Tu);
+  }
+  
   autoAlphaP = paramRecord.o_P;
   maxAlpha = paramRecord.alphaMax;
   yawDamperP = paramRecord.yd_P;
@@ -1175,14 +1180,14 @@ void configurationTask(uint32_t currentMicros)
        // Wing stabilizer gain
          
        mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
-       aileController.setPID(testGain = testGainExpo(paramRecord.s_Ku), 0, 0);
+       aileCtrl.setPID(testGain = testGainExpo(paramRecord.s_Ku), 0, 0);
        break;
             
      case 3:
        // Elevator stabilizer gain, outer loop enabled
          
        mode.autoTrim = mode.autoAlpha = true;
-       elevController.setPID(testGain = testGainExpo(paramRecord.i_Ku), 0, 0);
+       elevCtrl.setPID(testGain = testGainExpo(paramRecord.i_Ku), 0, 0);
        break;
          
      case 4:
@@ -1523,8 +1528,7 @@ void controlTask(uint32_t currentMicros)
     const float maxTargetAlpha_c =
       mixValue(strength_c, maxAutoAlpha, maxAlpha);
 
-    targetAlpha = clamp(neutralAlpha
-			+ effStick*(maxAlpha-paramRecord.alphaMin)/2,
+    targetAlpha = clamp(neutralAlpha + effStick*maxAlpha/2,
 			paramRecord.alphaMin, maxTargetAlpha_c);
   }
 	
@@ -1533,9 +1537,9 @@ void controlTask(uint32_t currentMicros)
   float feedForward = targetAlpha*360/90*paramRecord.ff_A + paramRecord.ff_B;
 
   if(mode.autoAlpha)
-    elevController.input(targetPitchRate - pitchRate, controlCycle);
+    elevCtrl.input(targetPitchRate - pitchRate, controlCycle);
   else
-    elevController.reset(elevStick - feedForward, 0.0);
+    elevCtrl.reset(elevStick - feedForward, 0.0);
     
   if(!mode.sensorFailSafe && mode.autoAlpha) {
     // Feed-forward part
@@ -1543,20 +1547,21 @@ void controlTask(uint32_t currentMicros)
     
     if(!alphaFailed)
       // Feedback (PID output)
-      elevOutput += elevController.output();
+      elevOutput += elevCtrl.output();
   }
 
   // Pusher
 
-  pusher.input((maxAlpha - alpha)*paramRecord.o_P - pitchRate, controlCycle);
+  pushCtrl.input((maxAlpha - alpha)*paramRecord.o_P - pitchRate, controlCycle);
 
   if(!mode.sensorFailSafe && !alphaFailed)
-    elevOutput = min(elevOutput, pusher.output());
+    elevOutput = min(elevOutput, pushCtrl.output());
   
   // Aileron
-    
+
+  const float maxRollRate_c = 270/360.0;
   float maxBank = 45.0;
-  float targetRollRate = 270.0/360*aileStick;
+  float targetRollRate = maxRollRate_c*aileStick;
     
   if(mode.rxFailSafe)
     maxBank = 15.0;
@@ -1571,24 +1576,30 @@ void controlTask(uint32_t currentMicros)
     // Simple proportional wing leveler
         
     aileOutput = (aileStick*maxBank - rollAngle) / 90;
-    aileController.reset(aileOutput, targetRollRate - rollRate);
+    aileCtrl.reset(aileOutput, targetRollRate - rollRate);
       
   } else {
     // Roll stabilizer enabled
-      
+
+    const float factor_c = 1.0/60;
+    
     if(mode.wingLeveler)
       // Wing leveler enabled
         
-      targetRollRate = clamp((aileStick*maxBank - rollAngle) / 90, -0.75, 0.75);
+      targetRollRate =
+	clamp((aileStick*maxBank - rollAngle)*factor_c,
+	      -maxRollRate_c, maxRollRate_c);
+
     else if(mode.bankLimiter) {
       // No leveling but limit bank
                 
-      targetRollRate = clamp(targetRollRate,
-			 (-maxBank - rollAngle) / 90, (maxBank - rollAngle) / 90);
+      targetRollRate =
+	clamp(targetRollRate,
+	      (-maxBank - rollAngle)*factor_c, (maxBank - rollAngle)*factor_c);
     }
       
-    aileController.input(targetRollRate - rollRate, controlCycle);
-    aileOutput = aileController.output();
+    aileCtrl.input(targetRollRate - rollRate, controlCycle);
+    aileOutput = aileCtrl.output();
   }
  
   // Rudder
