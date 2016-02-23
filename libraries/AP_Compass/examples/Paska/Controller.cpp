@@ -77,9 +77,11 @@ void Controller::input(float err, float d) {
     consoleNoteLn_P(PSTR("Controller delta less than 1 ms, iteration ignored"));
     return;
   }
-    
-  errorFilter.input(err - prevErr);
+
+  D = err - prevErr;
   prevErr = err;
+  
+  errorFilter.input(D);
   delta = d;
   
   // float range = 1.0 - Kp*err;
@@ -95,6 +97,7 @@ void Controller::input(float err, float d) {
 float Controller::output(void) {
   float diffTerm = 0.0, diffLimit = 0.15;
   if(Kd != 0.0)
-    diffTerm = clamp(Kd*errorFilter.output()/delta, -diffLimit, diffLimit);
+    // diffTerm = clamp(Kd*errorFilter.output()/delta, -diffLimit, diffLimit);
+    diffTerm = clamp(Kd*D/delta, -diffLimit, diffLimit);
   return clamp(Kp*prevErr + I + diffTerm, -1, 1);
 }

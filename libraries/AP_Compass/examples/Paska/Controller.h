@@ -20,7 +20,7 @@ public:
   
   bool warn;
 private:
-  float I, delta, prevErr, Kp, Ki, Kd;
+  float I, D, delta, prevErr, Kp, Ki, Kd;
   Median3Filter errorFilter;
 };
 

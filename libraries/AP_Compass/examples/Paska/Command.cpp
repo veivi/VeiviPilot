@@ -63,6 +63,7 @@ const struct Command commands[] PROGMEM = {
   { "talk", c_talk },
   { "rattle", c_rattle },
   { "defaults", c_defaults },
+  { "console", c_console },
   { "", c_invalid },  
 };
 

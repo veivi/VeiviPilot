@@ -204,7 +204,7 @@ AlphaBuffer alphaBuffer, pressureBuffer;
 float controlCycle = 10.0e-3;
 uint32_t idleMicros;
 float idleAvg, logBandWidth, ppmFreq;
-bool looping;
+bool looping, consoleConnected;
     
 float elevOutput = 0, aileOutput = 0, flapOutput = 0, gearOutput = 1, brakeOutput = 0, rudderOutput = 0;
 
@@ -595,7 +595,12 @@ void executeCommand(const char *buf, int bufLen)
       defaultParams();
       storeNVState();
       break;
-    
+
+    case c_console:
+      consoleNoteLn_P(PSTR("Console CONNECTED"));
+      consoleConnected = true;
+      break;
+      
     case c_dump:
       if(numParams > 0)
 	logDump(param[0]);
@@ -1046,7 +1051,7 @@ void configurationTask(uint32_t currentMicros)
       consolePrintLn(switchState ? "ON" : "OFF");
 
       if(switchState) {
-        if(armed && !logEnabled)
+        if(armed && !logEnabled && !consoleConnected)
           logEnable();
           
         consoleNoteLn_P(PSTR("Wing leveler ENABLED"));
@@ -1238,9 +1243,9 @@ void loopTask(uint32_t currentMicros)
   if(looping) {
     consolePrint("alpha = ");
     consolePrint(alpha*360);
-    /*    consolePrint(" targAlpha = ");
+    consolePrint(" targAlpha = ");
     consolePrint(targetAlpha*360);
-    consolePrint(" dynPress = ");
+    /*    consolePrint(" dynPress = ");
     consolePrint(dynPressure);
     */
 
@@ -1527,14 +1532,15 @@ void controlTask(uint32_t currentMicros)
     const float strength_c = max(effStick-(1.0-fract_c), 0)/fract_c;
     const float maxTargetAlpha_c =
       mixValue(strength_c, maxAutoAlpha, maxAlpha);
+    const float stickRange_c = min(20.0, 90/paramRecord.ff_A);
 
-    targetAlpha = clamp(neutralAlpha + effStick*maxAlpha/2,
+    targetAlpha = clamp(neutralAlpha + effStick*stickRange_c/360,
 			paramRecord.alphaMin, maxTargetAlpha_c);
   }
 	
-  float targetPitchRate = (targetAlpha - alpha) * autoAlphaP;      
-
   float feedForward = targetAlpha*360/90*paramRecord.ff_A + paramRecord.ff_B;
+
+  float targetPitchRate = (targetAlpha - alpha) * autoAlphaP;      
 
   if(mode.autoAlpha)
     elevCtrl.input(targetPitchRate - pitchRate, controlCycle);
