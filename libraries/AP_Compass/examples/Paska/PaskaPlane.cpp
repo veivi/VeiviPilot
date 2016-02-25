@@ -1204,7 +1204,8 @@ void configurationTask(uint32_t currentMicros)
          
      case 7:
        // Max alpha
-         
+
+       mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
        maxAlpha = testGain = testGainLinear(10, 20);
        break;         
 
@@ -1565,24 +1566,30 @@ void controlTask(uint32_t currentMicros)
   
   // Aileron
 
-  const float maxRollRate_c = 270/360.0;
+  float maxRollRate = 270/360.0;
   float maxBank = 45.0;
-  float targetRollRate = maxRollRate_c*aileStick;
     
   if(mode.rxFailSafe)
     maxBank = 15.0;
 
-  else if(mode.autoTrim)
-    maxBank -= 30.0*(neutralAlpha / maxAlpha);
-
-  if(mode.sensorFailSafe)
-    aileOutput = aileStick;
+  else if(mode.autoTrim) {
     
-  else if(!mode.stabilizer) {
+    maxBank -= 30.0*(neutralAlpha / maxAutoAlpha);
+    maxRollRate /= 1 + neutralAlpha / maxAutoAlpha;
+  }
+  
+  float targetRollRate = maxRollRate*aileStick;
+
+  if(mode.sensorFailSafe) {
+    
+    aileOutput = aileStick;
+    aileCtrl.reset(aileOutput, 0);
+    
+  } else if(!mode.stabilizer) {
     // Simple proportional wing leveler
         
     aileOutput = (aileStick*maxBank - rollAngle) / 90;
-    aileCtrl.reset(aileOutput, targetRollRate - rollRate);
+    aileCtrl.reset(aileOutput, 0);
       
   } else {
     // Roll stabilizer enabled
@@ -1594,7 +1601,7 @@ void controlTask(uint32_t currentMicros)
         
       targetRollRate =
 	clamp((aileStick*maxBank - rollAngle)*factor_c,
-	      -maxRollRate_c, maxRollRate_c);
+	      -maxRollRate, maxRollRate);
 
     else if(mode.bankLimiter) {
       // No leveling but limit bank
