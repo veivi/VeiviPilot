@@ -1206,13 +1206,13 @@ void configurationTask(uint32_t currentMicros)
        // Max alpha
 
        mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
-       maxAlpha = testGain = testGainLinear(10, 20);
+       maxAlpha = testGain = testGainLinear(10.0/360, 20.0/360);
        break;         
 
      case 10:
        // Aileron to rudder mix
 
-       rudderMix = testGain = testGainLinear(0, 1);
+       rudderMix = testGain = testGainExpo(paramRecord.r_Mix);
        break;
  
      case 11:
@@ -1566,7 +1566,7 @@ void controlTask(uint32_t currentMicros)
   
   // Aileron
 
-  float maxRollRate = 270/360.0;
+  float maxRollRate = 180/360.0;
   float maxBank = 45.0;
     
   if(mode.rxFailSafe)

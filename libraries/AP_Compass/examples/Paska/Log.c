@@ -13,7 +13,7 @@ struct LogChannel logChannels[] = {
    { lc_pitch, "PTCH", -90, 90 },
    { lc_pitchrate, "PRTE", -360, 360 },
    { lc_heading, "HEAD", -180, 180},
-   { lc_yawrate, "YRTE", -180, 180},
+   { lc_yawrate, "YRTE", -360, 360},
    { lc_ailestick, "ASTK", -1, 1 },
    { lc_elevstick, "ESTK", -1, 1 },
    { lc_rudstick, "RSTK", -1, 1 },
