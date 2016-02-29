@@ -67,7 +67,8 @@ typedef enum {
   c_name,
   c_ff,
   c_pid,
-  c_console
+  c_console,
+  c_wl
 } token_t;
 
 typedef enum

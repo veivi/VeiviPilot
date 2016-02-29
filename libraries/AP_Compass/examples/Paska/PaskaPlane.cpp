@@ -773,7 +773,7 @@ void alphaTask(uint32_t currentMicros)
     alphaBuffer.input((float) raw / (1L<<(8*sizeof(raw))));
 }
 
-#define NULLZONE 0.1
+#define NULLZONE 0.075
 
 float applyNullZone(float value)
 {
@@ -1135,7 +1135,7 @@ void configurationTask(uint32_t currentMicros)
   mode.bankLimiter = switchStateLazy;
   mode.autoAlpha = mode.autoTrim = flapOutput > 0;
   mode.autoRudder = false;
-  mode.yawDamper = !switchStateLazy;
+  mode.yawDamper = false; // !switchStateLazy;
   
   // Receiver fail detection
 
@@ -1160,16 +1160,14 @@ void configurationTask(uint32_t currentMicros)
   
   // Default controller settings
 
-  if(paramRecord.c_PID) { 
-    elevCtrl.setZieglerNicholsPID(paramRecord.i_Ku, paramRecord.i_Tu);
-    pushCtrl.setZieglerNicholsPID(paramRecord.i_Ku, paramRecord.i_Tu);
+  if(paramRecord.c_PID)
     aileCtrl.setZieglerNicholsPID(paramRecord.s_Ku, paramRecord.s_Tu);
-  } else  {
-    elevCtrl.setZieglerNicholsPI(paramRecord.i_Ku, paramRecord.i_Tu);
-    pushCtrl.setZieglerNicholsPI(paramRecord.i_Ku, paramRecord.i_Tu);
+  else
     aileCtrl.setZieglerNicholsPI(paramRecord.s_Ku, paramRecord.s_Tu);
-  }
-  
+
+  elevCtrl.setZieglerNicholsPID(paramRecord.i_Ku, paramRecord.i_Tu);
+  pushCtrl.setZieglerNicholsPID(paramRecord.i_Ku, paramRecord.i_Tu);
+
   autoAlphaP = paramRecord.o_P;
   maxAlpha = paramRecord.alphaMax;
   yawDamperP = paramRecord.yd_P;
@@ -1597,15 +1595,20 @@ void controlTask(uint32_t currentMicros)
     const float factor_c = 1.0/60;
     
     if(mode.wingLeveler)
-      // Wing leveler enabled
+      // Strong leveler enabled
         
       targetRollRate =
 	clamp((aileStick*maxBank - rollAngle)*factor_c,
 	      -maxRollRate, maxRollRate);
 
     else if(mode.bankLimiter) {
-      // No leveling but limit bank
-                
+      // Bank limiter + weak leveling
+
+      const float weakLevelerGain = 0.05;
+      
+      targetRollRate -=
+	clamp(rollAngle*factor_c, -weakLevelerGain, weakLevelerGain);
+      
       targetRollRate =
 	clamp(targetRollRate,
 	      (-maxBank - rollAngle)*factor_c, (maxBank - rollAngle)*factor_c);
