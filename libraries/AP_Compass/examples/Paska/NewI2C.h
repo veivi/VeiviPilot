@@ -14,12 +14,12 @@ class NewI2C
     void setSpeed(uint8_t); 
     void pullup(uint8_t);
     uint8_t wait(uint8_t);
-    uint8_t write(uint8_t, uint8_t, const uint8_t*, int);
-    uint8_t write(uint8_t, uint16_t, const uint8_t*, int);
-    uint8_t write(uint8_t, const uint8_t*, int, const uint8_t*, int);
-    uint8_t read(uint8_t, uint8_t, uint8_t*, int);
-    uint8_t read(uint8_t, uint16_t, uint8_t*, int);
-    uint8_t read(uint8_t, const uint8_t*, int, uint8_t*, int);
+    uint8_t write(uint8_t, uint8_t, const uint8_t*, uint8_t);
+    uint8_t write(uint8_t, uint16_t, const uint8_t*, uint8_t);
+    uint8_t write(uint8_t, const uint8_t*, uint8_t, const uint8_t*, uint8_t);
+    uint8_t read(uint8_t, uint8_t, uint8_t*, uint8_t);
+    uint8_t read(uint8_t, uint16_t, uint8_t*, uint8_t);
+    uint8_t read(uint8_t, const uint8_t*, uint8_t, uint8_t*, uint8_t);
 
 
   private:

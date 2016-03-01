@@ -62,17 +62,6 @@ bool handleFailure(const char *name, bool fail, bool *warn, bool *failed, int *c
 
 void NewI2C::begin()
 {
-  #if defined(__AVR_ATmega168__) || defined(__AVR_ATmega8__) || defined(__AVR_ATmega328P__)
-    // activate internal pull-ups for twi
-    // as per note from atmega8 manual pg167
-    sbi(PORTC, 4);
-    sbi(PORTC, 5);
-  #else
-    // activate internal pull-ups for twi
-    // as per note from atmega128 manual pg204
-    sbi(PORTD, 0);
-    sbi(PORTD, 1);
-  #endif
   // initialize twi prescaler and bit rate
   cbi(TWSR, TWPS0);
   cbi(TWSR, TWPS1);
@@ -188,22 +177,22 @@ uint8_t NewI2C::wait(uint8_t address)
   }
 }
 
-uint8_t NewI2C::write(uint8_t address, uint8_t registerAddress, const uint8_t *data, int numberBytes)
+uint8_t NewI2C::write(uint8_t address, uint8_t registerAddress, const uint8_t *data, uint8_t numberBytes)
 {
   return write(address, &registerAddress, sizeof(registerAddress), data, numberBytes);
 }
 
-uint8_t NewI2C::write(uint8_t address, uint16_t memAddress, const uint8_t *data, int numberBytes)
+uint8_t NewI2C::write(uint8_t address, uint16_t memAddress, const uint8_t *data, uint8_t numberBytes)
 {
   uint8_t addrArray[sizeof(memAddress)];
   
-  for(int i = 0; i < sizeof(memAddress); i++)
+  for(uint8_t i = 0; i < sizeof(memAddress); i++)
     addrArray[i] = (memAddress >> 8*(sizeof(memAddress) - i - 1)) & 0xFF;
     
   return write(address, addrArray, sizeof(addrArray), data, numberBytes);
 }
 
-uint8_t NewI2C::write(uint8_t address, const uint8_t *addrArray, int addrSize, const uint8_t *data, int numberBytes)
+uint8_t NewI2C::write(uint8_t address, const uint8_t *addrArray, uint8_t addrSize, const uint8_t *data, uint8_t numberBytes)
 {
   returnStatus = start();
   if(returnStatus){return(returnStatus);}
@@ -215,7 +204,7 @@ uint8_t NewI2C::write(uint8_t address, const uint8_t *addrArray, int addrSize, c
     return(returnStatus);
   }
 
-  for(int i = 0; i < addrSize; i++) {
+  for(uint8_t i = 0; i < addrSize; i++) {
     returnStatus = transmitByte(addrArray[i]);
     if(returnStatus)
     {
@@ -224,7 +213,7 @@ uint8_t NewI2C::write(uint8_t address, const uint8_t *addrArray, int addrSize, c
     }
   }
 
-  for (int i = 0; i < numberBytes; i++)
+  for (uint8_t i = 0; i < numberBytes; i++)
   {
     returnStatus = transmitByte(data[i]);
     if(returnStatus)
@@ -242,22 +231,22 @@ uint8_t NewI2C::write(uint8_t address, const uint8_t *addrArray, int addrSize, c
   return returnStatus;
 }
 
-uint8_t NewI2C::read(uint8_t address, uint8_t registerAddress, uint8_t *dataBuffer, int numberBytes)
+uint8_t NewI2C::read(uint8_t address, uint8_t registerAddress, uint8_t *dataBuffer, uint8_t numberBytes)
 {
   return read(address, &registerAddress, sizeof(registerAddress), dataBuffer, numberBytes);
 }
 
-uint8_t NewI2C::read(uint8_t address, uint16_t memAddress, uint8_t *dataBuffer, int numberBytes)
+uint8_t NewI2C::read(uint8_t address, uint16_t memAddress, uint8_t *dataBuffer, uint8_t numberBytes)
 {
   uint8_t addrArray[sizeof(memAddress)];
   
-  for(int i = 0; i < sizeof(memAddress); i++)
+  for(uint8_t i = 0; i < sizeof(memAddress); i++)
     addrArray[i] = (memAddress >> 8*(sizeof(memAddress) - i - 1)) & 0xFF;
     
   return read(address, addrArray, sizeof(addrArray), dataBuffer, numberBytes);
 }
 
-uint8_t NewI2C::read(uint8_t address, const uint8_t *addrArray, int addrSize, uint8_t *dataBuffer, int numberBytes)
+uint8_t NewI2C::read(uint8_t address, const uint8_t *addrArray, uint8_t addrSize, uint8_t *dataBuffer, uint8_t numberBytes)
 {
   if(numberBytes < 1)
     return 0;
@@ -273,7 +262,7 @@ uint8_t NewI2C::read(uint8_t address, const uint8_t *addrArray, int addrSize, ui
       return(returnStatus);
     }
 
-    for(int i = 0; i < addrSize; i++) {
+    for(uint8_t i = 0; i < addrSize; i++) {
       returnStatus = transmitByte(addrArray[i]);
       if(returnStatus)
       {
@@ -297,7 +286,7 @@ uint8_t NewI2C::read(uint8_t address, const uint8_t *addrArray, int addrSize, ui
     return(returnStatus);
   }
   
-  for(int i = 0; i < numberBytes; i++)
+  for(uint8_t i = 0; i < numberBytes; i++)
   {
     returnStatus = receiveByte(i < (numberBytes - 1));
     

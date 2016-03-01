@@ -1592,7 +1592,7 @@ void controlTask(uint32_t currentMicros)
   } else {
     // Roll stabilizer enabled
 
-    const float factor_c = 1.0/60;
+    const float factor_c = maxRollRate/60;
     
     if(mode.wingLeveler)
       // Strong leveler enabled
@@ -1604,7 +1604,7 @@ void controlTask(uint32_t currentMicros)
     else if(mode.bankLimiter) {
       // Bank limiter + weak leveling
 
-      const float weakLevelerGain = 0.05;
+      const float weakLevelerGain = paramRecord.wl_Gain;
       
       targetRollRate -=
 	clamp(rollAngle*factor_c, -weakLevelerGain, weakLevelerGain);
