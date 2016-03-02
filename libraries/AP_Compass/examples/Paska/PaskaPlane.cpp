@@ -992,6 +992,8 @@ float testGainLinear(float start, float stop)
   return start + parameter*(stop - start);
 }
 
+#define maxAutoAlpha (maxAlpha/square(1.1))  // Stall speed + 10%
+
 void configurationTask(uint32_t currentMicros)
 {   
   static bool pulseArmed = false, pulsePolarity = false;
@@ -1153,7 +1155,7 @@ void configurationTask(uint32_t currentMicros)
   if(mode.rxFailSafe) {    
     // Receiver failsafe mode settings
     
-    mode.autoAlpha = mode.bankLimiter = true;
+    mode.autoAlpha = mode.autoTrim = mode.bankLimiter = true;
     mode.autoRudder = mode.yawDamper = false;
     neutralStick = 0;
   }
@@ -1504,8 +1506,6 @@ float randomNum(float small, float large)
   return small + (large-small)*(float) (rand() % 1000) / 1000;
 }
 
-#define maxAutoAlpha (maxAlpha/square(1.1))  // Stall speed + 10%
-
 void controlTask(uint32_t currentMicros)
 {
   // Cycle time bookkeeping 
@@ -1564,32 +1564,27 @@ void controlTask(uint32_t currentMicros)
   
   // Aileron
 
-  float maxRollRate = 180/360.0;
+  float maxRollRate = 270/360.0;
   float maxBank = 45.0;
     
-  if(mode.rxFailSafe)
-    maxBank = 15.0;
-
-  else if(mode.autoTrim) {
+  if(mode.autoTrim) {
     const float slowDown = neutralAlpha / maxAutoAlpha;
+    
     maxBank /= 1 + slowDown;
     maxRollRate /= 1 + slowDown;
   }
   
   float targetRollRate = maxRollRate*aileStick;
 
-  if(mode.sensorFailSafe) {
+  if(mode.sensorFailSafe || !mode.stabilizer) {
+
+    // Failsafe/stabilizer disabled
     
     aileOutput = aileStick;
     aileCtrl.reset(aileOutput, 0);
     
-  } else if(!mode.stabilizer) {
-    // Simple proportional wing leveler
-        
-    aileOutput = (aileStick*maxBank - rollAngle) / 90;
-    aileCtrl.reset(aileOutput, 0);
-      
   } else {
+    
     // Roll stabilizer enabled
 
     const float factor_c = maxRollRate/60;
