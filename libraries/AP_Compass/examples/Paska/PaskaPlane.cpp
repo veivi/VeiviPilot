@@ -1706,18 +1706,16 @@ void backgroundTask(uint32_t durationMicros)
 
 void heartBeatTask(uint32_t durationMicros)
 {  
-  static uint32_t count;
+  static uint32_t count = 0;
 
   if(!talk)
     return;
   
-  if(logReady(false)) {
-    datagramTxStart(DG_HEARTBEAT);
-    datagramTxOut((uint8_t*) &count, sizeof(count));
-    datagramTxEnd();
-    count++;   
-  } else
-    count = 1;
+  datagramTxStart(DG_HEARTBEAT);
+  datagramTxOut((uint8_t*) &count, sizeof(count));
+  datagramTxEnd();
+  
+  count++;   
 }
 
 void blinkTask(uint32_t currentMicros)
