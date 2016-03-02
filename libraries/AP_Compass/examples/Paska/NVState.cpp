@@ -149,8 +149,8 @@ void printParams()
   consolePrint(paramRecord.s_Ku, 4);
   consolePrint_P(PSTR(" Tu = "));
   consolePrintLn(paramRecord.s_Tu, 4);
-  consoleNote_P(PSTR("    Weak leveling gain = "));
-  consolePrintLn(paramRecord.wl_Gain, 4);
+  consoleNote_P(PSTR("    Weak leveling limit angle = "));
+  consolePrintLn(paramRecord.wl_Limit, 4);
   consoleNote_P(PSTR("    Using "));
   consolePrint_P(paramRecord.c_PID ? PSTR("PID") : PSTR("PI"));
   consolePrintLn_P(PSTR(" controller"));

@@ -1571,9 +1571,9 @@ void controlTask(uint32_t currentMicros)
     maxBank = 15.0;
 
   else if(mode.autoTrim) {
-    
-    maxBank -= 30.0*(neutralAlpha / maxAutoAlpha);
-    maxRollRate /= 1 + neutralAlpha / maxAutoAlpha;
+    const float slowDown = neutralAlpha / maxAutoAlpha;
+    maxBank /= 1 + slowDown;
+    maxRollRate /= 1 + slowDown;
   }
   
   float targetRollRate = maxRollRate*aileStick;
@@ -1597,17 +1597,13 @@ void controlTask(uint32_t currentMicros)
     if(mode.wingLeveler)
       // Strong leveler enabled
         
-      targetRollRate =
-	clamp((aileStick*maxBank - rollAngle)*factor_c,
-	      -maxRollRate, maxRollRate);
+      targetRollRate = clamp(-rollAngle*factor_c, -maxRollRate, maxRollRate);
 
     else if(mode.bankLimiter) {
       // Bank limiter + weak leveling
 
-      const float weakLevelerGain = paramRecord.wl_Gain;
-      
       targetRollRate -=
-	clamp(rollAngle*factor_c, -weakLevelerGain, weakLevelerGain);
+	factor_c*clamp(rollAngle, -paramRecord.wl_Limit, paramRecord.wl_Limit);
       
       targetRollRate =
 	clamp(targetRollRate,

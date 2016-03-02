@@ -26,7 +26,7 @@ struct ParamRecord {
   float s_Ku, s_Tu;
   float yd_P, yd_Tau, r_Mix;
   float ff_A, ff_B;
-  float wl_Gain;
+  float wl_Limit;
   bool c_PID;
   };
 
