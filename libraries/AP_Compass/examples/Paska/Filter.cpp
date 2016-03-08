@@ -30,7 +30,12 @@ float clamp(float value, float a, float b)
 
 float mixValue(float mixRatio, float a, float b)
 {
-  return (1.0 - mixRatio)*a + mixRatio*b;
+  if(mixRatio < 0)
+    return a;
+  else if(mixRatio > 1)
+    return b;
+  else
+    return (1.0 - mixRatio)*a + mixRatio*b;
 }
 
 void Median3Filter::input(float v)

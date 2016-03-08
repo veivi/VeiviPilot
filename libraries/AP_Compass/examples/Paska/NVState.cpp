@@ -36,7 +36,8 @@ const struct ParamRecord paramDefaults = {
   2.0, 1.0, 0.1,
   0.0, 0.0,
   0.0,
-  true };
+  true,
+  12, 25 };
 
 const struct NVStateRecord stateDefaults = { 0, 128, 1024, 400, 0, false, 0 };
 
@@ -162,6 +163,10 @@ void printParams()
   consolePrint(paramRecord.alphaMin*360);
   consolePrint_P(PSTR("  max = "));
   consolePrintLn(paramRecord.alphaMax*360);
+  consoleNote_P(PSTR("  IAS low = "));
+  consolePrint(paramRecord.ias_Low);
+  consolePrint_P(PSTR("  high = "));
+  consolePrintLn(paramRecord.ias_High);
   consoleNoteLn_P(PSTR("  Elevator"));
   consoleNote_P(PSTR("    deflection = "));
   consolePrint(paramRecord.elevDefl*90);

@@ -185,7 +185,7 @@ int cycleTimePtr = 0;
 bool cycleTimesValid;
 float cycleMin = -1.0, cycleMax = -1.0, cycleMean = -1.0, cycleCum = -1.0;
 const float tau = 0.1;
-float dynPressure, alpha, aileStick, elevStick, aileStickRaw, elevStickRaw, rudderStick, rudderStickRaw;
+float iAS, dynPressure, alpha, aileStick, elevStick, aileStickRaw, elevStickRaw, rudderStick, rudderStickRaw;
 uint32_t controlCycleEnded;
 int initCount = 5;
 bool armed = false;
@@ -193,7 +193,7 @@ float neutralStick = 0.0, neutralAlpha, targetAlpha;
 float switchValue, tuningKnobValue, rpmOutput;
 Controller elevCtrl, aileCtrl, pushCtrl;
 float autoAlphaP, maxAlpha, yawDamperP, rudderMix;
-float accX, accY, accZ, altitude,  heading, rollAngle, pitchAngle, rollRate, pitchRate, yawRate;
+float accX, accY, accZ, altitude,  heading, rollAngle, pitchAngle, rollRate, pitchRate, yawRate, levelBank;
 int cycleTimeCounter = 0;
 uint32_t prevMeasurement;
 float parameter;  
@@ -743,6 +743,11 @@ void executeCommand(const char *buf, int bufLen)
   }
 }
 
+float scaleByIAS(float small, float large)
+{
+  return mixValue((iAS - paramRecord.ias_Low) / (paramRecord.ias_High - paramRecord.ias_Low), small, large);
+}
+
 void cacheTask(uint32_t currentMicros)
 {
   cacheFlush();
@@ -863,6 +868,10 @@ void sensorTaskSlow(uint32_t currentMicros)
   const float factor_c = pascalsPerPSI_c * range_c / (1L<<(8*sizeof(uint16_t)));
     
   dynPressure = pressureBuffer.output() * factor_c;
+  if(dynPressure > 0)
+    iAS = sqrt(2*dynPressure);
+  else
+    iAS = 0;
 }
 
 const int numPoles = 4;
@@ -984,7 +993,7 @@ void measurementTask(uint32_t currentMicros)
 
 float testGainExpo(float range)
 {
-  return exp(log(3)*(2*parameter-1))*range;
+  return exp(log(5)*(2*parameter-1))*range;
 }
 
 float testGainLinear(float start, float stop)
@@ -1175,6 +1184,7 @@ void configurationTask(uint32_t currentMicros)
   yawDamperP = paramRecord.yd_P;
   rudderMix = paramRecord.r_Mix;
   yawFilter.setTau(paramRecord.yd_Tau/log(CONTROL_HZ));
+  levelBank = 0;
   
   // Then apply test modes
   
@@ -1185,6 +1195,7 @@ void configurationTask(uint32_t currentMicros)
        // Wing stabilizer gain
          
        mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
+       levelBank = -15;
        aileCtrl.setPID(testGain = testGainExpo(paramRecord.s_Ku), 0, 0);
        break;
             
@@ -1249,6 +1260,8 @@ void loopTask(uint32_t currentMicros)
     /*    consolePrint(" dynPress = ");
     consolePrint(dynPressure);
     */
+    consolePrint(" IAS(rel) = ");
+    consolePrint(scaleByIAS(0, 1));
 
     /*    consolePrint(" ppmFreq = ");
     consolePrint(ppmFreq);
@@ -1564,21 +1577,18 @@ void controlTask(uint32_t currentMicros)
   
   // Aileron
 
-  float maxRollRate = 270/360.0;
+  float maxRollRate = scaleByIAS(270/360.0/2, 270/360.0);
   float maxBank = 45.0;
-    
-  if(mode.autoTrim) {
-    const float slowDown = neutralAlpha / maxAutoAlpha;
-    
-    maxBank /= 1 + slowDown;
-    maxRollRate /= 1 + slowDown;
-  }
+
+  if(mode.autoTrim)
+    maxBank /= 1 + neutralAlpha / maxAutoAlpha;
   
   float targetRollRate = maxRollRate*aileStick;
 
-  if(mode.sensorFailSafe || !mode.stabilizer) {
+  if(mode.sensorFailSafe || !mode.stabilizer
+     || (!iasFailed && iAS < paramRecord.ias_Low / 2)) {
 
-    // Failsafe/stabilizer disabled
+    // Failsafe mode or stabilizer disabled or launching
     
     aileOutput = aileStick;
     aileCtrl.reset(aileOutput, 0);
@@ -1588,11 +1598,12 @@ void controlTask(uint32_t currentMicros)
     // Roll stabilizer enabled
 
     const float factor_c = maxRollRate/60;
-    
+
     if(mode.wingLeveler)
       // Strong leveler enabled
         
-      targetRollRate = clamp(-rollAngle*factor_c, -maxRollRate, maxRollRate);
+      targetRollRate =
+	clamp((levelBank - rollAngle)*factor_c, -maxRollRate, maxRollRate);
 
     else if(mode.bankLimiter) {
       // Bank limiter + weak leveling
@@ -1617,12 +1628,12 @@ void controlTask(uint32_t currentMicros)
 
   yawFilter.input(yawRate);
   
-  if(mode.yawDamper)
-    rudderOutput -= yawFilter.output() * yawDamperP;
-  
   if(mode.sensorFailSafe)
     rudderOutput = rudderStick;
     
+  else if(mode.yawDamper)
+    rudderOutput -= yawFilter.output() * yawDamperP;
+  
   // Brake
     
   if(!mode.sensorFailSafe && gearOutput == 1)
