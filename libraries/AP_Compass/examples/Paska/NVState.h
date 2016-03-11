@@ -23,7 +23,8 @@ struct ParamRecord {
   int8_t servoAile, servoElev, servoRudder, servoFlap, servoFlap2, servoGear, servoBrake;
   float alphaMin, alphaMax;
   float i_Ku, i_Tu, o_P;
-  float s_Ku, s_Tu;
+  float s_Ku_fast, s_Tu_fast;
+  float s_Ku_slow, s_Tu_slow;
   float yd_P, yd_Tau, r_Mix;
   float r_Ku, r_Tu;
   float ff_A, ff_B;

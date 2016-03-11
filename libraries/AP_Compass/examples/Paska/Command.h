@@ -47,6 +47,7 @@ typedef enum {
   c_baud,
   c_dumpz,
   c_stabilizer_pid_zn,
+  c_stabilizer_slow_pid_zn,
   c_outer_p,
   c_yd_p,
   c_yd_tau,

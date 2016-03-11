@@ -159,6 +159,7 @@ struct ModeRecord {
   bool stabilizer;
   bool wingLeveler;
   bool bankLimiter;
+  bool launch;
 };
 
 struct ModeRecord mode;
@@ -993,7 +994,7 @@ void measurementTask(uint32_t currentMicros)
 
 float testGainExpo(float range)
 {
-  return exp(log(5)*(2*parameter-1))*range;
+  return exp(log(sqrt(10))*(2*parameter-1))*range;
 }
 
 float testGainLinear(float start, float stop)
@@ -1084,16 +1085,15 @@ void configurationTask(uint32_t currentMicros)
           armed = true;
           talk = false;
           
-        } /* else if(testMode) {
-          consoleNote_P(PSTR("Test channel incremented to "));
-          consolePrintLn(++stateRecord.testChannel);
-
-	  } */ else if(paramRecord.servoGear < 0 || gearOutput > 0) {
+        } else if(paramRecord.servoGear < 0 || gearOutput > 0) {
           if(flapOutput > 0) {
             flapOutput--;
             consoleNote_P(PSTR("Flaps RETRACTED to "));
             consolePrintLn(flapOutput);
-          }
+          } else {
+            consoleNoteLn_P(PSTR("Launch mode ENABLED"));
+	    mode.launch = true;
+	  }
         } else {
           consoleNoteLn_P(PSTR("Gear UP"));
           gearOutput = 1;
@@ -1139,13 +1139,20 @@ void configurationTask(uint32_t currentMicros)
     consoleNoteLn_P(PSTR("Wing leveler DISABLED"));
     mode.wingLeveler = false;
   }
-  
+
+  // Launch mode disabled when airspeed detected (or fails)
+
+  if(mode.launch && (iasFailed || iAS > paramRecord.ias_Low / 2)) {
+    consoleNoteLn_P(PSTR("Launch mode DISABLED"));
+    mode.launch = false;
+  }
+		   
   // Mode-to-feature mapping: first nominal values
       
   mode.stabilizer = true;
   mode.bankLimiter = switchStateLazy;
   mode.autoAlpha = mode.autoTrim = flapOutput > 0;
-  mode.autoBall = !switchStateLazy;
+  mode.autoBall = switchStateLazy;
   mode.yawDamper = false; // !switchStateLazy;
   
   // Receiver fail detection
@@ -1171,10 +1178,13 @@ void configurationTask(uint32_t currentMicros)
   
   // Default controller settings
 
+  float s_Ku = scaleByIAS(paramRecord.s_Ku_slow, paramRecord.s_Ku_fast);
+  float s_Tu = scaleByIAS(paramRecord.s_Tu_slow, paramRecord.s_Tu_fast);
+  
   if(paramRecord.c_PID)
-    aileCtrl.setZieglerNicholsPID(paramRecord.s_Ku, paramRecord.s_Tu);
+    aileCtrl.setZieglerNicholsPID(s_Ku, s_Tu);
   else
-    aileCtrl.setZieglerNicholsPI(paramRecord.s_Ku, paramRecord.s_Tu);
+    aileCtrl.setZieglerNicholsPI(s_Ku, s_Tu);
 
   elevCtrl.setZieglerNicholsPID(paramRecord.i_Ku, paramRecord.i_Tu);
   pushCtrl.setZieglerNicholsPID(paramRecord.i_Ku, paramRecord.i_Tu);
@@ -1197,7 +1207,7 @@ void configurationTask(uint32_t currentMicros)
          
        mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
        levelBank = -15;
-       aileCtrl.setPID(testGain = testGainExpo(paramRecord.s_Ku), 0, 0);
+       aileCtrl.setPID(testGain = testGainExpo(s_Ku), 0, 0);
        break;
             
      case 3:
@@ -1226,16 +1236,16 @@ void configurationTask(uint32_t currentMicros)
        break;
             
      case 6:
-       // Aileron and rudder calibration
+       // Aileron and rudder calibration, straight and level flight with
+       // ball centered, reduced controller gain to increase stability
          
        mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
        mode.yawDamper = false;
        mode.autoBall = true;
        rudderMix = 0;
        levelBank = 0;
-       aileCtrl.setZieglerNicholsPID(paramRecord.s_Ku*parameter,
-				     paramRecord.s_Tu);
-       rudderCtrl.setZieglerNicholsPID(paramRecord.r_Ku*parameter,
+       aileCtrl.setZieglerNicholsPID(s_Ku*parameter, s_Tu);
+       rudderCtrl.setZieglerNicholsPID(paramRecord.r_Ku*parameter/2,
 				       paramRecord.r_Tu);
        break;
             
@@ -1607,23 +1617,20 @@ void controlTask(uint32_t currentMicros)
   float maxRollRate = scaleByIAS(270/360.0/2, 270/360.0);
   float maxBank = 45.0;
 
-  if(mode.autoTrim)
+  if(mode.rxFailSafe)
+    maxBank = 15.0;
+  else if(mode.autoTrim)
     maxBank /= 1 + neutralAlpha / maxAutoAlpha;
   
   float targetRollRate = maxRollRate*aileStick;
 
-  if(mode.sensorFailSafe || !mode.stabilizer
-     || (!mode.rxFailSafe && !iasFailed && iAS < paramRecord.ias_Low / 2)) {
+  if(mode.sensorFailSafe || !mode.stabilizer || mode.launch) {
 
-    // Failsafe mode or stabilizer disabled or launching
-    
     aileOutput = aileStick;
     aileCtrl.reset(aileOutput, 0);
     
   } else {
     
-    // Roll stabilizer enabled
-
     const float factor_c = maxRollRate/60;
 
     if(mode.wingLeveler)
@@ -1649,8 +1656,7 @@ void controlTask(uint32_t currentMicros)
  
   // Rudder
     
-  if(mode.sensorFailSafe || !mode.autoBall
-     || (!mode.rxFailSafe && !iasFailed && iAS < paramRecord.ias_Low / 2)) {
+  if(mode.sensorFailSafe || !mode.autoBall || mode.launch) {
 
     // Failsafe mode or auto ball disabled or launching
     

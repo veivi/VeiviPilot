@@ -33,6 +33,7 @@ const struct ParamRecord paramDefaults = {
   -3.0/360,  12.0/360,
   1.0, 0.25, 10.0, 
   1.3, 0.25, 
+  1.3, 0.25, 
   2.0, 1.0, 0.1,
   0.1, 0.25,
   0.0, 0.0,
@@ -147,10 +148,14 @@ void printParams()
   consolePrint_P(PSTR(" B = "));
   consolePrintLn(paramRecord.ff_B, 4);
   consoleNoteLn_P(PSTR("  Stabilizer"));
-  consoleNote_P(PSTR("    Ku = "));
-  consolePrint(paramRecord.s_Ku, 4);
+  consoleNote_P(PSTR("    (Fast) Ku = "));
+  consolePrint(paramRecord.s_Ku_fast, 4);
   consolePrint_P(PSTR(" Tu = "));
-  consolePrintLn(paramRecord.s_Tu, 4);
+  consolePrintLn(paramRecord.s_Tu_fast, 4);
+  consoleNote_P(PSTR("    (Slow) Ku = "));
+  consolePrint(paramRecord.s_Ku_slow, 4);
+  consolePrint_P(PSTR(" Tu = "));
+  consolePrintLn(paramRecord.s_Tu_slow, 4);
   consoleNote_P(PSTR("    Weak leveling limit angle = "));
   consolePrintLn(paramRecord.wl_Limit, 4);
   consoleNote_P(PSTR("    Using "));
