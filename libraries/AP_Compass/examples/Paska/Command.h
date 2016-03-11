@@ -50,6 +50,7 @@ typedef enum {
   c_outer_p,
   c_yd_p,
   c_yd_tau,
+  c_rudder_pid_zn,
   c_rmix,
   c_rattle,
   c_inner_pid_zn,

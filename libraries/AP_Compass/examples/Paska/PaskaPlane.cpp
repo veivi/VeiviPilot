@@ -154,7 +154,7 @@ struct ModeRecord {
   bool rxFailSafe;
   bool autoAlpha;
   bool autoTrim;
-  bool autoRudder;
+  bool autoBall;
   bool yawDamper;
   bool stabilizer;
   bool wingLeveler;
@@ -191,7 +191,7 @@ int initCount = 5;
 bool armed = false;
 float neutralStick = 0.0, neutralAlpha, targetAlpha;
 float switchValue, tuningKnobValue, rpmOutput;
-Controller elevCtrl, aileCtrl, pushCtrl;
+Controller elevCtrl, aileCtrl, pushCtrl, rudderCtrl;
 float autoAlphaP, maxAlpha, yawDamperP, rudderMix;
 float accX, accY, accZ, altitude,  heading, rollAngle, pitchAngle, rollRate, pitchRate, yawRate, levelBank;
 int cycleTimeCounter = 0;
@@ -1145,7 +1145,7 @@ void configurationTask(uint32_t currentMicros)
   mode.stabilizer = true;
   mode.bankLimiter = switchStateLazy;
   mode.autoAlpha = mode.autoTrim = flapOutput > 0;
-  mode.autoRudder = false;
+  mode.autoBall = !switchStateLazy;
   mode.yawDamper = false; // !switchStateLazy;
   
   // Receiver fail detection
@@ -1165,7 +1165,7 @@ void configurationTask(uint32_t currentMicros)
     // Receiver failsafe mode settings
     
     mode.autoAlpha = mode.autoTrim = mode.bankLimiter = true;
-    mode.autoRudder = mode.yawDamper = false;
+    mode.autoBall = mode.yawDamper = false;
     neutralStick = 0;
   }
   
@@ -1178,6 +1178,7 @@ void configurationTask(uint32_t currentMicros)
 
   elevCtrl.setZieglerNicholsPID(paramRecord.i_Ku, paramRecord.i_Tu);
   pushCtrl.setZieglerNicholsPID(paramRecord.i_Ku, paramRecord.i_Tu);
+  rudderCtrl.setZieglerNicholsPID(paramRecord.r_Ku, paramRecord.r_Tu);
 
   autoAlphaP = paramRecord.o_P;
   maxAlpha = paramRecord.alphaMax;
@@ -1213,6 +1214,31 @@ void configurationTask(uint32_t currentMicros)
        autoAlphaP = testGain = testGainExpo(paramRecord.o_P);
        break;
          
+     case 5:
+       // Auto ball gain
+         
+       mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
+       mode.yawDamper = false;
+       mode.autoBall = true;
+       rudderMix = 0;
+       levelBank = 0;
+       rudderCtrl.setPID(testGain = testGainExpo(paramRecord.r_Ku), 0, 0);
+       break;
+            
+     case 6:
+       // Aileron and rudder calibration
+         
+       mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
+       mode.yawDamper = false;
+       mode.autoBall = true;
+       rudderMix = 0;
+       levelBank = 0;
+       aileCtrl.setZieglerNicholsPID(paramRecord.s_Ku*parameter,
+				     paramRecord.s_Tu);
+       rudderCtrl.setZieglerNicholsPID(paramRecord.r_Ku*parameter,
+				       paramRecord.r_Tu);
+       break;
+            
      case 7:
        // Max alpha
 
@@ -1255,11 +1281,12 @@ void loopTask(uint32_t currentMicros)
   if(looping) {
     consolePrint("alpha = ");
     consolePrint(alpha*360);
-    consolePrint(" targAlpha = ");
+    /*    consolePrint(" targAlpha = ");
     consolePrint(targetAlpha*360);
-    /*    consolePrint(" dynPress = ");
-    consolePrint(dynPressure);
     */
+
+    consolePrint(" IAS = ");
+    consolePrint(iAS);
     consolePrint(" IAS(rel) = ");
     consolePrint(scaleByIAS(0, 1));
 
@@ -1312,12 +1339,12 @@ void loopTask(uint32_t currentMicros)
     consolePrint(" trim = ");
     consolePrint(neutralAlpha*360);
 */
-    
+    /*    
     consolePrint(" param = ");
-    consolePrint(parameter);
+    consolePrint(parameter);    
     consolePrint(" testGain = ");
     consolePrint(testGain);
-    
+    */ 
     consolePrint("      \r");
     consoleFlush();
   }
@@ -1586,7 +1613,7 @@ void controlTask(uint32_t currentMicros)
   float targetRollRate = maxRollRate*aileStick;
 
   if(mode.sensorFailSafe || !mode.stabilizer
-     || (!iasFailed && iAS < paramRecord.ias_Low / 2)) {
+     || (!mode.rxFailSafe && !iasFailed && iAS < paramRecord.ias_Low / 2)) {
 
     // Failsafe mode or stabilizer disabled or launching
     
@@ -1622,16 +1649,34 @@ void controlTask(uint32_t currentMicros)
  
   // Rudder
     
-  rudderOutput = rudderStick + aileOutput*rudderMix;
+  if(mode.sensorFailSafe || !mode.autoBall
+     || (!mode.rxFailSafe && !iasFailed && iAS < paramRecord.ias_Low / 2)) {
+
+    // Failsafe mode or auto ball disabled or launching
+    
+    rudderOutput = rudderStick;
+    rudderCtrl.reset(rudderOutput, 0);
+    
+  } else {
+    
+    // Auto ball enabled
+    
+    const float factor_c = 1/9.81/4;
+
+    rudderCtrl.input(-accY*factor_c, controlCycle);
+    rudderOutput = rudderCtrl.output();
+  }
+
+  // Aileron/rudder mix
+  
+  if(!mode.sensorFailSafe)
+    rudderOutput += aileOutput*rudderMix;
 
   // Yaw damper
 
   yawFilter.input(yawRate);
   
-  if(mode.sensorFailSafe)
-    rudderOutput = rudderStick;
-    
-  else if(mode.yawDamper)
+  if(!mode.sensorFailSafe && mode.yawDamper)
     rudderOutput -= yawFilter.output() * yawDamperP;
   
   // Brake
@@ -1654,21 +1699,17 @@ void actuatorTask(uint32_t currentMicros)
     pwmOutputWrite(elevatorHandle, NEUTRAL
 		   + RANGE*clamp(paramRecord.elevDefl*randomNum(-1, 1) 
 				 + paramRecord.elevNeutral, -1, 1));
-                              
+
+    pwmOutputWrite(rudderHandle, NEUTRAL
+		   + RANGE*clamp(paramRecord.rudderDefl*randomNum(-1, 1) 
+				 + paramRecord.rudderNeutral, -1, 1));
+                                                            
     pwmOutputWrite(flapHandle, NEUTRAL
 		   + RANGE*clamp(paramRecord.flapNeutral 
 				 + randomNum(0, 3)*paramRecord.flapStep, -1, 1));                              
-
     pwmOutputWrite(flap2Handle, NEUTRAL
 		   + RANGE*clamp(paramRecord.flap2Neutral 
-				 - randomNum(0, 3)*paramRecord.flapStep, -1, 1));                              
-
-    pwmOutputWrite(gearHandle, NEUTRAL - RANGE*randomNum(-1, 1));
-
-    pwmOutputWrite(rudderHandle, NEUTRAL
-		   + RANGE*clamp(paramRecord.rudderNeutral + 
-		   paramRecord.rudderDefl*randomNum(0, 1), -1, 1));                
-
+				 - randomNum(0, 3)*paramRecord.flapStep, -1, 1));    
   } else if(armed) {
     pwmOutputWrite(aileHandle, NEUTRAL
 		   + RANGE*clamp(paramRecord.aileDefl*aileOutput 

@@ -88,7 +88,7 @@ void Controller::input(float err, float d) {
   // I = clamp(I + Ki*err*delta, -range, range);
   // I = clamp(I + Ki*err*delta, -1.0, 1.0);
     
-  if(abs(Ki) > 0.1)
+  if(abs(Ki) > 0.05)
     I = clamp(I + Ki*err*delta, -1.0 - Kp*err, 1.0 - Kp*err);
   else
     I = 0.0;

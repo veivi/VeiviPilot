@@ -34,6 +34,7 @@ const struct ParamRecord paramDefaults = {
   1.0, 0.25, 10.0, 
   1.3, 0.25, 
   2.0, 1.0, 0.1,
+  0.1, 0.25,
   0.0, 0.0,
   0.0,
   true,
@@ -155,6 +156,11 @@ void printParams()
   consoleNote_P(PSTR("    Using "));
   consolePrint_P(paramRecord.c_PID ? PSTR("PID") : PSTR("PI"));
   consolePrintLn_P(PSTR(" controller"));
+  consoleNoteLn_P(PSTR("  Auto rudder"));
+  consoleNote_P(PSTR("    Ku = "));
+  consolePrint(paramRecord.r_Ku, 4);
+  consolePrint_P(PSTR(" Tu = "));
+  consolePrintLn(paramRecord.r_Tu, 4);
   consoleNote_P(PSTR("  Yaw damper P = "));
   consolePrint(paramRecord.yd_P, 4);
   consolePrint_P(PSTR(" Tau = "));
