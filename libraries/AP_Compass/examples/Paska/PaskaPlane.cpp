@@ -1099,10 +1099,6 @@ void configurationTask(uint32_t currentMicros)
           gearOutput = 1;
         }
       } else {
-	/* if(testMode) {
-          consoleNoteLn_P(PSTR("Test channel RESET"));
-          // stateRecord.testChannel = 0;
-	  } else */
 	if(paramRecord.servoGear > -1 && gearOutput > 0) {
           consoleNoteLn_P(PSTR("Gear DOWN"));
           gearOutput = 0;
@@ -1181,14 +1177,16 @@ void configurationTask(uint32_t currentMicros)
   float s_Ku = scaleByIAS(paramRecord.s_Ku_slow, paramRecord.s_Ku_fast);
   float s_Tu = scaleByIAS(paramRecord.s_Tu_slow, paramRecord.s_Tu_fast);
   
-  if(paramRecord.c_PID)
+  if(paramRecord.c_PID) {
     aileCtrl.setZieglerNicholsPID(s_Ku, s_Tu);
-  else
+    rudderCtrl.setZieglerNicholsPID(paramRecord.r_Ku, paramRecord.r_Tu);
+  } else {
     aileCtrl.setZieglerNicholsPI(s_Ku, s_Tu);
-
+    rudderCtrl.setZieglerNicholsPI(paramRecord.r_Ku, paramRecord.r_Tu);
+  }
+  
   elevCtrl.setZieglerNicholsPID(paramRecord.i_Ku, paramRecord.i_Tu);
   pushCtrl.setZieglerNicholsPID(paramRecord.i_Ku, paramRecord.i_Tu);
-  rudderCtrl.setZieglerNicholsPID(paramRecord.r_Ku, paramRecord.r_Tu);
 
   autoAlphaP = paramRecord.o_P;
   maxAlpha = paramRecord.alphaMax;
@@ -1248,8 +1246,15 @@ void configurationTask(uint32_t currentMicros)
        rudderCtrl.setZieglerNicholsPID(paramRecord.r_Ku*parameter/2,
 				       paramRecord.r_Tu);
        break;
-            
+
      case 7:
+       // Auto rudder empirical gain, PI
+       
+       mode.autoBall = true;
+       rudderCtrl.setZieglerNicholsPI(paramRecord.r_Ku*parameter,
+				      paramRecord.r_Tu);
+       
+     case 8:
        // Max alpha
 
        mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
