@@ -30,7 +30,7 @@ class RunningAvgFilter {
 class DecayFilter {
   public:
     void setTau(float tau);
-    float input(float v);
+    void input(float v);
     float output();
     
   private:

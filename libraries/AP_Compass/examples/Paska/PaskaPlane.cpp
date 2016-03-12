@@ -187,6 +187,7 @@ bool cycleTimesValid;
 float cycleMin = -1.0, cycleMax = -1.0, cycleMean = -1.0, cycleCum = -1.0;
 const float tau = 0.1;
 float iAS, dynPressure, alpha, aileStick, elevStick, aileStickRaw, elevStickRaw, rudderStick, rudderStickRaw;
+bool ailePilotInput, rudderPilotInput;
 uint32_t controlCycleEnded;
 int initCount = 5;
 bool armed = false;
@@ -781,26 +782,39 @@ void alphaTask(uint32_t currentMicros)
 
 #define NULLZONE 0.075
 
-float applyNullZone(float value)
+float applyNullZone(float value, bool *pilotInput)
 {
+  if(pilotInput)
+    *pilotInput = true;
+  
   if(value < -NULLZONE)
     return (value + NULLZONE) / (1.0 - NULLZONE);
   else if(value > NULLZONE)
     return (value - NULLZONE) / (1.0 - NULLZONE);
 
+  if(pilotInput)
+    *pilotInput = false;
+    
   return 0.0;
+}
+
+float applyNullZone(float value)
+{
+  return applyNullZone(value, NULL);
 }
 
 void receiverTask(uint32_t currentMicros)
 {
   if(inputValid(&aileInput)) {
     aileStickRaw = decodePWM(inputValue(&aileInput));
-    aileStick = applyNullZone(clamp(aileStickRaw - paramRecord.aileZero, -1, 1));
+    aileStick = applyNullZone(clamp(aileStickRaw - paramRecord.aileZero, -1, 1),
+			      &ailePilotInput);
   }
   
   if(inputValid(&rudderInput)) {
     rudderStickRaw = decodePWM(inputValue(&rudderInput));
-    rudderStick = applyNullZone(clamp(rudderStickRaw - paramRecord.rudderZero, -1, 1));
+    rudderStick = applyNullZone(clamp(rudderStickRaw - paramRecord.rudderZero, -1, 1),
+				&rudderPilotInput);
   }
   
   if(inputValid(&elevInput)) {
@@ -1071,6 +1085,11 @@ void configurationTask(uint32_t currentMicros)
       } else {
         if(armed && logEnabled)
           logMark();
+
+	if(mode.wingLeveler) {
+	  consoleNoteLn_P(PSTR("Wing leveler DISABLED"));
+	  mode.wingLeveler = false;
+	}
       }
     }
           
@@ -1131,7 +1150,7 @@ void configurationTask(uint32_t currentMicros)
 
   // Wing leveler disable when stick input detected
   
-  if(mode.wingLeveler && fabsf(aileStick) > 0.1) {
+  if(mode.wingLeveler && ailePilotInput) {
     consoleNoteLn_P(PSTR("Wing leveler DISABLED"));
     mode.wingLeveler = false;
   }
@@ -1148,8 +1167,8 @@ void configurationTask(uint32_t currentMicros)
   mode.stabilizer = true;
   mode.bankLimiter = switchStateLazy;
   mode.autoAlpha = mode.autoTrim = flapOutput > 0;
-  mode.autoBall = switchStateLazy;
-  mode.yawDamper = false; // !switchStateLazy;
+  mode.autoBall = true; // switchStateLazy;
+  mode.yawDamper = false; // switchStateLazy;
   
   // Receiver fail detection
 
@@ -1168,7 +1187,7 @@ void configurationTask(uint32_t currentMicros)
     // Receiver failsafe mode settings
     
     mode.autoAlpha = mode.autoTrim = mode.bankLimiter = true;
-    mode.autoBall = mode.yawDamper = false;
+    //      = mode.autoBall = mode.yawDamper = true;
     neutralStick = 0;
   }
   
@@ -1179,12 +1198,12 @@ void configurationTask(uint32_t currentMicros)
   
   if(paramRecord.c_PID) {
     aileCtrl.setZieglerNicholsPID(s_Ku, s_Tu);
-    rudderCtrl.setZieglerNicholsPID(paramRecord.r_Ku, paramRecord.r_Tu);
+    //    rudderCtrl.setZieglerNicholsPID(paramRecord.r_Ku, paramRecord.r_Tu);
   } else {
     aileCtrl.setZieglerNicholsPI(s_Ku, s_Tu);
-    rudderCtrl.setZieglerNicholsPI(paramRecord.r_Ku, paramRecord.r_Tu);
   }
   
+  rudderCtrl.setZieglerNicholsPI(paramRecord.r_Ku, paramRecord.r_Tu);
   elevCtrl.setZieglerNicholsPID(paramRecord.i_Ku, paramRecord.i_Tu);
   pushCtrl.setZieglerNicholsPID(paramRecord.i_Ku, paramRecord.i_Tu);
 
@@ -1192,7 +1211,7 @@ void configurationTask(uint32_t currentMicros)
   maxAlpha = paramRecord.alphaMax;
   yawDamperP = paramRecord.yd_P;
   rudderMix = paramRecord.r_Mix;
-  yawFilter.setTau(paramRecord.yd_Tau/log(CONTROL_HZ));
+  yawFilter.setTau(paramRecord.yd_Tau*log(CONTROL_HZ));
   levelBank = 0;
   
   // Then apply test modes
@@ -1243,18 +1262,28 @@ void configurationTask(uint32_t currentMicros)
        rudderMix = 0;
        levelBank = 0;
        aileCtrl.setZieglerNicholsPID(s_Ku*parameter, s_Tu);
-       rudderCtrl.setZieglerNicholsPID(paramRecord.r_Ku*parameter/2,
-				       paramRecord.r_Tu);
+       rudderCtrl.setZieglerNicholsPI(paramRecord.r_Ku*parameter/2,
+				      paramRecord.r_Tu);
        break;
 
      case 7:
        // Auto rudder empirical gain, PI
        
        mode.autoBall = true;
-       rudderCtrl.setZieglerNicholsPI(paramRecord.r_Ku*parameter,
+       rudderCtrl.setZieglerNicholsPI(testGain = testGainExpo(paramRecord.r_Ku),
 				      paramRecord.r_Tu);
+       break;
        
      case 8:
+       // Aileron PI vs PID test
+       
+       if(parameter > 0.5)
+	 aileCtrl.setZieglerNicholsPI(s_Ku, s_Tu);
+       else
+	 aileCtrl.setZieglerNicholsPID(s_Ku, s_Tu);
+       break;         
+
+     case 9:
        // Max alpha
 
        mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
@@ -1268,9 +1297,11 @@ void configurationTask(uint32_t currentMicros)
        break;
  
      case 11:
-       // Yaw damper gain
+       // Yaw damper gain, disable aileron-rudder mixing so see the
+       // effect of on adverse (aileron) yaw
 
        mode.yawDamper = true;
+       rudderMix = 0;
        yawDamperP = testGain = testGainExpo(paramRecord.yd_P);
        break;
 
@@ -1278,7 +1309,8 @@ void configurationTask(uint32_t currentMicros)
        // Yaw damper tau
 
        mode.yawDamper = true;
-       yawFilter.setTau((testGain = testGainLinear(0, 1)) / log(CONTROL_HZ));
+       rudderMix = 0;
+       yawFilter.setTau(testGain = testGainExpo(paramRecord.yd_Tau));
        break;
     }
   }
@@ -1619,7 +1651,7 @@ void controlTask(uint32_t currentMicros)
   
   // Aileron
 
-  float maxRollRate = scaleByIAS(270/360.0/2, 270/360.0);
+  float maxRollRate = scaleByIAS(180, 360) / 360;
   float maxBank = 45.0;
 
   if(mode.rxFailSafe)
@@ -1661,11 +1693,12 @@ void controlTask(uint32_t currentMicros)
  
   // Rudder
     
+  rudderOutput = rudderStick;
+    
   if(mode.sensorFailSafe || !mode.autoBall || mode.launch) {
 
     // Failsafe mode or auto ball disabled or launching
     
-    rudderOutput = rudderStick;
     rudderCtrl.reset(rudderOutput, 0);
     
   } else {
@@ -1674,8 +1707,10 @@ void controlTask(uint32_t currentMicros)
     
     const float factor_c = 1/9.81/4;
 
-    rudderCtrl.input(-accY*factor_c, controlCycle);
-    rudderOutput = rudderCtrl.output();
+    if(!rudderPilotInput)
+      rudderCtrl.input(-accY*factor_c, controlCycle);
+    
+    rudderOutput += rudderCtrl.output();
   }
 
   // Aileron/rudder mix

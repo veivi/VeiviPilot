@@ -49,21 +49,25 @@ float Median3Filter::output(void)
   return max(min(memory[0],memory[1]), min(max(memory[0],memory[1]),memory[2]));
 }
 
-float DecayFilter::input(float v)
+void DecayFilter::input(float v)
 {
   in = v;
   avg = mixValue(tau, in, avg);
-  return output();
 }
 
 float DecayFilter::output(void)
 {
-  return in - avg;
+  float out = in - avg;
+  
+  if(signbit(out) == signbit(in))
+    return out;
+  else
+    return 0.0;
 }
 
 void DecayFilter::setTau(float tauValue)
 {
-  tau = tauValue;
+  tau = 1 - 1/tauValue;
 }
 
 void RunningAvgFilter::setWindowLen(int a) 
