@@ -1168,7 +1168,7 @@ void configurationTask(uint32_t currentMicros)
   mode.bankLimiter = switchStateLazy;
   mode.autoAlpha = mode.autoTrim = flapOutput > 0;
   mode.autoBall = true; // switchStateLazy;
-  mode.yawDamper = false; // switchStateLazy;
+  mode.yawDamper = true; // switchStateLazy;
   
   // Receiver fail detection
 
@@ -1652,13 +1652,13 @@ void controlTask(uint32_t currentMicros)
   
   // Aileron
 
-  float maxRollRate = scaleByIAS(180, 360) / 360;
+  float maxRollRate = scaleByIAS(270.0/2, 270.0) / 360;
   float maxBank = 45.0;
 
   if(mode.rxFailSafe)
     maxBank = 15.0;
   else if(mode.autoTrim)
-    maxBank /= 1 + neutralAlpha / maxAutoAlpha;
+    maxBank /= 1 + 2*neutralAlpha / maxAutoAlpha;
   
   float targetRollRate = maxRollRate*aileStick;
 
