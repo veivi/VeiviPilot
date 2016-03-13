@@ -1261,9 +1261,10 @@ void configurationTask(uint32_t currentMicros)
        mode.autoBall = true;
        rudderMix = 0;
        levelBank = 0;
-       aileCtrl.setZieglerNicholsPID(s_Ku*parameter, s_Tu);
-       rudderCtrl.setZieglerNicholsPI(paramRecord.r_Ku*parameter/2,
-				      paramRecord.r_Tu);
+       aileCtrl.setZieglerNicholsPID
+	 (s_Ku*testGain, s_Tu);
+       rudderCtrl.setZieglerNicholsPI
+	 (paramRecord.r_Ku*testGain, paramRecord.r_Tu);
        break;
 
      case 7:
@@ -1297,8 +1298,8 @@ void configurationTask(uint32_t currentMicros)
        break;
  
      case 11:
-       // Yaw damper gain, disable aileron-rudder mixing so see the
-       // effect of on adverse (aileron) yaw
+       // Yaw damper gain, disable aileron-rudder mixing so we see the
+       // effect of yaw damping on adverse (aileron) yaw
 
        mode.yawDamper = true;
        rudderMix = 0;
