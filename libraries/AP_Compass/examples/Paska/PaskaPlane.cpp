@@ -1006,14 +1006,29 @@ void measurementTask(uint32_t currentMicros)
   }
 }
 
+float quantize(float param)
+{
+  static int state;
+  const int steps = 20;
+
+  if((int) ((param-1.0/steps/2)*steps) > state)
+    state = (param-1.0/steps/2)*steps;
+  else if((int) ((param+1.0/steps/2)*steps) < state)
+    state = (param+1.0/steps/2)*steps;
+
+  return (float) state / steps;
+}
+
 float testGainExpo(float range)
 {
-  return exp(log(sqrt(10))*(2*parameter-1))*range;
+  float q = quantize(parameter);
+  return exp(log(sqrt(10))*(2*q-1))*range;
 }
 
 float testGainLinear(float start, float stop)
 {
-  return start + parameter*(stop - start);
+  float q = quantize(parameter);
+  return start + q*(stop - start);
 }
 
 #define maxAutoAlpha (maxAlpha/square(1.1))  // Stall speed + 10%
@@ -1389,10 +1404,12 @@ void loopTask(uint32_t currentMicros)
 */
     /*    
     consolePrint(" param = ");
-    consolePrint(parameter);    
+    consolePrint(parameter);  
     consolePrint(" testGain = ");
     consolePrint(testGain);
-    */ 
+    */
+    consolePrint(" Qparam = ");
+    consolePrint(quantize(parameter));  
     consolePrint("      \r");
     consoleFlush();
   }
@@ -1658,7 +1675,7 @@ void controlTask(uint32_t currentMicros)
   if(mode.rxFailSafe)
     maxBank = 15.0;
   else if(mode.autoTrim)
-    maxBank /= 1 + 2*neutralAlpha / maxAutoAlpha;
+    maxBank /= 1.25 + neutralAlpha / maxAutoAlpha;
   
   float targetRollRate = maxRollRate*aileStick;
 
