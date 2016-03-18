@@ -1025,6 +1025,12 @@ float testGainExpo(float range)
   return exp(log(sqrt(10))*(2*q-1))*range;
 }
 
+float testGainExpoReversed(float range)
+{
+  float q = quantize(1 - parameter);
+  return exp(log(sqrt(10))*(2*q-1))*range;
+}
+
 float testGainLinear(float start, float stop)
 {
   float q = quantize(parameter);
@@ -1202,7 +1208,6 @@ void configurationTask(uint32_t currentMicros)
     // Receiver failsafe mode settings
     
     mode.autoAlpha = mode.autoTrim = mode.bankLimiter = true;
-    //      = mode.autoBall = mode.yawDamper = true;
     neutralStick = 0;
   }
   
@@ -1211,12 +1216,10 @@ void configurationTask(uint32_t currentMicros)
   float s_Ku = scaleByIAS(paramRecord.s_Ku_slow, paramRecord.s_Ku_fast);
   float s_Tu = scaleByIAS(paramRecord.s_Tu_slow, paramRecord.s_Tu_fast);
   
-  if(paramRecord.c_PID) {
+  if(paramRecord.c_PID)
     aileCtrl.setZieglerNicholsPID(s_Ku, s_Tu);
-    //    rudderCtrl.setZieglerNicholsPID(paramRecord.r_Ku, paramRecord.r_Tu);
-  } else {
+  else
     aileCtrl.setZieglerNicholsPI(s_Ku, s_Tu);
-  }
   
   rudderCtrl.setZieglerNicholsPI(paramRecord.r_Ku, paramRecord.r_Tu);
   elevCtrl.setZieglerNicholsPID(paramRecord.i_Ku, paramRecord.i_Tu);
@@ -1233,12 +1236,12 @@ void configurationTask(uint32_t currentMicros)
   
   if(testMode) {
     testGain = testGainLinear(0, 1);
+    
      switch(stateRecord.testChannel) {
      case 1:
        // Wing stabilizer gain
          
        mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
-       levelBank = -15;
        aileCtrl.setPID(testGain = testGainExpo(s_Ku), 0, 0);
        break;
             
@@ -1309,7 +1312,7 @@ void configurationTask(uint32_t currentMicros)
      case 10:
        // Aileron to rudder mix
 
-       rudderMix = testGain = testGainExpo(paramRecord.r_Mix);
+       rudderMix = testGain = testGainExpoReversed(paramRecord.r_Mix);
        break;
  
      case 11:
@@ -1692,7 +1695,7 @@ void controlTask(uint32_t currentMicros)
       // Strong leveler enabled
         
       targetRollRate =
-	clamp((levelBank - rollAngle)*factor_c, -maxRollRate, maxRollRate);
+	clamp((levelBank + aileStick*maxBank - rollAngle)*factor_c, -maxRollRate, maxRollRate);
 
     else if(mode.bankLimiter) {
       // Bank limiter + weak leveling
