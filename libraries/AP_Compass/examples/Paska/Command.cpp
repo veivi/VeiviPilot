@@ -19,7 +19,6 @@ const struct Command commands[] PROGMEM = {
     e_float, &paramRecord.r_Ku, &paramRecord.r_Tu },
   { "wl", c_wl, e_float, &paramRecord.wl_Limit },
   { "yd_p", c_yd_p, e_float, &paramRecord.yd_P },
-  { "yd_tau", c_yd_tau, e_float, &paramRecord.yd_Tau },
   { "rmix", c_rmix, e_float, &paramRecord.r_Mix },
   { "edefl", c_edefl, e_angle90, &paramRecord.elevDefl },
   { "eneutral", c_eneutral, e_angle90, &paramRecord.elevNeutral },

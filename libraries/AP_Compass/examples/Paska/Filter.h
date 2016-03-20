@@ -37,6 +37,15 @@ class DecayFilter {
     float tau, in, avg;
 };
 
+class Derivator {
+  public:
+  void input(float v, float dt);
+  float output();
+    
+  private:
+  float value, prev, delta;
+};
+
 const int MedianWindow_c = 3;
   
 class Median3Filter {  

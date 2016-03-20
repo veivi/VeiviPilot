@@ -70,6 +70,18 @@ void DecayFilter::setTau(float tauValue)
   tau = 1 - 1/tauValue;
 }
 
+void Derivator::input(float v, float dt)
+{
+  prev = value;
+  value = v;
+  delta = dt;
+}
+
+float Derivator::output(void)
+{
+  return (value - prev) / delta;
+}
+
 void RunningAvgFilter::setWindowLen(int a) 
 {
   if(a < 1 || a > windowLenMax)

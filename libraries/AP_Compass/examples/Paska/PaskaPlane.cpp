@@ -201,7 +201,7 @@ uint32_t prevMeasurement;
 float parameter;  
 NewI2C I2c = NewI2C();
 RunningAvgFilter alphaFilter;
-DecayFilter yawFilter;
+Derivator yawFilter;
 AlphaBuffer alphaBuffer, pressureBuffer;
 float controlCycle = 10.0e-3;
 uint32_t idleMicros;
@@ -1022,7 +1022,7 @@ float quantize(float param)
 float testGainExpo(float range)
 {
   float q = quantize(parameter);
-  return exp(log(sqrt(10))*(2*q-1))*range;
+  return exp(log(4)*(2*q-1))*range;
 }
 
 float testGainExpoReversed(float range)
@@ -1130,7 +1130,7 @@ void configurationTask(uint32_t currentMicros)
             flapOutput--;
             consoleNote_P(PSTR("Flaps RETRACTED to "));
             consolePrintLn(flapOutput);
-          } else {
+          } else if(!mode.launch && iAS < paramRecord.ias_Low / 3) {
             consoleNoteLn_P(PSTR("Launch mode ENABLED"));
 	    mode.launch = true;
 	  }
@@ -1189,7 +1189,7 @@ void configurationTask(uint32_t currentMicros)
   mode.bankLimiter = switchStateLazy;
   mode.autoAlpha = mode.autoTrim = flapOutput > 0;
   mode.autoBall = true; // switchStateLazy;
-  mode.yawDamper = true; // switchStateLazy;
+  mode.yawDamper = switchStateLazy;
   
   // Receiver fail detection
 
@@ -1229,7 +1229,6 @@ void configurationTask(uint32_t currentMicros)
   maxAlpha = paramRecord.alphaMax;
   yawDamperP = paramRecord.yd_P;
   rudderMix = paramRecord.r_Mix;
-  yawFilter.setTau(paramRecord.yd_Tau*log(CONTROL_HZ));
   levelBank = 0;
   
   // Then apply test modes
@@ -1323,14 +1322,6 @@ void configurationTask(uint32_t currentMicros)
        rudderMix = 0;
        yawDamperP = testGain = testGainExpo(paramRecord.yd_P);
        break;
-
-     case 12:
-       // Yaw damper tau
-
-       mode.yawDamper = true;
-       rudderMix = 0;
-       yawFilter.setTau(testGain = testGainExpo(paramRecord.yd_Tau));
-       break;
     }
   }
       
@@ -1353,9 +1344,9 @@ void loopTask(uint32_t currentMicros)
 
     consolePrint(" IAS = ");
     consolePrint(iAS);
-    consolePrint(" IAS(rel) = ");
+    /*    consolePrint(" IAS(rel) = ");
     consolePrint(scaleByIAS(0, 1));
-
+    */
     /*    consolePrint(" ppmFreq = ");
     consolePrint(ppmFreq);
     consolePrint(" aileStick = ");
@@ -1408,11 +1399,14 @@ void loopTask(uint32_t currentMicros)
     /*    
     consolePrint(" param = ");
     consolePrint(parameter);  
+    */
     consolePrint(" testGain = ");
     consolePrint(testGain);
-    */
+
+    /* 
     consolePrint(" Qparam = ");
     consolePrint(quantize(parameter));  
+    */
     consolePrint("      \r");
     consoleFlush();
   }
@@ -1741,7 +1735,7 @@ void controlTask(uint32_t currentMicros)
 
   // Yaw damper
 
-  yawFilter.input(yawRate);
+  yawFilter.input(yawRate, controlCycle);
   
   if(!mode.sensorFailSafe && mode.yawDamper)
     rudderOutput -= yawFilter.output() * yawDamperP;

@@ -167,9 +167,7 @@ void printParams()
   consolePrint_P(PSTR(" Tu = "));
   consolePrintLn(paramRecord.r_Tu, 4);
   consoleNote_P(PSTR("  Yaw damper P = "));
-  consolePrint(paramRecord.yd_P, 4);
-  consolePrint_P(PSTR(" Tau = "));
-  consolePrintLn(paramRecord.yd_Tau, 4);
+  consolePrintLn(paramRecord.yd_P, 4);
   consoleNote_P(PSTR("  Alpha min = "));
   consolePrint(paramRecord.alphaMin*360);
   consolePrint_P(PSTR("  max = "));
