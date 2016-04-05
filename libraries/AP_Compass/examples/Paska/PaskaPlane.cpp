@@ -1019,16 +1019,19 @@ float quantize(float param)
   return (float) state / steps;
 }
 
+float testGainExpoFunction(float range, float param)
+{
+  return exp(log(4)*(2*quantize(param)-1))*range;
+}
+
 float testGainExpo(float range)
 {
-  float q = quantize(parameter);
-  return exp(log(4)*(2*q-1))*range;
+  return testGainExpoFunction(range, parameter);
 }
 
 float testGainExpoReversed(float range)
 {
-  float q = quantize(1 - parameter);
-  return exp(log(sqrt(10))*(2*q-1))*range;
+  return testGainExpoFunction(range, 1 - parameter);
 }
 
 float testGainLinear(float start, float stop)
@@ -1037,7 +1040,8 @@ float testGainLinear(float start, float stop)
   return start + q*(stop - start);
 }
 
-#define maxAutoAlpha (maxAlpha/square(1.1))  // Stall speed + 10%
+#define shakerAlpha (maxAlpha/square(1.05))  // Stall speed + 5%
+#define thresholdAlpha (maxAlpha/square(1.15))  // Stall speed + 15%
 
 void configurationTask(uint32_t currentMicros)
 {   
@@ -1188,8 +1192,8 @@ void configurationTask(uint32_t currentMicros)
   mode.stabilizer = true;
   mode.bankLimiter = switchStateLazy;
   mode.autoAlpha = mode.autoTrim = flapOutput > 0;
-  mode.autoBall = true; // switchStateLazy;
-  mode.yawDamper = switchStateLazy;
+  mode.autoBall = false; // switchStateLazy;
+  mode.yawDamper = false; // switchStateLazy;
   
   // Receiver fail detection
 
@@ -1305,7 +1309,7 @@ void configurationTask(uint32_t currentMicros)
        // Max alpha
 
        mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
-       maxAlpha = testGain = testGainLinear(10.0/360, 20.0/360);
+       maxAlpha = testGain = testGainLinear(20.0/360, 10.0/360);
        break;         
 
      case 10:
@@ -1320,6 +1324,13 @@ void configurationTask(uint32_t currentMicros)
 
        mode.yawDamper = true;
        rudderMix = 0;
+       yawDamperP = testGain = testGainExpo(paramRecord.yd_P);
+       break;
+ 
+     case 12:
+       // Yaw damper gain, aileron-rudder mixing enabled
+
+       mode.yawDamper = true;
        yawDamperP = testGain = testGainExpo(paramRecord.yd_P);
        break;
     }
@@ -1627,12 +1638,12 @@ void controlTask(uint32_t currentMicros)
   const float effStick = applyNullZone(elevStick - neutralStick);
     
   if(mode.rxFailSafe)
-    targetAlpha = maxAutoAlpha;
+    targetAlpha = thresholdAlpha;
   else {
     const float fract_c = 1.0/3;
     const float strength_c = max(effStick-(1.0-fract_c), 0)/fract_c;
     const float maxTargetAlpha_c =
-      mixValue(strength_c, maxAutoAlpha, maxAlpha);
+      mixValue(strength_c, shakerAlpha, maxAlpha);
     const float stickRange_c = min(20.0, 90/paramRecord.ff_A);
 
     targetAlpha = clamp(neutralAlpha + effStick*stickRange_c/360,
@@ -1672,7 +1683,7 @@ void controlTask(uint32_t currentMicros)
   if(mode.rxFailSafe)
     maxBank = 15.0;
   else if(mode.autoTrim)
-    maxBank /= 1.25 + neutralAlpha / maxAutoAlpha;
+    maxBank /= 1.25 + neutralAlpha / thresholdAlpha;
   
   float targetRollRate = maxRollRate*aileStick;
 
@@ -1799,7 +1810,7 @@ void trimTask(uint32_t currentMicros)
 {
   if(mode.autoTrim && fabsf(rollAngle) < 15)
     neutralAlpha +=
-      clamp((min(targetAlpha, maxAutoAlpha) - neutralAlpha)/2/TRIM_HZ,
+      clamp((min(targetAlpha, thresholdAlpha) - neutralAlpha)/2/TRIM_HZ,
 	    -1.5/360/TRIM_HZ, 1.5/360/TRIM_HZ);
 }
 
@@ -1931,7 +1942,7 @@ void setup() {
   
   I2c.begin();
   I2c.setSpeed(true);
-  I2c.pullup(true);
+  I2c.pullup(false);
   I2c.timeOut(2+EXT_EEPROM_LATENCY/1000);
 
   consolePrintLn_P(PSTR("done. "));
