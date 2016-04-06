@@ -70,7 +70,10 @@ typedef enum {
   c_pid,
   c_console,
   c_wl,
-  c_ias
+  c_ias,
+  c_acalibrate,
+  c_ecalibrate,
+  c_rcalibrate
 } token_t;
 
 typedef enum

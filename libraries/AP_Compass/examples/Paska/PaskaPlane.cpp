@@ -202,6 +202,7 @@ float parameter;
 NewI2C I2c = NewI2C();
 RunningAvgFilter alphaFilter;
 Derivator yawFilter;
+Accumulator ball;
 AlphaBuffer alphaBuffer, pressureBuffer;
 float controlCycle = 10.0e-3;
 uint32_t idleMicros;
@@ -531,6 +532,18 @@ void executeCommand(const char *buf, int bufLen)
     //
     
     switch(command.token) {
+    case c_acalibrate:
+      paramRecord.aileNeutral += paramRecord.aileDefl*param[0];
+      break;
+      
+    case c_ecalibrate:
+      paramRecord.elevNeutral += paramRecord.elevDefl*param[0];
+      break;
+      
+    case c_rcalibrate:
+      paramRecord.rudderNeutral += paramRecord.rudderDefl*param[0];
+      break;
+      
     case c_arm:
       rattling = false;
       armed = true;
@@ -846,6 +859,8 @@ void sensorTaskFast(uint32_t currentMicros)
   accX = acc.x;
   accY = acc.y;
   accZ = -acc.z;
+
+  ball.input(accY);
   
   Vector3f gyro = ins.get_gyro();
   
@@ -1192,7 +1207,7 @@ void configurationTask(uint32_t currentMicros)
   mode.stabilizer = true;
   mode.bankLimiter = switchStateLazy;
   mode.autoAlpha = mode.autoTrim = flapOutput > 0;
-  mode.autoBall = false; // switchStateLazy;
+  mode.autoBall = switchStateLazy;
   mode.yawDamper = false; // switchStateLazy;
   
   // Receiver fail detection
@@ -1367,6 +1382,9 @@ void loopTask(uint32_t currentMicros)
     consolePrint(" rudderStick = ");
     consolePrint(rudderStick);
     */
+    consolePrint(" ball = ");
+    consolePrint(ball.output(), 2);
+    
     consolePrint(" acc = (");
     consolePrint(accX, 2);
     consolePrint(", ");
@@ -1734,7 +1752,7 @@ void controlTask(uint32_t currentMicros)
     const float factor_c = 1/9.81/4;
 
     if(!rudderPilotInput)
-      rudderCtrl.input(-accY*factor_c, controlCycle);
+      rudderCtrl.input(-ball.output()*factor_c, controlCycle);
     
     rudderOutput += rudderCtrl.output();
   }
@@ -2000,6 +2018,7 @@ void setup() {
   //
   
   alphaFilter.setWindowLen(-1);
+  ball.setTau(70);
 
   // Misc sensors
   

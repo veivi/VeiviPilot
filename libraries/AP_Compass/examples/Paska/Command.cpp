@@ -69,6 +69,9 @@ const struct Command commands[] PROGMEM = {
   { "rattle", c_rattle },
   { "defaults", c_defaults },
   { "console", c_console },
+  { "acalibrate", c_acalibrate },
+  { "ecalibrate", c_ecalibrate },
+  { "rcalibrate", c_rcalibrate },
   { "", c_invalid },  
 };
 

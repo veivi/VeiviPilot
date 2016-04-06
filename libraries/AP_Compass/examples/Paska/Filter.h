@@ -27,14 +27,14 @@ class RunningAvgFilter {
     int ptr;
 };
 
-class DecayFilter {
+class Accumulator {
   public:
     void setTau(float tau);
     void input(float v);
     float output();
     
   private:
-    float tau, in, avg;
+    float tau, avg;
 };
 
 class Derivator {
