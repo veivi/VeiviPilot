@@ -1207,7 +1207,7 @@ void configurationTask(uint32_t currentMicros)
   mode.stabilizer = true;
   mode.bankLimiter = switchStateLazy;
   mode.autoAlpha = mode.autoTrim = flapOutput > 0;
-  mode.autoBall = switchStateLazy;
+  mode.autoBall = !switchStateLazy;
   mode.yawDamper = false; // switchStateLazy;
   
   // Receiver fail detection
@@ -1384,7 +1384,8 @@ void loopTask(uint32_t currentMicros)
     */
     consolePrint(" ball = ");
     consolePrint(ball.output(), 2);
-    
+
+    /*
     consolePrint(" acc = (");
     consolePrint(accX, 2);
     consolePrint(", ");
@@ -1392,6 +1393,7 @@ void loopTask(uint32_t currentMicros)
     consolePrint(", ");
     consolePrint(accZ, 2);
     consolePrint(")");
+    */
     /*
     consolePrint(" roll = ");
     consolePrint(rollAngle, 2);
