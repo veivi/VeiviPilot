@@ -1207,7 +1207,7 @@ void configurationTask(uint32_t currentMicros)
   mode.stabilizer = true;
   mode.bankLimiter = switchStateLazy;
   mode.autoAlpha = mode.autoTrim = flapOutput > 0;
-  mode.autoBall = !switchStateLazy;
+  mode.autoBall = true; // !switchStateLazy;
   mode.yawDamper = false; // switchStateLazy;
   
   // Receiver fail detection
@@ -1330,7 +1330,8 @@ void configurationTask(uint32_t currentMicros)
      case 10:
        // Aileron to rudder mix
 
-       rudderMix = testGain = testGainExpoReversed(paramRecord.r_Mix);
+       //       rudderMix = testGain = testGainExpoReversed(paramRecord.r_Mix);
+       rudderMix = testGain = testGainLinear(0.2, 0.6);
        break;
  
      case 11:
