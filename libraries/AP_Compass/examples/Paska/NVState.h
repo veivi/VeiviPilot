@@ -31,6 +31,7 @@ struct ParamRecord {
   float wl_Limit;
   bool c_PID;
   float ias_Low, ias_High;
+  float servoRate;
   };
 
 struct NVStateRecord {

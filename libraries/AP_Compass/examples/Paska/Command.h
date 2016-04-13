@@ -73,7 +73,8 @@ typedef enum {
   c_ias,
   c_acalibrate,
   c_ecalibrate,
-  c_rcalibrate
+  c_rcalibrate,
+  c_servorate
 } token_t;
 
 typedef enum

@@ -43,6 +43,7 @@ const struct Command commands[] PROGMEM = {
   { "gservo", c_gservo, e_int8, &paramRecord.servoGear },  
   { "pid", c_pid, e_int8, &paramRecord.c_PID },  
   { "ias", c_ias, e_float, &paramRecord.ias_Low, &paramRecord.ias_High },
+  { "servorate", c_servorate, e_float, &paramRecord.servoRate },
   { "model", c_model },
   { "zero", c_zero },
   { "alpha", c_alpha },

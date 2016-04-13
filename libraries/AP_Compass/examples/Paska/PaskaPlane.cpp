@@ -208,6 +208,7 @@ float controlCycle = 10.0e-3;
 uint32_t idleMicros;
 float idleAvg, logBandWidth, ppmFreq;
 bool looping, consoleConnected;
+RateLimiter aileRateLimiter;
     
 float elevOutput = 0, aileOutput = 0, flapOutput = 0, gearOutput = 1, brakeOutput = 0, rudderOutput = 0;
 
@@ -1250,6 +1251,8 @@ void configurationTask(uint32_t currentMicros)
   rudderMix = paramRecord.r_Mix;
   levelBank = 0;
   
+  aileRateLimiter.setRate(paramRecord.servoRate/(90.0/2)/paramRecord.aileDefl);
+  
   // Then apply test modes
   
   if(testMode) {
@@ -1331,7 +1334,7 @@ void configurationTask(uint32_t currentMicros)
        // Aileron to rudder mix
 
        //       rudderMix = testGain = testGainExpoReversed(paramRecord.r_Mix);
-       rudderMix = testGain = testGainLinear(0.2, 0.6);
+       rudderMix = testGain = testGainLinear(0.5, 0.0);
        break;
  
      case 11:
@@ -1711,6 +1714,10 @@ void controlTask(uint32_t currentMicros)
   if(mode.sensorFailSafe || !mode.stabilizer || mode.launch) {
 
     aileOutput = aileStick;
+    
+    if(!mode.sensorFailSafe && mode.wingLeveler)
+      aileOutput -= rollAngle/135;
+    
     aileCtrl.reset(aileOutput, 0);
     
   } else {
@@ -1737,7 +1744,9 @@ void controlTask(uint32_t currentMicros)
     aileCtrl.input(targetRollRate - rollRate, controlCycle);
     aileOutput = aileCtrl.output();
   }
- 
+
+  aileRateLimiter.input(aileOutput, controlCycle);
+    
   // Rudder
     
   rudderOutput = rudderStick;
@@ -1763,7 +1772,7 @@ void controlTask(uint32_t currentMicros)
   // Aileron/rudder mix
   
   if(!mode.sensorFailSafe)
-    rudderOutput += aileOutput*rudderMix;
+    rudderOutput += aileRateLimiter.output()*rudderMix;
 
   // Yaw damper
 
@@ -1805,7 +1814,7 @@ void actuatorTask(uint32_t currentMicros)
 				 - randomNum(0, 3)*paramRecord.flapStep, -1, 1));    
   } else if(armed) {
     pwmOutputWrite(aileHandle, NEUTRAL
-		   + RANGE*clamp(paramRecord.aileDefl*aileOutput 
+		   + RANGE*clamp(paramRecord.aileDefl*aileRateLimiter.output()
 				 + paramRecord.aileNeutral, -1, 1));
 
     pwmOutputWrite(elevatorHandle, NEUTRAL

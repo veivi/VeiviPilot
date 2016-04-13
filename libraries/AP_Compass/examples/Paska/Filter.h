@@ -46,6 +46,17 @@ class Derivator {
   float value, prev, delta;
 };
 
+class RateLimiter {
+  public:
+  void input(float v, float dt);
+  float output();
+  void setRate(float v);
+    
+  private:
+  float maxRate;
+  float state;
+};
+
 const int MedianWindow_c = 3;
   
 class Median3Filter {  

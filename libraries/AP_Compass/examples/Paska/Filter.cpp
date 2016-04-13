@@ -76,6 +76,21 @@ float Derivator::output(void)
   return (value - prev) / delta;
 }
 
+void RateLimiter::setRate(float r)
+{
+  maxRate = r;
+}  
+
+void RateLimiter::input(float v, float dt)
+{
+  state += clamp(v - state, -maxRate*dt, maxRate*dt);
+}
+
+float RateLimiter::output(void)
+{
+  return state;
+}
+
 void RunningAvgFilter::setWindowLen(int a) 
 {
   if(a < 1 || a > windowLenMax)

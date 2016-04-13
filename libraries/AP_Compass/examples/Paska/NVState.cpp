@@ -39,7 +39,9 @@ const struct ParamRecord paramDefaults = {
   0.0, 0.0,
   0.0,
   true,
-  12, 25 };
+  12, 25,
+  60/0.09
+};
 
 const struct NVStateRecord stateDefaults = { 0, 128, 1024, 400, 0, false, 0 };
 
@@ -222,6 +224,8 @@ void printParams()
   consolePrint(paramRecord.servoGear);
   consolePrint_P(PSTR("  B = "));
   consolePrintLn(paramRecord.servoBrake);
+  consoleNote_P(PSTR("  Servo rate = "));
+  consolePrintLn(paramRecord.servoRate);
 }
 
 static void dumpParamEntry(const Command *e)
