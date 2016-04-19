@@ -1,7 +1,7 @@
 #include "PWMOutput.h"
 #include <avr/io.h>
 
-#define PWM_HZ 50 // (100.141592654)
+#define PWM_HZ 50
 #define TIMER_HZ (16e6/8)
 
 static const uint8_t outputModeMask[] = { 1<<COM1A1, 1<<COM1B1, 1<<COM1C1 };

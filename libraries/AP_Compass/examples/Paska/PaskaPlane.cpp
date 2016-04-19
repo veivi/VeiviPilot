@@ -303,7 +303,7 @@ void logInput(void)
 
 void logActuator(void)
 {
-  logGeneric(lc_aileron, aileOutput);
+  logGeneric(lc_aileron, aileRateLimiter.output());
   logGeneric(lc_elevator, elevOutput);
   logGeneric(lc_rudder, rudderOutput);
 }
@@ -1208,7 +1208,7 @@ void configurationTask(uint32_t currentMicros)
   mode.stabilizer = true;
   mode.bankLimiter = switchStateLazy;
   mode.autoAlpha = mode.autoTrim = flapOutput > 0;
-  mode.autoBall = true; // !switchStateLazy;
+  mode.autoBall = false; // true; // !switchStateLazy;
   mode.yawDamper = false; // switchStateLazy;
   
   // Receiver fail detection
@@ -1217,7 +1217,7 @@ void configurationTask(uint32_t currentMicros)
     if(!mode.rxFailSafe) {
       consoleNoteLn_P(PSTR("Receiver failsafe mode ENABLED"));
       mode.rxFailSafe = true;
-      mode.sensorFailSafe = false;
+      mode.sensorFailSafe = mode.launch = false;
     }
   } else if(mode.rxFailSafe) {
     consoleNoteLn_P(PSTR("Receiver failsafe mode DISABLED"));
@@ -1231,19 +1231,26 @@ void configurationTask(uint32_t currentMicros)
     neutralStick = 0;
   }
   
+  // Safety scaling (test mode 0)
+  
+  float scale = 1.0;
+  
+  if(testMode && stateRecord.testChannel == 0)
+    scale = testGainLinear(1.0/3, 1.0);
+  
   // Default controller settings
 
   float s_Ku = scaleByIAS(paramRecord.s_Ku_slow, paramRecord.s_Ku_fast);
   float s_Tu = scaleByIAS(paramRecord.s_Tu_slow, paramRecord.s_Tu_fast);
-  
+
   if(paramRecord.c_PID)
-    aileCtrl.setZieglerNicholsPID(s_Ku, s_Tu);
+    aileCtrl.setZieglerNicholsPID(s_Ku*scale, s_Tu);
   else
-    aileCtrl.setZieglerNicholsPI(s_Ku, s_Tu);
+    aileCtrl.setZieglerNicholsPI(s_Ku*scale, s_Tu);
   
-  rudderCtrl.setZieglerNicholsPI(paramRecord.r_Ku, paramRecord.r_Tu);
-  elevCtrl.setZieglerNicholsPID(paramRecord.i_Ku, paramRecord.i_Tu);
-  pushCtrl.setZieglerNicholsPID(paramRecord.i_Ku, paramRecord.i_Tu);
+  rudderCtrl.setZieglerNicholsPI(paramRecord.r_Ku*scale, paramRecord.r_Tu);
+  elevCtrl.setZieglerNicholsPID(paramRecord.i_Ku*scale, paramRecord.i_Tu);
+  pushCtrl.setZieglerNicholsPID(paramRecord.i_Ku*scale, paramRecord.i_Tu);
 
   autoAlphaP = paramRecord.o_P;
   maxAlpha = paramRecord.alphaMax;
@@ -1258,100 +1265,99 @@ void configurationTask(uint32_t currentMicros)
   if(testMode) {
     testGain = testGainLinear(0, 1);
     
-     switch(stateRecord.testChannel) {
-     case 1:
-       // Wing stabilizer gain
+    switch(stateRecord.testChannel) {
+    case 1:
+      // Wing stabilizer gain
          
-       mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
-       aileCtrl.setPID(testGain = testGainExpo(s_Ku), 0, 0);
-       break;
+      mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
+      aileCtrl.setPID(testGain = testGainExpo(s_Ku), 0, 0);
+      break;
             
-     case 3:
-       // Elevator stabilizer gain, outer loop enabled
+    case 3:
+      // Elevator stabilizer gain, outer loop enabled
          
-       mode.autoTrim = mode.autoAlpha = true;
-       elevCtrl.setPID(testGain = testGainExpo(paramRecord.i_Ku), 0, 0);
-       break;
+      mode.autoTrim = mode.autoAlpha = true;
+      elevCtrl.setPID(testGain = testGainExpo(paramRecord.i_Ku), 0, 0);
+      break;
          
-     case 4:
-       // Auto alpha outer loop gain
+    case 4:
+      // Auto alpha outer loop gain
          
-       mode.autoTrim = mode.autoAlpha = true;
-       autoAlphaP = testGain = testGainExpo(paramRecord.o_P);
-       break;
+      mode.autoTrim = mode.autoAlpha = true;
+      autoAlphaP = testGain = testGainExpo(paramRecord.o_P);
+      break;
          
-     case 5:
-       // Auto ball gain
+    case 5:
+      // Auto ball gain
          
-       mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
-       mode.yawDamper = false;
-       mode.autoBall = true;
-       rudderMix = 0;
-       levelBank = 0;
-       rudderCtrl.setPID(testGain = testGainExpo(paramRecord.r_Ku), 0, 0);
-       break;
+      mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
+      mode.yawDamper = false;
+      mode.autoBall = true;
+      rudderMix = 0;
+      levelBank = 0;
+      rudderCtrl.setPID(testGain = testGainExpo(paramRecord.r_Ku), 0, 0);
+      break;
             
-     case 6:
-       // Aileron and rudder calibration, straight and level flight with
-       // ball centered, reduced controller gain to increase stability
+    case 6:
+      // Aileron and rudder calibration, straight and level flight with
+      // ball centered, reduced controller gain to increase stability
          
-       mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
-       mode.yawDamper = false;
-       mode.autoBall = true;
-       rudderMix = 0;
-       levelBank = 0;
-       aileCtrl.setZieglerNicholsPID
-	 (s_Ku*testGain, s_Tu);
-       rudderCtrl.setZieglerNicholsPI
-	 (paramRecord.r_Ku*testGain, paramRecord.r_Tu);
-       break;
+      mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
+      mode.yawDamper = false;
+      mode.autoBall = true;
+      rudderMix = 0;
+      levelBank = 0;
+      aileCtrl.setZieglerNicholsPID
+	(s_Ku*testGain, s_Tu);
+      rudderCtrl.setZieglerNicholsPI
+	(paramRecord.r_Ku*testGain, paramRecord.r_Tu);
+      break;
 
-     case 7:
-       // Auto rudder empirical gain, PI
+    case 7:
+      // Auto rudder empirical gain, PI
        
-       mode.autoBall = true;
-       rudderCtrl.setZieglerNicholsPI(testGain = testGainExpo(paramRecord.r_Ku),
-				      paramRecord.r_Tu);
-       break;
+      mode.autoBall = true;
+      rudderCtrl.setZieglerNicholsPI(testGain = testGainExpo(paramRecord.r_Ku),
+				     paramRecord.r_Tu);
+      break;
        
-     case 8:
-       // Aileron PI vs PID test
+    case 8:
+      // Aileron PI vs PID test
        
-       if(parameter > 0.5)
-	 aileCtrl.setZieglerNicholsPI(s_Ku, s_Tu);
-       else
-	 aileCtrl.setZieglerNicholsPID(s_Ku, s_Tu);
-       break;         
+      if(parameter > 0.5)
+	aileCtrl.setZieglerNicholsPI(s_Ku, s_Tu);
+      else
+	aileCtrl.setZieglerNicholsPID(s_Ku, s_Tu);
+      break;         
 
-     case 9:
-       // Max alpha
+    case 9:
+      // Max alpha
 
-       mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
-       maxAlpha = testGain = testGainLinear(20.0/360, 10.0/360);
-       break;         
+      mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
+      maxAlpha = testGain = testGainLinear(20.0/360, 10.0/360);
+      break;         
 
-     case 10:
-       // Aileron to rudder mix
+    case 10:
+      // Aileron to rudder mix
 
-       //       rudderMix = testGain = testGainExpoReversed(paramRecord.r_Mix);
-       rudderMix = testGain = testGainLinear(0.5, 0.0);
-       break;
+      rudderMix = testGain = testGainLinear(0.5, 0.0);
+      break;
  
-     case 11:
-       // Yaw damper gain, disable aileron-rudder mixing so we see the
-       // effect of yaw damping on adverse (aileron) yaw
-
-       mode.yawDamper = true;
-       rudderMix = 0;
-       yawDamperP = testGain = testGainExpo(paramRecord.yd_P);
-       break;
+    case 11:
+      // Yaw damper gain, disable aileron-rudder mixing so we see the
+      // effect of yaw damping on adverse (aileron) yaw
+      
+      mode.yawDamper = true;
+      rudderMix = 0;
+      yawDamperP = testGain = testGainExpo(paramRecord.yd_P);
+      break;
  
-     case 12:
-       // Yaw damper gain, aileron-rudder mixing enabled
+    case 12:
+      // Yaw damper gain, aileron-rudder mixing enabled
 
-       mode.yawDamper = true;
-       yawDamperP = testGain = testGainExpo(paramRecord.yd_P);
-       break;
+      mode.yawDamper = true;
+      yawDamperP = testGain = testGainExpo(paramRecord.yd_P);
+      break;
     }
   }
       
@@ -1698,6 +1704,8 @@ void controlTask(uint32_t currentMicros)
 
   if(!mode.sensorFailSafe && !alphaFailed)
     elevOutput = min(elevOutput, pushCtrl.output());
+
+  elevOutput = clamp(elevOutput, -1, 1);
   
   // Aileron
 
@@ -1716,7 +1724,7 @@ void controlTask(uint32_t currentMicros)
     aileOutput = aileStick;
     
     if(!mode.sensorFailSafe && mode.wingLeveler)
-      aileOutput -= rollAngle/135;
+      aileOutput -= rollAngle/90;
     
     aileCtrl.reset(aileOutput, 0);
     
@@ -1745,7 +1753,7 @@ void controlTask(uint32_t currentMicros)
     aileOutput = aileCtrl.output();
   }
 
-  aileRateLimiter.input(aileOutput, controlCycle);
+  aileRateLimiter.input(clamp(aileOutput, -1, 1), controlCycle);
     
   // Rudder
     
@@ -1781,6 +1789,8 @@ void controlTask(uint32_t currentMicros)
   if(!mode.sensorFailSafe && mode.yawDamper)
     rudderOutput -= yawFilter.output() * yawDamperP;
   
+  rudderOutput = clamp(rudderOutput, -1, 1);
+
   // Brake
     
   if(!mode.sensorFailSafe && gearOutput == 1)
