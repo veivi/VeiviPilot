@@ -187,7 +187,7 @@ bool cycleTimesValid;
 float cycleMin = -1.0, cycleMax = -1.0, cycleMean = -1.0, cycleCum = -1.0;
 const float tau = 0.1;
 float iAS, dynPressure, alpha, aileStick, elevStick, aileStickRaw, elevStickRaw, rudderStick, rudderStickRaw;
-bool ailePilotInput, rudderPilotInput;
+bool ailePilotInput, elevPilotInput, rudderPilotInput;
 uint32_t controlCycleEnded;
 int initCount = 5;
 bool armed = false;
@@ -817,6 +817,8 @@ float applyNullZone(float value)
   return applyNullZone(value, NULL);
 }
 
+int elevPilotInputPersistCount;
+
 void receiverTask(uint32_t currentMicros)
 {
   if(inputValid(&aileInput)) {
@@ -1202,7 +1204,7 @@ void configurationTask(uint32_t currentMicros)
     consoleNoteLn_P(PSTR("Launch mode DISABLED"));
     mode.launch = false;
   }
-		   
+
   // Mode-to-feature mapping: first nominal values
       
   mode.stabilizer = true;
@@ -1432,11 +1434,11 @@ void loopTask(uint32_t currentMicros)
     /*
     consolePrint(" speed = ");
     consolePrint(gpsFix.speed);
+    */
     consolePrint(" target = ");
     consolePrint(targetAlpha*360);
     consolePrint(" trim = ");
     consolePrint(neutralAlpha*360);
-*/
     /*    
     consolePrint(" param = ");
     consolePrint(parameter);  
@@ -1665,8 +1667,14 @@ void controlTask(uint32_t currentMicros)
   targetAlpha = 0.0;
   elevOutput = elevStick;
  
-  const float effStick = applyNullZone(elevStick - neutralStick);
+  const float
+    effStick = applyNullZone(elevStick - neutralStick, &elevPilotInput);
     
+  if(!elevPilotInput)
+    elevPilotInputPersistCount = 0;
+  else if(elevPilotInputPersistCount < CONTROL_HZ*2)
+    elevPilotInputPersistCount++;
+  
   if(mode.rxFailSafe)
     targetAlpha = thresholdAlpha;
   else {
@@ -1848,7 +1856,8 @@ void actuatorTask(uint32_t currentMicros)
 
 void trimTask(uint32_t currentMicros)
 {
-  if(mode.autoTrim && fabsf(rollAngle) < 15)
+  if(mode.autoTrim && elevPilotInputPersistCount > CONTROL_HZ
+     && fabsf(rollAngle) < 15)
     neutralAlpha +=
       clamp((min(targetAlpha, thresholdAlpha) - neutralAlpha)/2/TRIM_HZ,
 	    -1.5/360/TRIM_HZ, 1.5/360/TRIM_HZ);
