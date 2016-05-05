@@ -70,9 +70,9 @@ const struct PinDescriptor led[] = {{ PortA, 3 }, { PortA, 4 }, { PortA, 5 }};
 
 struct PinDescriptor ppmInputPin = { PortL, 1 }; 
 struct RxInputRecord aileInput, elevInput, rudderInput,
-  switchInput, tuningKnobInput;
+  switchInput, tuningKnobInput, gearInput, flapInput;
 struct RxInputRecord *ppmInputs[] = 
-{ &aileInput, &elevInput, NULL, &rudderInput, &switchInput, &tuningKnobInput };
+  { &aileInput, &elevInput, NULL, &rudderInput, &switchInput, &tuningKnobInput, &gearInput, &flapInput };
 
 #else
 
@@ -81,6 +81,8 @@ struct RxInputRecord elevInput = { { PortK, 1 } };
 struct RxInputRecord switchInput = { { PortK, 3 } };
 struct RxInputRecord tuningKnobInput = { { PortK, 3 } };
 struct RxInputRecord rudderInput = { { PortK, 4 } };
+struct RxInputRecord gearInput = { { PortK, 5 } };
+struct RxInputRecord flapInput = { { PortK, 6 } };
 
 #endif
 
@@ -177,7 +179,8 @@ struct GPSFix gpsFix;
 bool testMode = false;
 bool rattling = false;
 float testGain = 0;
-bool switchState = false, switchStateLazy = false, echoEnabled = true;
+int8_t switchState = 0, switchStateLazy = 0;
+bool echoEnabled = true;
 bool iasFailed = false, iasWarn = false, alphaFailed = false, alphaWarn = false;
 bool rxElevatorAlive = true, rxAileronAlive = true, rpmAlive = 0;
 const int cycleTimeWindow = 31;
@@ -192,7 +195,7 @@ uint32_t controlCycleEnded;
 int initCount = 5;
 bool armed = false;
 float neutralStick = 0.0, neutralAlpha, targetAlpha;
-float switchValue, tuningKnobValue, rpmOutput;
+float switchValue, gearValue, flapValue, tuningKnobValue, rpmOutput;
 Controller elevCtrl, aileCtrl, pushCtrl, rudderCtrl;
 float autoAlphaP, maxAlpha, yawDamperP, rudderMix;
 float accX, accY, accZ, altitude,  heading, rollAngle, pitchAngle, rollRate, pitchRate, yawRate, levelBank;
@@ -211,6 +214,7 @@ bool looping, consoleConnected;
 RateLimiter aileRateLimiter;
     
 float elevOutput = 0, aileOutput = 0, flapOutput = 0, gearOutput = 1, brakeOutput = 0, rudderOutput = 0;
+int8_t elevMode = 0;
 
 #ifdef rpmPin
 struct RxInputRecord rpmInput = { rpmPin };
@@ -327,15 +331,40 @@ void logAttitude(void)
   logGeneric(lc_yawrate, yawRate*360);
 }
 
-bool readSwitch()
+struct SwitchRecord {
+  struct RxInputRecord *input;
+  int8_t prevState, state;
+};
+
+struct SwitchRecord modeSwitchRecord = { &switchInput };
+struct SwitchRecord gearSwitchRecord = { &gearInput };
+struct SwitchRecord flapSwitchRecord = { &flapInput };
+
+int8_t readSwitch(struct SwitchRecord *record)
 {
-  static bool state = false;
-  const float value = decodePWM(switchValue);
+  static int8_t prev = 0, state = 0;
+  int8_t newState = 0;
+
+  if(inputValid(record->input)) {
+    const float value = decodePWM(inputValue(record->input));
   
-  if(fabsf(value) > 0.3)
-    state = value < 0.0;
-  
+    if(fabsf(value) < 0.3)
+      newState = 0;
+    else
+      newState = value < 0.0 ? -1 : 1;
+
+    if(prev == newState)
+      state = newState;
+
+    prev = newState;
+  }
+
   return state;
+}
+
+int8_t readModeSwitch()
+{
+  return readSwitch(&modeSwitchRecord);
 }
 
 float readParameter()
@@ -837,9 +866,6 @@ void receiverTask(uint32_t currentMicros)
     elevStickRaw = decodePWM(inputValue(&elevInput));
     elevStick = clamp(elevStickRaw - paramRecord.elevZero, -1, 1);
   }
-
-  if(inputValid(&switchInput))
-    switchValue = inputValue(&switchInput);
     
   if(inputValid(&tuningKnobInput))
     tuningKnobValue = inputValue(&tuningKnobInput);
@@ -1066,8 +1092,8 @@ void configurationTask(uint32_t currentMicros)
   static bool pulseArmed = false, pulsePolarity = false;
   static int pulseCount = 0; 
    
-  int prev = switchState;
-  switchState = readSwitch();
+  int8_t prev = switchState;
+  switchState = readModeSwitch();
   bool switchStateChange = switchState != prev;
 
   if(initCount > 0) {
@@ -1080,9 +1106,9 @@ void configurationTask(uint32_t currentMicros)
   static uint32_t lastUpdate;
           
   if(switchStateChange) {
-    if(switchState != switchStateLazy) {
+    if(switchState && switchState != switchStateLazy) {
       pulseArmed = true;
-      pulsePolarity = switchState;
+      pulsePolarity = switchState > 0;
     } else if(pulseArmed) {
       // We detected a pulse
             
@@ -1100,10 +1126,10 @@ void configurationTask(uint32_t currentMicros)
               logDisable();
             }
           } else {
-            consoleNoteLn_P(PSTR("Climbing out"));
-            gearOutput = 1;
-            if(flapOutput > 2)
-              flapOutput = 2;
+	    //            consoleNoteLn_P(PSTR("Climbing out"));
+            //gearOutput = 1;
+            //if(flapOutput > 2)
+            //  flapOutput = 2;
           }
         }
       }
@@ -1117,21 +1143,23 @@ void configurationTask(uint32_t currentMicros)
       switchStateLazy = switchState;
         
       consoleNote_P(PSTR("Lazy switch "));
-      consolePrintLn(switchState ? "ON" : "OFF");
+      consolePrintLn(switchState > 0 ? "UP" : switchState < 0 ? "DOWN" : "NEU");
 
-      if(switchState) {
+      if(switchState > 0) {
         if(armed && !logEnabled && !consoleConnected)
           logEnable();
-          
-        consoleNoteLn_P(PSTR("Wing leveler ENABLED"));
-        mode.wingLeveler = true;
-      } else {
+
+	if(!mode.bankLimiter) {
+	  consoleNoteLn_P(PSTR("Wing leveler and bank limiter ENABLED"));
+	  mode.wingLeveler = mode.bankLimiter = true;
+	} 
+      } else if(switchState < 0) {
         if(armed && logEnabled)
           logMark();
 
-	if(mode.wingLeveler) {
-	  consoleNoteLn_P(PSTR("Wing leveler DISABLED"));
-	  mode.wingLeveler = false;
+	if(mode.bankLimiter) {
+	  consoleNoteLn_P(PSTR("Bank limiter DISABLED"));
+	  mode.wingLeveler = mode.bankLimiter = false;
 	}
       }
     }
@@ -1147,27 +1175,22 @@ void configurationTask(uint32_t currentMicros)
           armed = true;
           talk = false;
           
-        } else if(paramRecord.servoGear < 0 || gearOutput > 0) {
-          if(flapOutput > 0) {
-            flapOutput--;
-            consoleNote_P(PSTR("Flaps RETRACTED to "));
-            consolePrintLn(flapOutput);
+        } else {
+          if(elevMode > 0) {
+            elevMode--;
+            consoleNote_P(PSTR("Elevator mode DECREMENTED to "));
+            consolePrintLn(elevMode);
+	    
           } else if(!mode.launch && iAS < paramRecord.ias_Low / 3) {
             consoleNoteLn_P(PSTR("Launch mode ENABLED"));
 	    mode.launch = true;
 	  }
-        } else {
-          consoleNoteLn_P(PSTR("Gear UP"));
-          gearOutput = 1;
         }
       } else {
-	if(paramRecord.servoGear > -1 && gearOutput > 0) {
-          consoleNoteLn_P(PSTR("Gear DOWN"));
-          gearOutput = 0;
-        } else if(flapOutput < 3) {
-          flapOutput++;
-          consoleNote_P(PSTR("Flaps EXTENDED to "));
-          consolePrintLn(flapOutput);
+        if(elevMode < 1) {
+          elevMode++;
+          consoleNote_P(PSTR("Elevator mode INCREMENTED to "));
+          consolePrintLn(elevMode);
         }
       }
     }
@@ -1208,14 +1231,13 @@ void configurationTask(uint32_t currentMicros)
   // Mode-to-feature mapping: first nominal values
       
   mode.stabilizer = true;
-  mode.bankLimiter = switchStateLazy;
-  mode.autoAlpha = mode.autoTrim = flapOutput > 0;
+  mode.autoAlpha = mode.autoTrim = elevMode > 0;
   mode.autoBall = false; // true; // !switchStateLazy;
   mode.yawDamper = false; // switchStateLazy;
   
   // Receiver fail detection
 
-  if(switchState && aileStick < -0.90 && elevStick > 0.90) {
+  if(switchState == 1 && aileStick < -0.90 && elevStick > 0.90) {
     if(!mode.rxFailSafe) {
       consoleNoteLn_P(PSTR("Receiver failsafe mode ENABLED"));
       mode.rxFailSafe = true;
@@ -1232,6 +1254,14 @@ void configurationTask(uint32_t currentMicros)
     mode.autoAlpha = mode.autoTrim = mode.bankLimiter = true;
     neutralStick = 0;
   }
+
+  // Gear and flap input
+
+  if(paramRecord.servoGear > -1)
+    gearOutput = readSwitch(&gearSwitchRecord) > 0 ? 1 : 0;
+  
+  if(paramRecord.servoFlap > -1)
+    flapOutput = readSwitch(&flapSwitchRecord) + 1;
   
   // Safety scaling (test mode 0)
   
