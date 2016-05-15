@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 #define MAX_NAME_LEN 24
-#define MAX_VARS 4
+#define MAX_VARS 10
 
 typedef enum {
   c_invalid,
@@ -71,14 +71,18 @@ typedef enum {
   c_console,
   c_wl,
   c_ias,
-  c_acalibrate,
-  c_ecalibrate,
-  c_rcalibrate,
-  c_servorate
+  c_atrim,
+  c_etrim,
+  c_rtrim,
+  c_servorate,
+  c_rxmin,
+  c_rxmax,
+  c_rxzero,
+  c_calibrate
 } token_t;
 
 typedef enum
-  { e_int8, e_uint16, e_angle90, e_angle360, e_float, e_string } varType_t;
+  { e_int8, e_uint16, e_angle90, e_angle360, e_float, e_string, e_calib } varType_t;
 
 struct Command {
   char name[MAX_NAME_LEN];

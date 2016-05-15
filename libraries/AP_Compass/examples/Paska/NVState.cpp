@@ -182,25 +182,25 @@ void printParams()
   consoleNote_P(PSTR("    deflection = "));
   consolePrint(paramRecord.elevDefl*90);
   consolePrint_P(PSTR(" neutral = "));
-  consolePrint(paramRecord.elevNeutral*90);
-  consolePrint_P(PSTR(" center = "));
-  consolePrintLn(paramRecord.elevZero*90);
+  consolePrintLn(paramRecord.elevNeutral*90);
+  //  consolePrint_P(PSTR(" center = "));
+  //  consolePrintLn(paramRecord.elevZero*90);
   consoleNoteLn_P(PSTR("  Aileron"));
   consoleNote_P(PSTR("    deflection = "));
   consolePrint(paramRecord.aileDefl*90);
   consolePrint_P(PSTR(" neutral = "));
-  consolePrint(paramRecord.aileNeutral*90);
-  consolePrint_P(PSTR(" center = "));
-  consolePrintLn(paramRecord.aileZero*90);
+  consolePrintLn(paramRecord.aileNeutral*90);
+  //  consolePrint_P(PSTR(" center = "));
+  //  consolePrintLn(paramRecord.aileZero*90);
   consoleNoteLn_P(PSTR("  Rudder"));
   consoleNote_P(PSTR("    deflection = "));
   consolePrint(paramRecord.rudderDefl*90);
   consolePrint_P(PSTR(" neutral = "));
   consolePrint(paramRecord.rudderNeutral*90);
   consolePrint_P(PSTR(" aile mix = "));
-  consolePrint(paramRecord.r_Mix);
-  consolePrint_P(PSTR(" center = "));
-  consolePrintLn(paramRecord.rudderZero*90);
+  consolePrintLn(paramRecord.r_Mix);
+  //  consolePrint_P(PSTR(" center = "));
+  // consolePrintLn(paramRecord.rudderZero*90);
   consoleNoteLn_P(PSTR("  Flap"));
   consoleNote_P(PSTR("    step = "));
   consolePrint(paramRecord.flapStep*90);
@@ -258,6 +258,12 @@ static void dumpParamEntry(const Command *e)
     case e_angle360:
       consolePrint(*((float*) e->var[i])*360);
       break;
+
+    case e_calib:
+      for(int j = 0; j < MAX_CH; i++) {
+	consolePrint(((uint32_t*) e->var[i])[j]);
+	consolePrint(" ");
+      }
     }
   }
 

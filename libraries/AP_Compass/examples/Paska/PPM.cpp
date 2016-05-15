@@ -44,7 +44,8 @@ static void handlePPMInput(const uint16_t *pulse, int numCh)
     if(inputRecords[i]) {
        inputRecords[i]->alive = true;
        inputRecords[i]->pulseCount++;
-       inputRecords[i]->pulseWidthAcc += pulse[i]/2;              
+       inputRecords[i]->pulseWidthLast = pulse[i]/2;              
+       inputRecords[i]->pulseWidthAcc += inputRecords[i]->pulseWidthLast;
      }
   }
 }

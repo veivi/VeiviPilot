@@ -5,6 +5,7 @@
 
 #define MAX_MODELS   4
 #define NAME_LEN     8
+#define MAX_CH       8
 
 // Parameters and non-volatile state
 
@@ -14,7 +15,6 @@ struct ParamRecord {
   uint8_t i2c_clkDiv;
   uint8_t i2c_5048B, i2c_24L256;
   uint16_t alphaRef;
-  float elevZero, aileZero, rudderZero;
   float aileNeutral, aileDefl;
   float elevNeutral, elevDefl;
   float flapNeutral, flap2Neutral, flapStep;
@@ -32,6 +32,7 @@ struct ParamRecord {
   bool c_PID;
   float ias_Low, ias_High;
   float servoRate;
+  uint32_t rxZero[MAX_CH], rxMin[MAX_CH], rxMax[MAX_CH];
   };
 
 struct NVStateRecord {
