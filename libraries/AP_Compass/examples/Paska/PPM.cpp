@@ -27,6 +27,25 @@ bool ppmWarnShort, ppmWarnSlow;
 static struct RxInputRecord **inputRecords;
 static int numInputs;
 
+static bool calibrating;
+
+void calibStart()
+{
+  calibrating = true;
+  
+  for(int i = 0; i < numInputs; i++)
+    if(inputRecords[i]) {
+      inputRecords[i]->pulseCenter
+	= inputRecords[i]->pulseMin
+	= inputRecords[i]->pulseMax = inputRecords[i]->pulseWidthLast;
+    }
+}
+  
+void calibStop()
+{
+  calibrating = false;
+}
+  
 static void handlePPMInput(const uint16_t *pulse, int numCh)
 {
   static uint32_t prev;
@@ -46,7 +65,12 @@ static void handlePPMInput(const uint16_t *pulse, int numCh)
        inputRecords[i]->pulseCount++;
        inputRecords[i]->pulseWidthLast = pulse[i]/2;              
        inputRecords[i]->pulseWidthAcc += inputRecords[i]->pulseWidthLast;
-     }
+
+       if(calibrating) {
+	 inputRecords[i]->pulseMin = min(inputRecords[i]->pulseWidthLast, inputRecords[i]->pulseMin);
+	 inputRecords[i]->pulseMax = min(inputRecords[i]->pulseWidthLast, inputRecords[i]->pulseMax);
+       }
+    }
   }
 }
 

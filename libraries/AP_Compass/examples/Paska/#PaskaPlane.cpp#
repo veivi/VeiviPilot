@@ -369,7 +369,7 @@ int8_t readModeSwitch()
 
 float readParameter()
 {
-  return ((decodePWM(tuningKnobValue) + 1.0) / 2 - 0.05) / 0.95;
+  return ((tuningKnobValue + 1.0) / 2 - 0.05) / 0.95;
 }
 
 float readRPM()
@@ -868,10 +868,10 @@ void receiverTask(uint32_t currentMicros)
   }
     
   if(inputValid(&tuningKnobInput))
-    tuningKnobValue = inputValue(&tuningKnobInput);
+    tuningKnobValue = decodePWM(inputValue(&tuningKnobInput));
     
   if(inputValid(&throttleInput))
-    throttleStick = inputValue(&throttleInput);
+    throttleStick = decodePWM(inputValue(&throttleInput));
 }
 
 void sensorTaskFast(uint32_t currentMicros)

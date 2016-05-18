@@ -33,7 +33,12 @@ uint32_t inputValue(struct RxInputRecord *record)
   PERMIT;
   
   //  return acc / count;
-  return value;
+
+  if(value < record->pulseCenter)
+    return (float) (value - record->pulseCenter)/(record->pulseCenter-record->pulseMin);
+  else
+    return (float) (value - record->pulseCenter)/(record->pulseMax-record->pulseCenter)
+      //  return value;
 }
 
 void rxInputInit(struct RxInputRecord *record)
