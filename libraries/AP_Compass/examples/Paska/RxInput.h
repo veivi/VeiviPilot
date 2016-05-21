@@ -6,17 +6,17 @@
 struct RxInputRecord {
   struct PinDescriptor pin;
   bool freqOnly, alive;
-  uint32_t pulseMin, pulseMax, pulseCenter;
-  uint32_t pulseStart;
-  uint32_t pulseCount;
-  uint32_t pulseWidthAcc;
-  uint32_t pulseWidthLast;
+  int32_t pulseMin, pulseMax, pulseCenter;
+  int32_t pulseStart;
+  int32_t pulseCount;
+  int32_t pulseWidthAcc;
+  int32_t pulseWidthLast;
 };
   
 void rxInputInit(struct RxInputRecord *record);
 bool inputValid(struct RxInputRecord *record);
 float inputValue(struct RxInputRecord *record);
-float decodePWM(float pulse);
+// float decodePWM(float pulse);
 
 extern bool pciWarn;
 

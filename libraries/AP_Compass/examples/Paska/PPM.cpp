@@ -41,9 +41,17 @@ void calibStart()
     }
 }
   
-void calibStop()
+void calibStop(int32_t *min, int32_t *center, int32_t *max)
 {
-  calibrating = false;
+  if(calibrating) {
+    for(uint8_t i = 0; i < numInputs; i++) {
+      min[i] = inputRecords[i]->pulseMin;
+      center[i] = inputRecords[i]->pulseCenter;
+      max[i] = inputRecords[i]->pulseMax;
+    }
+
+    calibrating = false;
+  }
 }
   
 static void handlePPMInput(const uint16_t *pulse, int numCh)
@@ -68,7 +76,7 @@ static void handlePPMInput(const uint16_t *pulse, int numCh)
 
        if(calibrating) {
 	 inputRecords[i]->pulseMin = min(inputRecords[i]->pulseWidthLast, inputRecords[i]->pulseMin);
-	 inputRecords[i]->pulseMax = min(inputRecords[i]->pulseWidthLast, inputRecords[i]->pulseMax);
+	 inputRecords[i]->pulseMax = max(inputRecords[i]->pulseWidthLast, inputRecords[i]->pulseMax);
        }
     }
   }
@@ -103,11 +111,16 @@ extern "C" ISR(TIMER5_CAPT_vect)
   icr5_prev = icr5_current;
 }
 
-void ppmInputInit(struct RxInputRecord *inputs[], int num)
+void ppmInputInit(struct RxInputRecord *inputs[], int num, const int32_t *min, const int32_t *center, const int32_t *max)
 {
-
   inputRecords = inputs;
   numInputs = min(num, AVR_RC_INPUT_MAX_CHANNELS);
+  
+  for(uint8_t i = 0; i < num; i++) {
+    inputs[i]->pulseMin = min[i];
+    inputs[i]->pulseCenter = center[i];
+    inputs[i]->pulseMax = max[i];
+  }
   
   FORBID;
     

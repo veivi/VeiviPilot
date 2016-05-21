@@ -32,7 +32,6 @@ struct ParamRecord {
   bool c_PID;
   float ias_Low, ias_High;
   float servoRate;
-  uint32_t rxZero[MAX_CH], rxMin[MAX_CH], rxMax[MAX_CH];
   };
 
 struct NVStateRecord {
@@ -42,6 +41,7 @@ struct NVStateRecord {
   int model;
   bool logRPM;
   int testChannel;
+  int32_t rxCenter[MAX_CH], rxMin[MAX_CH], rxMax[MAX_CH];
 };
 
 extern struct ParamRecord paramRecord;

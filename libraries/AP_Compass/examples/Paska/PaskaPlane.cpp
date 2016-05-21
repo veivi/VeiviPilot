@@ -346,7 +346,7 @@ int8_t readSwitch(struct SwitchRecord *record)
   int8_t newState = 0;
 
   if(inputValid(record->input)) {
-    const float value = decodePWM(inputValue(record->input));
+    const float value = inputValue(record->input);
   
     if(fabsf(value) < 0.3)
       newState = 0;
@@ -369,7 +369,7 @@ int8_t readModeSwitch()
 
 float readParameter()
 {
-  return ((decodePWM(tuningKnobValue) + 1.0) / 2 - 0.05) / 0.95;
+  return ((tuningKnobValue + 1.0) / 2 - 0.05) / 0.95;
 }
 
 float readRPM()
@@ -605,12 +605,18 @@ void executeCommand(const char *buf, int bufLen)
       break;
 
     case c_center:
+      /*
       paramRecord.elevZero = elevStickRaw;
       paramRecord.aileZero = aileStickRaw;
       paramRecord.rudderZero = rudderStickRaw;
+      */
       consoleNoteLn_P(PSTR("Stick center set"));
       break;
-    
+
+    case c_calibrate:
+      calibStart();
+      break;
+          
     case c_zero:
       paramRecord.alphaRef += (int16_t) ((1L<<16) * alpha);
       consoleNoteLn_P(PSTR("Alpha zero set"));
@@ -851,20 +857,18 @@ int elevPilotInputPersistCount;
 void receiverTask(uint32_t currentMicros)
 {
   if(inputValid(&aileInput)) {
-    aileStickRaw = decodePWM(inputValue(&aileInput));
-    aileStick = applyNullZone(clamp(aileStickRaw - paramRecord.aileZero, -1, 1),
-			      &ailePilotInput);
+    aileStickRaw = inputValue(&aileInput);
+    aileStick = applyNullZone(aileStickRaw, &ailePilotInput);
   }
   
   if(inputValid(&rudderInput)) {
-    rudderStickRaw = decodePWM(inputValue(&rudderInput));
-    rudderStick = applyNullZone(clamp(rudderStickRaw - paramRecord.rudderZero, -1, 1),
-				&rudderPilotInput);
+    rudderStickRaw = inputValue(&rudderInput);
+    rudderStick = applyNullZone(rudderStickRaw, &rudderPilotInput);
   }
   
   if(inputValid(&elevInput)) {
-    elevStickRaw = decodePWM(inputValue(&elevInput));
-    elevStick = clamp(elevStickRaw - paramRecord.elevZero, -1, 1);
+    elevStickRaw = inputValue(&elevInput);
+    elevStick = elevStickRaw;
   }
     
   if(inputValid(&tuningKnobInput))
@@ -1176,7 +1180,8 @@ void configurationTask(uint32_t currentMicros)
         } else if(!armed) {
           consoleNoteLn_P(PSTR("We're now ARMED"));
           armed = true;
-          talk = false;
+	  if(!consoleConnected)
+	    talk = false;
           
         } else {
           if(elevMode > 0) {
@@ -1412,7 +1417,7 @@ void loopTask(uint32_t currentMicros)
 
     consolePrint(" InputVec = ( ");
     for(uint8_t i = 0; i < sizeof(ppmInputs)/sizeof(void*); i++) {
-      consolePrint(decodePWM(inputValue(ppmInputs[i])), 2);
+      consolePrint(inputValue(ppmInputs[i]), 2);
       consolePrint(" ");
     }      
     consolePrint(")");
@@ -1526,6 +1531,7 @@ void communicationTask(uint32_t currentMicros)
 	
       } else if(c == '\n' || c == '\r') {
 	looping = false;
+	calibStop(stateRecord.rxMin, stateRecord.rxCenter, stateRecord.rxMax);
 
 	if(serialBufIndex < 1)
 	  consolePrintLn("// %");
@@ -2059,8 +2065,9 @@ void setup() {
   consoleNoteLn_P(PSTR("Initializing PPM receiver"));
 
   configureInput(&ppmInputPin, true);
-  ppmInputInit(ppmInputs, sizeof(ppmInputs)/sizeof(struct RxInputRecord*));
-
+  
+  ppmInputInit(ppmInputs, sizeof(ppmInputs)/sizeof(struct RxInputRecord*),
+	       stateRecord.rxMin, stateRecord.rxCenter, stateRecord.rxMax);
 #else
   
   consoleNoteLn_P(PSTR("Initializing individual PWM inputs"));

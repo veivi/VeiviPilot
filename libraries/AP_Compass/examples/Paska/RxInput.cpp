@@ -11,23 +11,24 @@ struct RxInputRecord **rxInputIndexList[] = { rxInputIndex0, rxInputIndex1, rxIn
 uint8_t log2Table[1<<8];
 bool pciWarn;
 
+/*
 float decodePWM(float pulse) {
   const float txRange = 0.81;
   return (pulse - 1500)/500.0/txRange;
 }
-
+*/
 bool inputValid(struct RxInputRecord *record)
 {
   return record->pulseCount > 0;
 }
 
-uint32_t inputValue(struct RxInputRecord *record)
+float inputValue(struct RxInputRecord *record)
 {
   FORBID;
   
   //  uint32_t count = record->pulseCount, acc = record->pulseWidthAcc;
   
-  uint32_t value = record->pulseWidthLast;
+  int32_t value = record->pulseWidthLast;
   record->pulseWidthAcc = record->pulseCount = 0;  
   
   PERMIT;
@@ -37,7 +38,7 @@ uint32_t inputValue(struct RxInputRecord *record)
   if(value < record->pulseCenter)
     return (float) (value - record->pulseCenter)/(record->pulseCenter-record->pulseMin);
   else
-    return (float) (value - record->pulseCenter)/(record->pulseMax-record->pulseCenter)
+    return (float) (value - record->pulseCenter)/(record->pulseMax-record->pulseCenter);
       //  return value;
 }
 

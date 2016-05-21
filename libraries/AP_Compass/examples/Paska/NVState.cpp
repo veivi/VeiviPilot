@@ -18,29 +18,28 @@ struct ParamRecord paramRecord;
 #define paramOffset stateRecord.paramPartition
 
 const struct ParamRecord paramDefaults = {
-  0,
-  "Unnamed",
-  12,
-  0x40, 0x50, 
-  0,
-  0, 0, 0,
-  0, -45.0/90,
-  0, 45.0/90,
-  0, -15.0/90, -15.0/90,
-  0, 45.0/90,
-  0, 45.0/90,
-  0, 1, 2, -1, -1, -1, -1,
-  -3.0/360,  12.0/360,
-  1.0, 0.25, 10.0, 
-  1.3, 0.25, 
-  1.3, 0.25, 
-  2.0, 1.0, 0.1,
-  0.1, 0.25,
-  0.0, 0.0,
-  0.0,
-  true,
-  12, 25,
-  60/0.09
+  .crc = 0,
+  { .name = "Unnamed" },
+  .i2c_clkDiv = 12,
+  .i2c_5048B = 0x40, .i2c_24L256 = 0x50, 
+  .alphaRef = 0,
+  .aileNeutral = 0, .aileDefl = -45.0/90,
+  .elevNeutral = 0, .elevDefl = 45.0/90,
+  .flapNeutral = 0, .flap2Neutral = -15.0/90, .flapStep = -15.0/90,
+  .rudderNeutral = 0, .rudderDefl = 45.0/90,
+  .brakeNeutral = 0, .brakeDefl = 45.0/90,
+  .servoAile = 0, .servoElev = 1, .servoRudder = 2, .servoFlap = -1, .servoFlap2 = -1, .servoGear = -1, .servoBrake = -1,
+  .alphaMin = -3.0/360, .alphaMax = 12.0/360,
+  .i_Ku = 1.0, .i_Tu = 0.25, .o_P = 10.0, 
+  .s_Ku_fast = 1.3, .s_Tu_fast = 0.25, 
+  .s_Ku_slow = 1.3, .s_Tu_slow = 0.25, 
+  .yd_P = 0, .yd_Tau = 1.0, .r_Mix = 0.1,
+  .r_Ku = 0.1, .r_Tu = 0.25,
+  .ff_A = 0.0, .ff_B = 0.0,
+  .wl_Limit = 0.0,
+  .c_PID = true,
+  .ias_Low = 12, .ias_High = 25,
+  .servoRate = 60/0.09
 };
 
 const struct NVStateRecord stateDefaults = { 0, 128, 1024, 400, 0, false, 0 };
@@ -258,12 +257,6 @@ static void dumpParamEntry(const Command *e)
     case e_angle360:
       consolePrint(*((float*) e->var[i])*360);
       break;
-
-    case e_calib:
-      for(int j = 0; j < MAX_CH; i++) {
-	consolePrint(((uint32_t*) e->var[i])[j]);
-	consolePrint(" ");
-      }
     }
   }
 
