@@ -208,9 +208,9 @@ float controlCycle = 10.0e-3;
 uint32_t idleMicros;
 float idleAvg, logBandWidth, ppmFreq;
 bool looping, consoleConnected;
-RateLimiter aileRateLimiter;
+RateLimiter aileRateLimiter, flapRateLimiter;
     
-float elevOutput = 0, aileOutput = 0, flapOutput = 0, gearOutput = 1, brakeOutput = 0, rudderOutput = 0;
+float elevOutput = 0, aileOutput = 0, flapOutput = 0, gearOutput = 0, brakeOutput = 0, rudderOutput = 0;
 int8_t elevMode = 0;
 
 #ifdef rpmPin
@@ -1228,10 +1228,10 @@ void configurationTask(uint32_t currentMicros)
 
   if(gearButton.singlePulse()) {
     if(gearOutput > 0) {
-      consoleNoteLn_P(PSTR("Gear UP"));
+      consoleNoteLn_P(PSTR("Gear DOWN"));
       gearOutput = 0;
     } else {
-      consoleNoteLn_P(PSTR("Gear DOWN"));
+      consoleNoteLn_P(PSTR("Gear UP"));
       gearOutput = 1;
     }
   }
@@ -1350,6 +1350,7 @@ void configurationTask(uint32_t currentMicros)
   levelBank = 0;
   
   aileRateLimiter.setRate(paramRecord.servoRate/(90.0/2)/paramRecord.aileDefl);
+  flapRateLimiter.setRate(0.5);
   
   // Then apply test modes
   
@@ -1936,15 +1937,17 @@ void actuatorTask(uint32_t currentMicros)
     pwmOutputWrite(elevatorHandle, NEUTRAL
 		   + RANGE*clamp(paramRecord.elevDefl*elevOutput 
 				 + paramRecord.elevNeutral, -1, 1));
-                              
+
+    flapRateLimiter.input(flapOutput, controlCycle);
+    
     pwmOutputWrite(flapHandle, NEUTRAL
 		   + RANGE*clamp(paramRecord.flapNeutral 
-				  + flapOutput*paramRecord.flapStep, -1, 1));                              
+				 + paramRecord.flapStep*flapRateLimiter.output(), -1, 1));                              
     pwmOutputWrite(flap2Handle, NEUTRAL
 		   + RANGE*clamp(paramRecord.flap2Neutral 
-				  - flapOutput*paramRecord.flapStep, -1, 1));                              
+				 - paramRecord.flapStep*flapRateLimiter.output(), -1, 1));                              
 
-    pwmOutputWrite(gearHandle, NEUTRAL - RANGE*(gearOutput*2-1));
+    pwmOutputWrite(gearHandle, NEUTRAL + RANGE*(gearOutput*2-1));
 
     pwmOutputWrite(rudderHandle, NEUTRAL
 		   + RANGE*clamp(paramRecord.rudderNeutral + 
