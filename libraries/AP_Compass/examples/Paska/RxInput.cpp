@@ -35,10 +35,17 @@ float inputValue(struct RxInputRecord *record)
   
   //  return acc / count;
 
-  if(value < record->pulseCenter)
-    return (float) (value - record->pulseCenter)/(record->pulseCenter-record->pulseMin);
-  else
-    return (float) (value - record->pulseCenter)/(record->pulseMax-record->pulseCenter);
+  if(value < record->pulseCenter) {
+    if(record->pulseCenter-record->pulseMin < 100)
+      return 0;
+    else
+      return (float) (value - record->pulseCenter)/(record->pulseCenter-record->pulseMin);
+  } else {
+    if(record->pulseMax-record->pulseCenter < 100)
+      return 0;
+    else
+      return (float) (value - record->pulseCenter)/(record->pulseMax-record->pulseCenter);
+    }
       //  return value;
 }
 

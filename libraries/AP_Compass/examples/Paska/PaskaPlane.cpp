@@ -179,10 +179,8 @@ struct GPSFix gpsFix;
 bool testMode = false;
 bool rattling = false;
 float testGain = 0;
-int8_t switchState = 0, switchStateLazy = 0;
 bool echoEnabled = true;
 bool iasFailed = false, iasWarn = false, alphaFailed = false, alphaWarn = false;
-bool rxElevatorAlive = true, rxAileronAlive = true, rpmAlive = 0;
 const int cycleTimeWindow = 31;
 float cycleTimeStore[cycleTimeWindow];
 int cycleTimePtr = 0;
@@ -192,7 +190,6 @@ const float tau = 0.1;
 float iAS, dynPressure, alpha, aileStick, elevStick, throttleStick, aileStickRaw, elevStickRaw, rudderStick, rudderStickRaw;
 bool ailePilotInput, elevPilotInput, rudderPilotInput;
 uint32_t controlCycleEnded;
-int initCount = 5;
 bool armed = false;
 float neutralStick = 0.0, neutralAlpha, targetAlpha;
 float switchValue, gearValue, flapValue, tuningKnobValue, rpmOutput;
@@ -342,7 +339,6 @@ struct SwitchRecord flapSwitchRecord = { &flapInput };
 
 int8_t readSwitch(struct SwitchRecord *record)
 {
-  static int8_t prev = 0, state = 0;
   int8_t newState = 0;
 
   if(inputValid(record->input)) {
@@ -353,13 +349,13 @@ int8_t readSwitch(struct SwitchRecord *record)
     else
       newState = value < 0.0 ? -1 : 1;
 
-    if(prev == newState)
-      state = newState;
+    if(record->prevState == newState)
+      record->state = newState;
 
-    prev = newState;
+    record->prevState = newState;
   }
 
-  return state;
+  return record->state;
 }
 
 int8_t readModeSwitch()
@@ -367,9 +363,19 @@ int8_t readModeSwitch()
   return readSwitch(&modeSwitchRecord);
 }
 
+int8_t readGearSwitch()
+{
+  return readSwitch(&gearSwitchRecord);
+}
+
+int8_t readFlapSwitch()
+{
+  return readSwitch(&flapSwitchRecord);
+}
+
 float readParameter()
 {
-  return ((tuningKnobValue + 1.0) / 2 - 0.05) / 0.95;
+  return tuningKnobValue/0.95 - 0.05;
 }
 
 float readRPM()
@@ -1094,119 +1100,167 @@ float testGainLinear(float start, float stop)
 #define shakerAlpha (maxAlpha/square(1.05))  // Stall speed + 5%
 #define thresholdAlpha (maxAlpha/square(1.15))  // Stall speed + 15%
 
-void configurationTask(uint32_t currentMicros)
-{   
-  static bool pulseArmed = false, pulsePolarity = false;
-  static int pulseCount = 0; 
-   
-  int8_t prev = switchState;
-  switchState = readModeSwitch();
-  bool switchStateChange = switchState != prev;
+class Button {
+public:
+  void input(bool);
+  bool singlePulse();
+  bool doublePulse();
+  bool state();
+  bool active();
 
-  if(initCount > 0) {
-    if(rxElevatorAlive && rxAileronAlive)
-      initCount--;
-      
-    return;
-  }
+private:
+  bool statePrev, stateLazy, stateActive;
+  uint32_t pulseStart;
+  bool pulseArmed;
+  uint8_t count;
+  bool pulseDouble, pulseSingle;
+};
 
-  static uint32_t lastUpdate;
-          
-  if(switchStateChange) {
-    if(switchState && switchState != switchStateLazy) {
+void Button :: input(bool newState)
+{
+  if(newState != statePrev) {
+    pulseStart = hal.scheduler->micros();
+
+    if(newState)
       pulseArmed = true;
-      pulsePolarity = switchState > 0;
-    } else if(pulseArmed) {
-      // We detected a pulse
-            
-      pulseCount++;            
-      
-      if(pulseCount > 1) {
-        pulseCount = 0;
-             
-        if(armed) {   
-          if(!pulsePolarity) {
-            if(!mode.sensorFailSafe) {
-              consoleNoteLn_P(PSTR("Failsafe ENABLED"));
-              mode.sensorFailSafe = true;
-            } else {
-              logDisable();
-            }
-          } else {
-	    //            consoleNoteLn_P(PSTR("Climbing out"));
-            //gearOutput = 1;
-            //if(flapOutput > 2)
-            //  flapOutput = 2;
-          }
-        }
-      }
+    else if(pulseArmed) {
+      if(count > 0) {
+	pulseDouble = true;
+	count = 0;
+      } else
+	count = 1;
       
       pulseArmed = false;
     }
-          
-    lastUpdate = hal.scheduler->micros();
-  } else if(hal.scheduler->micros() - lastUpdate > 1.0e6/3) {
-    if(switchState != switchStateLazy) {
-      switchStateLazy = switchState;
-        
-      consoleNote_P(PSTR("Lazy switch "));
-      consolePrintLn(switchState > 0 ? "UP" : switchState < 0 ? "DOWN" : "NEU");
+    
+    statePrev = newState;
+  } else if(hal.scheduler->micros() - pulseStart > 1.0e6/3) {
 
-      if(switchState > 0) {
-        if(armed && !logEnabled && !consoleConnected)
-          logEnable();
+    if(stateLazy != newState)
+      stateActive = newState;
+    
+    stateLazy = newState;
+    
+    if(!newState && count > 0)
+      pulseSingle = true;
 
-	if(!mode.bankLimiter) {
-	  consoleNoteLn_P(PSTR("Wing leveler and bank limiter ENABLED"));
-	  mode.wingLeveler = mode.bankLimiter = true;
-	} 
-      } else if(switchState < 0) {
-        if(armed && logEnabled)
-          logMark();
-
-	if(mode.bankLimiter) {
-	  consoleNoteLn_P(PSTR("Bank limiter DISABLED"));
-	  mode.wingLeveler = mode.bankLimiter = false;
-	}
-      }
-    }
-          
-    if(pulseCount > 0) {
-      if(pulsePolarity) {
-        if(mode.sensorFailSafe) {
-            mode.sensorFailSafe = false;
-            consoleNoteLn_P(PSTR("Sensor failsafe DISABLED"));
-            
-        } else if(!armed) {
-          consoleNoteLn_P(PSTR("We're now ARMED"));
-          armed = true;
-	  if(!consoleConnected)
-	    talk = false;
-          
-        } else {
-          if(elevMode > 0) {
-            elevMode--;
-            consoleNote_P(PSTR("Elevator mode DECREMENTED to "));
-            consolePrintLn(elevMode);
-	    
-          } else if(!mode.launch && iAS < paramRecord.ias_Low / 3) {
-            consoleNoteLn_P(PSTR("Launch mode ENABLED"));
-	    mode.launch = true;
-	  }
-        }
-      } else {
-        if(elevMode < 1) {
-          elevMode++;
-          consoleNote_P(PSTR("Elevator mode INCREMENTED to "));
-          consolePrintLn(elevMode);
-        }
-      }
-    }
-          
+    count = 0;
     pulseArmed = false;
-    pulseCount = 0;
+  }
+}
+
+bool Button::state(void)
+{
+  return stateLazy;
+}  
+
+bool Button::active(void)
+{
+  bool value = stateActive;
+  stateActive = false;
+  return value;
+}  
+
+bool Button::singlePulse(void)
+{
+  bool value = pulseSingle;
+  pulseSingle = false;
+  return value;
+}  
+
+bool Button::doublePulse(void)
+{
+  bool value = pulseDouble;
+  pulseDouble = false;
+  return value;
+}  
+
+Button upButton, downButton, gearButton;
+
+void buttonTask(uint32_t currentMicros)
+{
+  int8_t modeS = readModeSwitch(), gearS = readGearSwitch();
+  
+  upButton.input(modeS > 0);
+  downButton.input(modeS < 0);
+  gearButton.input(gearS > 0);
+}  
+  
+void configurationTask(uint32_t currentMicros)
+{   
+  if(downButton.doublePulse() || gearButton.doublePulse()) {
+    if(!mode.sensorFailSafe) {
+      consoleNoteLn_P(PSTR("Failsafe ENABLED"));
+      mode.sensorFailSafe = true;
+    } else
+      logDisable();
+  }
+  
+  if(upButton.singlePulse()) {
+    if(mode.sensorFailSafe) {
+      mode.sensorFailSafe = false;
+      consoleNoteLn_P(PSTR("Sensor failsafe DISABLED"));
+            
+    } else if(!armed) {
+      consoleNoteLn_P(PSTR("We're now ARMED"));
+      armed = true;
+      if(!consoleConnected)
+	talk = false;
+          
+    } else {
+      if(elevMode > 0) {
+	elevMode--;
+	consoleNote_P(PSTR("Elevator mode DECREMENTED to "));
+	consolePrintLn(elevMode);
+	    
+      } else if(!mode.launch && iAS < paramRecord.ias_Low / 3) {
+	consoleNoteLn_P(PSTR("Launch mode ENABLED"));
+	mode.launch = true;
+      }
+    }
+  }
+  
+  if(downButton.singlePulse() && elevMode < 1) {
+    elevMode++;
+    consoleNote_P(PSTR("Elevator mode INCREMENTED to "));
+    consolePrintLn(elevMode);
   }
 
+  if(gearButton.singlePulse()) {
+    if(gearOutput > 0) {
+      consoleNoteLn_P(PSTR("Gear UP"));
+      gearOutput = 0;
+    } else {
+      consoleNoteLn_P(PSTR("Gear DOWN"));
+      gearOutput = 1;
+    }
+  }
+
+  if(upButton.active()) {
+    if(armed && !logEnabled && !consoleConnected)
+      logEnable();
+
+    if(!mode.bankLimiter) {
+      consoleNoteLn_P(PSTR("Bank limiter ENABLED"));
+      mode.bankLimiter = true;
+    }
+	
+    if(!mode.wingLeveler) {
+      consoleNoteLn_P(PSTR("Wing leveler ENABLED"));
+      mode.wingLeveler = true;
+    } 
+  }
+  
+  if(downButton.active()) {
+    if(armed && logEnabled)
+      logMark();
+
+    if(mode.bankLimiter) {
+      consoleNoteLn_P(PSTR("Bank limiter DISABLED"));
+      mode.wingLeveler = mode.bankLimiter = false;
+    }
+  }
+  
   // Test parameter
 
   parameter = readParameter();
@@ -1245,7 +1299,7 @@ void configurationTask(uint32_t currentMicros)
   
   // Receiver fail detection
 
-  if(switchState == 1 && aileStick < -0.90 && elevStick > 0.90) {
+  if(upButton.state() && aileStick < -0.90 && elevStick > 0.90) {
     if(!mode.rxFailSafe) {
       consoleNoteLn_P(PSTR("Receiver failsafe mode ENABLED"));
       mode.rxFailSafe = true;
@@ -1263,11 +1317,8 @@ void configurationTask(uint32_t currentMicros)
     neutralStick = 0;
   }
 
-  // Gear and flap input
+  // Flap input
 
-  if(paramRecord.servoGear > -1)
-    gearOutput = readSwitch(&gearSwitchRecord) > 0 ? 1 : 0;
-  
   if(paramRecord.servoFlap > -1)
     flapOutput = readSwitch(&flapSwitchRecord) + 1;
   
@@ -1950,6 +2001,7 @@ void blinkTask(uint32_t currentMicros)
 
 void controlTaskGroup(uint32_t currentMicros)
 {
+  buttonTask(currentMicros);
   receiverTask(currentMicros);
   sensorTaskFast(currentMicros);
   controlTask(currentMicros);
