@@ -18,6 +18,7 @@
 #include "PPM.h"
 #include "Datagram.h"
 #include "Command.h"
+#include "Button.h"
 #include <AP_Progmem/AP_Progmem.h>
 #include <AP_HAL/AP_HAL.h>
 #include <AP_HAL_AVR/AP_HAL_AVR.h>
@@ -31,12 +32,6 @@ AP_Baro barometer;
 AP_InertialSensor ins;
 AP_GPS gps;
 AP_AHRS_DCM ahrs {ins,  barometer, gps};
-
-//
-// HW config
-//
-
-#define MEGAMINI
 
 //
 // HW timer declarations
@@ -66,25 +61,11 @@ const struct PinDescriptor led[] = {{ PortA, 3 }, { PortA, 4 }, { PortA, 5 }};
 // RC input
 //
 
-#ifdef MEGAMINI
-
 struct PinDescriptor ppmInputPin = { PortL, 1 }; 
 struct RxInputRecord aileInput, elevInput, throttleInput, rudderInput,
   switchInput, tuningKnobInput, gearInput, flapInput;
 struct RxInputRecord *ppmInputs[] = 
   { &aileInput, &elevInput, &throttleInput, &rudderInput, &switchInput, &tuningKnobInput, &gearInput, &flapInput };
-
-#else
-
-struct RxInputRecord aileInput = { { PortK, 0 } }; 
-struct RxInputRecord elevInput = { { PortK, 1 } };
-struct RxInputRecord switchInput = { { PortK, 3 } };
-struct RxInputRecord tuningKnobInput = { { PortK, 3 } };
-struct RxInputRecord rudderInput = { { PortK, 4 } };
-struct RxInputRecord gearInput = { { PortK, 5 } };
-struct RxInputRecord flapInput = { { PortK, 6 } };
-
-#endif
 
 //
 // Servo PWM output
@@ -92,8 +73,6 @@ struct RxInputRecord flapInput = { { PortK, 6 } };
 
 #define NEUTRAL 1500
 #define RANGE 500
-
-#ifdef MEGAMINI
 
 const struct PWMOutput pwmOutput[] = {
   { { PortB, 6 }, &hwTimer1, COMnB },
@@ -105,19 +84,6 @@ const struct PWMOutput pwmOutput[] = {
   { { PortE, 4 }, &hwTimer3, COMnB },
   { { PortE, 3 }, &hwTimer3, COMnA }
 };
-
-#else
-
-const struct PWMOutput pwmOutput[] = {
-  { { PortE, 4 }, &hwTimer3, COMnB },
-  { { PortE, 5 }, &hwTimer3, COMnC },
-  { { PortE, 3 }, &hwTimer3, COMnA },
-  { { PortH, 3 }, &hwTimer4, COMnA },
-  { { PortH, 4 }, &hwTimer4, COMnB },
-  { { PortH, 5 }, &hwTimer4, COMnC }
-};
-
-#endif
 
 //
 // Function to servo output mapping
@@ -215,81 +181,6 @@ int8_t elevMode = 0;
 #ifdef rpmPin
 struct RxInputRecord rpmInput = { rpmPin };
 #endif
-
-class Button {
-public:
-  void input(bool);
-  bool singlePulse();
-  bool doublePulse();
-  bool state();
-  bool active();
-
-private:
-  bool statePrev, stateLazy, stateActive;
-  uint32_t pulseStart;
-  bool pulseArmed;
-  uint8_t count;
-  bool pulseDouble, pulseSingle;
-};
-
-void Button :: input(bool newState)
-{
-  if(newState != statePrev) {
-    pulseStart = hal.scheduler->micros();
-
-    if(newState)
-      pulseArmed = true;
-    else if(pulseArmed) {
-      if(count > 0) {
-	pulseDouble = true;
-	count = 0;
-      } else
-	count = 1;
-      
-      pulseArmed = false;
-    }
-    
-    statePrev = newState;
-  } else if(hal.scheduler->micros() - pulseStart > 1.0e6/3) {
-
-    if(stateLazy != newState)
-      stateActive = newState;
-    
-    stateLazy = newState;
-    
-    if(!newState && count > 0)
-      pulseSingle = true;
-
-    count = 0;
-    pulseArmed = false;
-  }
-}
-
-bool Button::state(void)
-{
-  return stateLazy;
-}  
-
-bool Button::active(void)
-{
-  bool value = stateActive;
-  stateActive = false;
-  return value;
-}  
-
-bool Button::singlePulse(void)
-{
-  bool value = pulseSingle;
-  pulseSingle = false;
-  return value;
-}  
-
-bool Button::doublePulse(void)
-{
-  bool value = pulseDouble;
-  pulseDouble = false;
-  return value;
-}  
 
 Button upButton, downButton, gearButton;
 
@@ -522,7 +413,7 @@ bool readPressure(int16_t *result)
     accCount++;
   } else {
     if(!done)
-      consoleNoteLn_P(PSTR("Airspeed calibration completed"));
+      consoleNoteLn_P(PSTR("Airspeed calibration DONE"));
     
     done = true;
     
@@ -2081,25 +1972,12 @@ void setup() {
                 
   // RC input
   
-#ifdef MEGAMINI
-
   consoleNoteLn_P(PSTR("Initializing PPM receiver"));
 
   configureInput(&ppmInputPin, true);
   
   ppmInputInit(ppmInputs, sizeof(ppmInputs)/sizeof(struct RxInputRecord*),
 	       stateRecord.rxMin, stateRecord.rxCenter, stateRecord.rxMax);
-#else
-  
-  consoleNoteLn_P(PSTR("Initializing individual PWM inputs"));
-
-  rxInputInit(&elevInput);
-  rxInputInit(&aileInput);
-  rxInputInit(&rudderInput);
-  rxInputInit(&switchInput);
-  rxInputInit(&tuningKnobInput);  
-
-#endif
 
   // RPM sensor int control
 
@@ -2165,148 +2043,3 @@ void loop()
 }
 
 AP_HAL_MAIN();
-
-/*
-
-// Param backup 2016/2/11
-// 
-// MODEL 0 L-39
-// 
-
-model 0
-name L-39
-min -3.00
-max 13.00
-5048b_ref 32268
-inner_pid_zn 1.140 0.270
-outer_p 10.000
-stabilizer_pid_zn 1.390 0.360
-rudder_pid_zn 0.500 0.330
-yd_p 2.000
-edefl -50.00
-eneutral 0.00
-ezero 3.08
-eservo 1
-adefl -35.00
-aneutral 0.00
-azero 5.77
-aservo 0
-rdefl 35.00
-rneutral -5.00
-rzero 8.42
-rservo 2
-fstep 0.00
-fneutral 45.00 45.00
-fservo -1 -1
-bdefl -45.00
-bneutral -45.00
-bservo -1
-gservo -1
-store
-
-// 
-// MODEL 1 Viper
-// 
-
-model 1
-name Viper
-min -3.00
-max 12.00
-5048b_ref 0
-inner_pid_zn 1.000 0.250
-outer_p 10.000
-stabilizer_pid_zn 1.299 0.250
-rudder_pid_zn 1.000 0.330
-yd_p 2.000
-edefl 45.00
-eneutral 0.00
-ezero 0.00
-eservo 1
-adefl -45.00
-aneutral 0.00
-azero 0.00
-aservo 0
-rdefl 45.00
-rneutral 0.00
-rzero 0.00
-rservo 6
-fstep -15.00
-fneutral 0.00 -15.00
-fservo 2 3
-bdefl 45.00
-bneutral 0.00
-bservo -1
-gservo -1
-store
-
-// Param backup L-39 2016/2/2
-//
-// MODEL 0
-//
- 
-model 0
-name L-39
-min -3.00
-max 13.00
-5048b_ref 32268
-inner_pid_zn 1.14 0.27000
-outer_p 10.00000
-stabilizer_pid_zn 1.39000 0.36000
-rudder_pid_zn 0.50000 0.33000
-yd_p 2.00000
-edefl -50.00
-eneutral 0.00
-ezero 3.08
-eservo 1
-adefl -35.00
-aneutral 0.00
-azero 5.77
-aservo 0
-rdefl 35.00
-rneutral -5.00
-rzero 8.42
-rservo 2
-fstep 0.00
-fneutral 45.00 45.00
-fservo -1 -1
-bdefl -45.00
-bneutral -45.00
-bservo -1
-gservo -1
-store
-
-//
-// MODEL 1 : VIPER 2016/2/1
-//
- 
-echo 0; model 1 \
-min -3.00; max 12.00; 5048b_ref 0 \
-inner_pid_zn 1.000 0.250; outer_p 10.00 \
-stabilizer_pid_zn 1.299 0.250 \
-rudder_pid_zn 1.000 0.330; yd_p 2.000 \
-edefl 45.000; eneutral 0.000; ezero 3.111; eservo 1 \
-adefl -45.000; aneutral 0.000; azero 6.000; aservo 0 \
-fstep -15.00; fneutral 0.00 -15.00; fservo 2 3 \
-bdefl 45.00; bneutral 0.00; bservo -1 \
-rdefl 45.000; rneutral 5.000; rzero 8.222; rservo 6 \
-gservo -1 \
-echo 1; store
-
-//
-// MODEL 0 : L-39 2016/2/1
-//
- 
-echo 0; model 0 \
-min -3.00; max 13.00; 5048b_ref 32268 \
-inner_pid_zn 1.148 0.270; outer_p 10.00 \
-stabilizer_pid_zn 1.398 0.360 \
-rudder_pid_zn 1.000 0.330; yd_p 2.000 \
-edefl -50.000; eneutral 0.000; ezero 2.885; eservo 1 \
-adefl -35.000; aneutral 0.000; azero 5.555; aservo 0 \
-fstep 0.00; fneutral 45.00 45.00; fservo -1 -1 \
-bdefl -45.00; bneutral -45.00; bservo -1 \
-rdefl 45.000; rneutral 0.000; rzero -0.888; rservo -1 \
-gservo -1 \
-echo 1; store
-
- */
