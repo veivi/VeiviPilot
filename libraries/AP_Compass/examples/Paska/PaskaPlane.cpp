@@ -186,7 +186,7 @@ int cycleTimePtr = 0;
 bool cycleTimesValid;
 float cycleMin = -1.0, cycleMax = -1.0, cycleMean = -1.0, cycleCum = -1.0;
 const float tau = 0.1;
-float iAS, dynPressure, alpha, aileStick, elevStick, throttleStick, aileStickRaw, elevStickRaw, rudderStick, rudderStickRaw;
+float iAS, dynPressure, alpha, aileStick, elevStick, throttleStick, rudderStick;
 bool ailePilotInput, elevPilotInput, rudderPilotInput;
 uint32_t controlCycleEnded;
 bool armed = false;
@@ -214,6 +214,83 @@ int8_t elevMode = 0;
 #ifdef rpmPin
 struct RxInputRecord rpmInput = { rpmPin };
 #endif
+
+class Button {
+public:
+  void input(bool);
+  bool singlePulse();
+  bool doublePulse();
+  bool state();
+  bool active();
+
+private:
+  bool statePrev, stateLazy, stateActive;
+  uint32_t pulseStart;
+  bool pulseArmed;
+  uint8_t count;
+  bool pulseDouble, pulseSingle;
+};
+
+void Button :: input(bool newState)
+{
+  if(newState != statePrev) {
+    pulseStart = hal.scheduler->micros();
+
+    if(newState)
+      pulseArmed = true;
+    else if(pulseArmed) {
+      if(count > 0) {
+	pulseDouble = true;
+	count = 0;
+      } else
+	count = 1;
+      
+      pulseArmed = false;
+    }
+    
+    statePrev = newState;
+  } else if(hal.scheduler->micros() - pulseStart > 1.0e6/3) {
+
+    if(stateLazy != newState)
+      stateActive = newState;
+    
+    stateLazy = newState;
+    
+    if(!newState && count > 0)
+      pulseSingle = true;
+
+    count = 0;
+    pulseArmed = false;
+  }
+}
+
+bool Button::state(void)
+{
+  return stateLazy;
+}  
+
+bool Button::active(void)
+{
+  bool value = stateActive;
+  stateActive = false;
+  return value;
+}  
+
+bool Button::singlePulse(void)
+{
+  bool value = pulseSingle;
+  pulseSingle = false;
+  return value;
+}  
+
+bool Button::doublePulse(void)
+{
+  bool value = pulseDouble;
+  pulseDouble = false;
+  return value;
+}  
+
+Button upButton, downButton, gearButton;
 
 const uint8_t addr5048B_c = 0x40;
 const uint8_t addr4525_c = 0x28;
@@ -608,16 +685,8 @@ void executeCommand(const char *buf, int bufLen)
       consolePrintLn(stateRecord.testChannel);
       break;
 
-    case c_center:
-      /*
-      paramRecord.elevZero = elevStickRaw;
-      paramRecord.aileZero = aileStickRaw;
-      paramRecord.rudderZero = rudderStickRaw;
-      */
-      consoleNoteLn_P(PSTR("Stick center set"));
-      break;
-
     case c_calibrate:
+      consoleNoteLn_P(PSTR("Receiver calibration STARTED"));
       calibStart();
       break;
           
@@ -860,26 +929,26 @@ int elevPilotInputPersistCount;
 
 void receiverTask(uint32_t currentMicros)
 {
-  if(inputValid(&aileInput)) {
-    aileStickRaw = inputValue(&aileInput);
-    aileStick = applyNullZone(aileStickRaw, &ailePilotInput);
-  }
+  if(inputValid(&aileInput))
+    aileStick = applyNullZone(inputValue(&aileInput), &ailePilotInput);
   
-  if(inputValid(&rudderInput)) {
-    rudderStickRaw = inputValue(&rudderInput);
-    rudderStick = applyNullZone(rudderStickRaw, &rudderPilotInput);
-  }
+  if(inputValid(&rudderInput))
+    rudderStick = applyNullZone(inputValue(&rudderInput), &rudderPilotInput);
   
-  if(inputValid(&elevInput)) {
-    elevStickRaw = inputValue(&elevInput);
-    elevStick = elevStickRaw;
-  }
+  if(inputValid(&elevInput))
+    elevStick = inputValue(&elevInput);
     
   if(inputValid(&tuningKnobInput))
     tuningKnobValue = inputValue(&tuningKnobInput);
     
   if(inputValid(&throttleInput))
     throttleStick = inputValue(&throttleInput);
+
+  int8_t modeS = readModeSwitch(), gearS = readGearSwitch();
+  
+  upButton.input(modeS > 0);
+  downButton.input(modeS < 0);
+  gearButton.input(gearS > 0);
 }
 
 void sensorTaskFast(uint32_t currentMicros)
@@ -1098,92 +1167,6 @@ float testGainLinear(float start, float stop)
 #define shakerAlpha (maxAlpha/square(1.05))  // Stall speed + 5%
 #define thresholdAlpha (maxAlpha/square(1.15))  // Stall speed + 15%
 
-class Button {
-public:
-  void input(bool);
-  bool singlePulse();
-  bool doublePulse();
-  bool state();
-  bool active();
-
-private:
-  bool statePrev, stateLazy, stateActive;
-  uint32_t pulseStart;
-  bool pulseArmed;
-  uint8_t count;
-  bool pulseDouble, pulseSingle;
-};
-
-void Button :: input(bool newState)
-{
-  if(newState != statePrev) {
-    pulseStart = hal.scheduler->micros();
-
-    if(newState)
-      pulseArmed = true;
-    else if(pulseArmed) {
-      if(count > 0) {
-	pulseDouble = true;
-	count = 0;
-      } else
-	count = 1;
-      
-      pulseArmed = false;
-    }
-    
-    statePrev = newState;
-  } else if(hal.scheduler->micros() - pulseStart > 1.0e6/3) {
-
-    if(stateLazy != newState)
-      stateActive = newState;
-    
-    stateLazy = newState;
-    
-    if(!newState && count > 0)
-      pulseSingle = true;
-
-    count = 0;
-    pulseArmed = false;
-  }
-}
-
-bool Button::state(void)
-{
-  return stateLazy;
-}  
-
-bool Button::active(void)
-{
-  bool value = stateActive;
-  stateActive = false;
-  return value;
-}  
-
-bool Button::singlePulse(void)
-{
-  bool value = pulseSingle;
-  pulseSingle = false;
-  return value;
-}  
-
-bool Button::doublePulse(void)
-{
-  bool value = pulseDouble;
-  pulseDouble = false;
-  return value;
-}  
-
-Button upButton, downButton, gearButton;
-
-void buttonTask(uint32_t currentMicros)
-{
-  int8_t modeS = readModeSwitch(), gearS = readGearSwitch();
-  
-  upButton.input(modeS > 0);
-  downButton.input(modeS < 0);
-  gearButton.input(gearS > 0);
-}  
-  
 void configurationTask(uint32_t currentMicros)
 {   
   if(downButton.doublePulse() || gearButton.doublePulse()) {
@@ -1975,7 +1958,6 @@ void blinkTask(uint32_t currentMicros)
 
 void controlTaskGroup(uint32_t currentMicros)
 {
-  buttonTask(currentMicros);
   receiverTask(currentMicros);
   sensorTaskFast(currentMicros);
   controlTask(currentMicros);

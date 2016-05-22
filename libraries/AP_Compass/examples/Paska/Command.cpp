@@ -53,7 +53,6 @@ const struct Command commands[] PROGMEM = {
   { "start", c_start },
   { "params", c_params },
   { "reset", c_reset },
-  { "center", c_center },
   { "loop", c_loop },
   { "stamp", c_stamp },
   { "backup", c_backup },

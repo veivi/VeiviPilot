@@ -30,7 +30,6 @@ typedef enum {
   c_start,
   c_params,
   c_reset,
-  c_center,
   c_loop,
   c_stamp,
   c_model,
