@@ -157,7 +157,6 @@ struct ModeRecord {
   bool autoAlpha;
   bool autoTrim;
   bool autoBall;
-  bool yawDamper;
   bool stabilizer;
   bool wingLeveler;
   bool bankLimiter;
@@ -194,14 +193,13 @@ bool armed = false;
 float neutralStick = 0.0, neutralAlpha, targetAlpha;
 float switchValue, gearValue, flapValue, tuningKnobValue, rpmOutput;
 Controller elevCtrl, aileCtrl, pushCtrl, rudderCtrl;
-float autoAlphaP, maxAlpha, yawDamperP, rudderMix;
+float autoAlphaP, maxAlpha, rudderMix;
 float accX, accY, accZ, altitude,  heading, rollAngle, pitchAngle, rollRate, pitchRate, yawRate, levelBank;
 int cycleTimeCounter = 0;
 uint32_t prevMeasurement;
 float parameter;  
 NewI2C I2c = NewI2C();
 RunningAvgFilter alphaFilter;
-Derivator yawFilter;
 Accumulator ball;
 AlphaBuffer alphaBuffer, pressureBuffer;
 float controlCycle = 10.0e-3;
@@ -1295,7 +1293,6 @@ void configurationTask(uint32_t currentMicros)
   mode.stabilizer = true;
   mode.autoAlpha = mode.autoTrim = elevMode > 0;
   mode.autoBall = false; // true; // !switchStateLazy;
-  mode.yawDamper = false; // switchStateLazy;
   
   // Receiver fail detection
 
@@ -1345,7 +1342,6 @@ void configurationTask(uint32_t currentMicros)
 
   autoAlphaP = paramRecord.o_P;
   maxAlpha = paramRecord.alphaMax;
-  yawDamperP = paramRecord.yd_P;
   rudderMix = paramRecord.r_Mix;
   levelBank = 0;
   
@@ -1383,7 +1379,6 @@ void configurationTask(uint32_t currentMicros)
       // Auto ball gain
          
       mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
-      mode.yawDamper = false;
       mode.autoBall = true;
       rudderMix = 0;
       levelBank = 0;
@@ -1395,7 +1390,6 @@ void configurationTask(uint32_t currentMicros)
       // ball centered, reduced controller gain to increase stability
          
       mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
-      mode.yawDamper = false;
       mode.autoBall = true;
       rudderMix = 0;
       levelBank = 0;
@@ -1433,22 +1427,6 @@ void configurationTask(uint32_t currentMicros)
       // Aileron to rudder mix
 
       rudderMix = testGain = testGainLinear(0.5, 0.0);
-      break;
- 
-    case 11:
-      // Yaw damper gain, disable aileron-rudder mixing so we see the
-      // effect of yaw damping on adverse (aileron) yaw
-      
-      mode.yawDamper = true;
-      rudderMix = 0;
-      yawDamperP = testGain = testGainExpo(paramRecord.yd_P);
-      break;
- 
-    case 12:
-      // Yaw damper gain, aileron-rudder mixing enabled
-
-      mode.yawDamper = true;
-      yawDamperP = testGain = testGainExpo(paramRecord.yd_P);
       break;
     }
   }
@@ -1889,13 +1867,6 @@ void controlTask(uint32_t currentMicros)
   if(!mode.sensorFailSafe)
     rudderOutput += aileRateLimiter.output()*rudderMix;
 
-  // Yaw damper
-
-  yawFilter.input(yawRate, controlCycle);
-  
-  if(!mode.sensorFailSafe && mode.yawDamper)
-    rudderOutput -= yawFilter.output() * yawDamperP;
-  
   rudderOutput = clamp(rudderOutput, -1, 1);
 
   // Brake

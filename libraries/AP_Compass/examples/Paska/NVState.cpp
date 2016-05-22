@@ -33,8 +33,7 @@ const struct ParamRecord paramDefaults = {
   .i_Ku = 1.0, .i_Tu = 0.25, .o_P = 10.0, 
   .s_Ku_fast = 1.3, .s_Tu_fast = 0.25, 
   .s_Ku_slow = 1.3, .s_Tu_slow = 0.25, 
-  .yd_P = 0, .yd_Tau = 1.0, .r_Mix = 0.1,
-  .r_Ku = 0.1, .r_Tu = 0.25,
+  .r_Mix = 0.1, .r_Ku = 0.1, .r_Tu = 0.25,
   .ff_A = 0.0, .ff_B = 0.0,
   .wl_Limit = 0.0,
   .c_PID = true,
@@ -167,8 +166,6 @@ void printParams()
   consolePrint(paramRecord.r_Ku, 4);
   consolePrint_P(PSTR(" Tu = "));
   consolePrintLn(paramRecord.r_Tu, 4);
-  consoleNote_P(PSTR("  Yaw damper P = "));
-  consolePrintLn(paramRecord.yd_P, 4);
   consoleNote_P(PSTR("  Alpha min = "));
   consolePrint(paramRecord.alphaMin*360);
   consolePrint_P(PSTR("  max = "));
@@ -182,15 +179,11 @@ void printParams()
   consolePrint(paramRecord.elevDefl*90);
   consolePrint_P(PSTR(" neutral = "));
   consolePrintLn(paramRecord.elevNeutral*90);
-  //  consolePrint_P(PSTR(" center = "));
-  //  consolePrintLn(paramRecord.elevZero*90);
   consoleNoteLn_P(PSTR("  Aileron"));
   consoleNote_P(PSTR("    deflection = "));
   consolePrint(paramRecord.aileDefl*90);
   consolePrint_P(PSTR(" neutral = "));
   consolePrintLn(paramRecord.aileNeutral*90);
-  //  consolePrint_P(PSTR(" center = "));
-  //  consolePrintLn(paramRecord.aileZero*90);
   consoleNoteLn_P(PSTR("  Rudder"));
   consoleNote_P(PSTR("    deflection = "));
   consolePrint(paramRecord.rudderDefl*90);
@@ -198,8 +191,6 @@ void printParams()
   consolePrint(paramRecord.rudderNeutral*90);
   consolePrint_P(PSTR(" aile mix = "));
   consolePrintLn(paramRecord.r_Mix);
-  //  consolePrint_P(PSTR(" center = "));
-  // consolePrintLn(paramRecord.rudderZero*90);
   consoleNoteLn_P(PSTR("  Flap"));
   consoleNote_P(PSTR("    step = "));
   consolePrint(paramRecord.flapStep*90);
