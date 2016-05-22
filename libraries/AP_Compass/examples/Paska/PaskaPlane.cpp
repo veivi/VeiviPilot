@@ -137,6 +137,7 @@ const struct PWMOutput pwmOutput[] = {
 
 #define CONTROL_HZ 50.0
 #define ALPHA_HZ (CONTROL_HZ*10)
+#define AIRSPEED_HZ (CONTROL_HZ*5)
 #define TRIM_HZ 10
 #define LED_HZ 3
 #define LED_TICK 100
@@ -405,7 +406,8 @@ void logAttitude(void)
 
 struct SwitchRecord {
   struct RxInputRecord *input;
-  int8_t prevState, state;
+  int8_t state;
+  float prevValue;
 };
 
 struct SwitchRecord modeSwitchRecord = { &switchInput };
@@ -414,20 +416,18 @@ struct SwitchRecord flapSwitchRecord = { &flapInput };
 
 int8_t readSwitch(struct SwitchRecord *record)
 {
-  int8_t newState = 0;
-
   if(inputValid(record->input)) {
-    const float value = inputValue(record->input);
+    const float value = inputValue(record->input),
+      diff = fabsf(value - record->prevValue);
+    
+    record->prevValue = value;
   
-    if(fabsf(value) < 0.3)
-      newState = 0;
-    else
-      newState = value < 0.0 ? -1 : 1;
-
-    if(record->prevState == newState)
-      record->state = newState;
-
-    record->prevState = newState;
+    if(diff < 0.05) {
+      if(fabs(value) < 1.0/3)
+	record->state = 0;
+      else
+	record->state = value < 0.0 ? -1 : 1;
+    }
   }
 
   return record->state;
@@ -505,7 +505,8 @@ bool readPressure(int16_t *result)
 {
   static uint32_t acc;
   static int accCount;
-  const int log2CalibWindow = 6;
+  static bool done = false;
+  const int log2CalibWindow = 9;
   
   if(iasFailed)
     // Stop trying
@@ -519,8 +520,15 @@ bool readPressure(int16_t *result)
   if(accCount < 1<<log2CalibWindow) {
     acc += raw;
     accCount++;
-  } else if(result)
-    *result = (raw - (acc>>log2CalibWindow))<<2;
+  } else {
+    if(!done)
+      consoleNoteLn_P(PSTR("Airspeed calibration completed"));
+    
+    done = true;
+    
+    if(result)
+      *result = (raw - (acc>>log2CalibWindow))<<2;
+  }
   
   return true;
 }
@@ -902,6 +910,16 @@ void alphaTask(uint32_t currentMicros)
     alphaBuffer.input((float) raw / (1L<<(8*sizeof(raw))));
 }
 
+
+void airspeedTask(uint32_t currentMicros)
+{
+  int16_t raw = 0;
+  static int failCount = 0;
+  
+  if(!handleFailure("airspeed", !readPressure(&raw), &iasWarn, &iasFailed, &failCount))
+    pressureBuffer.input((float) raw);
+}
+
 #define NULLZONE 0.075
 
 float applyNullZone(float value, bool *pilotInput)
@@ -957,6 +975,18 @@ void sensorTaskFast(uint32_t currentMicros)
   
   alpha = alphaBuffer.output();
   
+  // Airspeed
+  
+  const float pascalsPerPSI_c = 6894.7573, range_c = 2*1.1;
+  const float factor_c = pascalsPerPSI_c * range_c / (1L<<(8*sizeof(uint16_t)));
+    
+  dynPressure = pressureBuffer.output() * factor_c;
+  
+  if(dynPressure > 0)
+    iAS = sqrt(2*dynPressure);
+  else
+    iAS = 0;
+  
   // Attitude
 
   ins.wait_for_sample();
@@ -985,14 +1015,6 @@ void sensorTaskFast(uint32_t currentMicros)
 
   barometer.update();
   barometer.accumulate();
-
-  // Airspeed data acquisition
-  
-  int16_t raw = 0;
-  static int failCount = 0;
-  
-  if(!handleFailure("airspeed", !readPressure(&raw), &iasWarn, &iasFailed, &failCount))
-    pressureBuffer.input((float) raw);
 }
 
 void sensorTaskSlow(uint32_t currentMicros)
@@ -1000,17 +1022,6 @@ void sensorTaskSlow(uint32_t currentMicros)
   // Altitude
 
   altitude = (float) barometer.get_altitude();
-
-  // Airspeed
-  
-  const float pascalsPerPSI_c = 6894.7573, range_c = 2*1.1;
-  const float factor_c = pascalsPerPSI_c * range_c / (1L<<(8*sizeof(uint16_t)));
-    
-  dynPressure = pressureBuffer.output() * factor_c;
-  if(dynPressure > 0)
-    iAS = sqrt(2*dynPressure);
-  else
-    iAS = 0;
 }
 
 const int numPoles = 4;
@@ -1970,6 +1981,8 @@ struct Task taskList[] = {
   //  { gpsTask, HZ_TO_PERIOD(100) },
   { alphaTask,
     HZ_TO_PERIOD(ALPHA_HZ) },
+  { airspeedTask,
+    HZ_TO_PERIOD(AIRSPEED_HZ) },
   { blinkTask,
     HZ_TO_PERIOD(LED_TICK) },
   { controlTaskGroup,
