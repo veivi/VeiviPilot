@@ -34,10 +34,10 @@ AP_GPS gps;
 AP_AHRS_DCM ahrs {ins,  barometer, gps};
 
 //
-// Stick shaker speed margin
+// Threshold speed margin
 //
 
-const float shakerMargin_c = (7.5/100);
+const float thresholdMargin_c = 15.0/100;
 
 //
 // HW timer declarations
@@ -1260,8 +1260,8 @@ void configurationTask(uint32_t currentMicros)
   // Compute effective alpha limits
   //
   
-  shakerAlpha = (maxAlpha/square(1+shakerMargin_c));
-  thresholdAlpha = (maxAlpha/square(1+2*shakerMargin_c));
+  thresholdAlpha = maxAlpha/square(1 + thresholdMargin_c);
+  shakerAlpha = maxAlpha/square(1 + thresholdMargin_c/2);
 
   //
   // Take note of neutral stick/alpha
