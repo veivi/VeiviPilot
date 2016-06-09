@@ -34,6 +34,12 @@ AP_GPS gps;
 AP_AHRS_DCM ahrs {ins,  barometer, gps};
 
 //
+// Stick shaker speed margin
+//
+
+const float shakerMargin_c = (7.5/100);
+
+//
 // HW timer declarations
 //
 
@@ -160,7 +166,7 @@ bool armed = false;
 float neutralStick = 0.0, neutralAlpha, targetAlpha;
 float switchValue, gearValue, flapValue, tuningKnobValue, rpmOutput;
 Controller elevCtrl, aileCtrl, pushCtrl, rudderCtrl;
-float autoAlphaP, maxAlpha, rudderMix;
+float autoAlphaP, maxAlpha, shakerAlpha, thresholdAlpha, rudderMix;
 float accX, accY, accZ, altitude,  heading, rollAngle, pitchAngle, rollRate, pitchRate, yawRate, levelBank;
 int cycleTimeCounter = 0;
 uint32_t prevMeasurement;
@@ -295,53 +301,13 @@ void logAttitude(void)
   logGeneric(lc_yawrate, yawRate*360);
 }
 
-struct SwitchRecord {
-  struct RxInputRecord *input;
-  int8_t state;
-  float prevValue;
-};
-
 struct SwitchRecord modeSwitchRecord = { &switchInput };
 struct SwitchRecord gearSwitchRecord = { &gearInput };
 struct SwitchRecord flapSwitchRecord = { &flapInput };
 
-int8_t readSwitch(struct SwitchRecord *record)
-{
-  if(inputValid(record->input)) {
-    const float value = inputValue(record->input),
-      diff = fabsf(value - record->prevValue);
-    
-    record->prevValue = value;
-  
-    if(diff < 0.05) {
-      if(fabs(value) < 1.0/3)
-	record->state = 0;
-      else
-	record->state = value < 0.0 ? -1 : 1;
-    }
-  }
-
-  return record->state;
-}
-
-int8_t readModeSwitch()
-{
-  return readSwitch(&modeSwitchRecord);
-}
-
-int8_t readGearSwitch()
-{
-  return readSwitch(&gearSwitchRecord);
-}
-
-int8_t readFlapSwitch()
-{
-  return readSwitch(&flapSwitchRecord);
-}
-
 float readParameter()
 {
-  return tuningKnobValue/0.95 - 0.05;
+  return tuningKnobValue/0.95 - (1/0.95 - 1);
 }
 
 float readRPM()
@@ -370,7 +336,7 @@ void rpmMeasure(bool on)
 #define AS5048B_MAGNLSB_REG 0xFD //bits 0..5
 #define AS5048B_ANGLMSB_REG 0xFE //bits 0..7
 #define AS5048B_ANGLLSB_REG 0xFF //bits 0..5
-#define AS5048B_RESOLUTION 16384.0 //14 bits
+#define AS5048B_RESOLUTION ((float) (1<<14))
 
 bool readAlpha_5048B(int16_t *result) {
   uint16_t raw = 0;
@@ -811,29 +777,6 @@ void airspeedTask(uint32_t currentMicros)
     pressureBuffer.input((float) raw);
 }
 
-#define NULLZONE 0.075
-
-float applyNullZone(float value, bool *pilotInput)
-{
-  if(pilotInput)
-    *pilotInput = true;
-  
-  if(value < -NULLZONE)
-    return (value + NULLZONE) / (1.0 - NULLZONE);
-  else if(value > NULLZONE)
-    return (value - NULLZONE) / (1.0 - NULLZONE);
-
-  if(pilotInput)
-    *pilotInput = false;
-    
-  return 0.0;
-}
-
-float applyNullZone(float value)
-{
-  return applyNullZone(value, NULL);
-}
-
 int elevPilotInputPersistCount;
 
 void receiverTask(uint32_t currentMicros)
@@ -853,7 +796,7 @@ void receiverTask(uint32_t currentMicros)
   if(inputValid(&throttleInput))
     throttleStick = inputValue(&throttleInput);
 
-  int8_t modeS = readModeSwitch(), gearS = readGearSwitch();
+  int8_t modeS = readSwitch(&modeSwitchRecord), gearS = readSwitch(&gearSwitchRecord);
   
   upButton.input(modeS > 0);
   downButton.input(modeS < 0);
@@ -1065,9 +1008,6 @@ float testGainLinear(float start, float stop)
   float q = quantize(parameter);
   return start + q*(stop - start);
 }
-
-#define shakerAlpha (maxAlpha/square(1.05))  // Stall speed + 5%
-#define thresholdAlpha (maxAlpha/square(1.15))  // Stall speed + 15%
 
 void configurationTask(uint32_t currentMicros)
 {   
@@ -1316,8 +1256,19 @@ void configurationTask(uint32_t currentMicros)
     }
   }
       
-  alphaFilter.input(alpha);
+  //
+  // Compute effective alpha limits
+  //
   
+  shakerAlpha = (maxAlpha/square(1+shakerMargin_c));
+  thresholdAlpha = (maxAlpha/square(1+2*shakerMargin_c));
+
+  //
+  // Take note of neutral stick/alpha
+  //
+
+  alphaFilter.input(alpha);
+ 
   if(!mode.autoAlpha) { 
     neutralStick = elevStick;
     neutralAlpha = clamp(alphaFilter.output(), paramRecord.alphaMin, maxAlpha);
@@ -1623,31 +1574,35 @@ void controlTask(uint32_t currentMicros)
   }
   
   controlCycleEnded = currentMicros;
-  
+
+  //
   // Elevator control
-    
+  //
+  
   targetAlpha = 0.0;
   elevOutput = elevStick;
- 
-  const float
-    effStick = applyNullZone(elevStick - neutralStick, &elevPilotInput);
+
+  const float elevOffset = mode.autoAlpha ? neutralStick : 0;
+
+  const float effStick = applyNullZone(elevStick - elevOffset, &elevPilotInput);
     
   if(!elevPilotInput)
     elevPilotInputPersistCount = 0;
   else if(elevPilotInputPersistCount < CONTROL_HZ*2)
     elevPilotInputPersistCount++;
   
+  const float fract_c = 1.0/3;
+  const float stickStrength_c = max(effStick-(1.0-fract_c), 0)/fract_c;
+  const float effMaxAlpha_c =
+    mixValue(stickStrength_c, shakerAlpha, maxAlpha);
+    
   if(mode.rxFailSafe)
-    targetAlpha = thresholdAlpha;
+    targetAlpha = shakerAlpha;
   else {
-    const float fract_c = 1.0/3;
-    const float strength_c = max(effStick-(1.0-fract_c), 0)/fract_c;
-    const float maxTargetAlpha_c =
-      mixValue(strength_c, shakerAlpha, maxAlpha);
     const float stickRange_c = min(20.0, 90/paramRecord.ff_A);
 
     targetAlpha = clamp(neutralAlpha + effStick*stickRange_c/360,
-			paramRecord.alphaMin, maxTargetAlpha_c);
+			paramRecord.alphaMin, effMaxAlpha_c);
   }
 	
   float feedForward = targetAlpha*360/90*paramRecord.ff_A + paramRecord.ff_B;
@@ -1670,7 +1625,8 @@ void controlTask(uint32_t currentMicros)
 
   // Pusher
 
-  pushCtrl.input((maxAlpha - alpha)*paramRecord.o_P - pitchRate, controlCycle);
+  pushCtrl.input((effMaxAlpha_c - alpha)*paramRecord.o_P - pitchRate,
+		 controlCycle);
 
   if(!mode.sensorFailSafe && !alphaFailed)
     elevOutput = min(elevOutput, pushCtrl.output());

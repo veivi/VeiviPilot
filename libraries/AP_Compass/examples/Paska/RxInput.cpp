@@ -115,3 +115,44 @@ extern "C" void rxInterrupt_callback(uint8_t num)
     event &= ~mask;
   }
 }
+
+int8_t readSwitch(struct SwitchRecord *record)
+{
+  if(inputValid(record->input)) {
+    const float value = inputValue(record->input),
+      diff = fabsf(value - record->prevValue);
+    
+    record->prevValue = value;
+  
+    if(diff < 0.05) {
+      if(fabs(value) < 1.0/3)
+	record->state = 0;
+      else
+	record->state = value < 0.0 ? -1 : 1;
+    }
+  }
+
+  return record->state;
+}
+
+float applyNullZone(float value, bool *pilotInput)
+{
+  if(pilotInput)
+    *pilotInput = true;
+  
+  if(value < -NULLZONE)
+    return (value + NULLZONE) / (1.0 - NULLZONE);
+  else if(value > NULLZONE)
+    return (value - NULLZONE) / (1.0 - NULLZONE);
+
+  if(pilotInput)
+    *pilotInput = false;
+    
+  return 0.0;
+}
+
+float applyNullZone(float value)
+{
+  return applyNullZone(value, NULL);
+}
+
