@@ -2,11 +2,11 @@
 #include "NVState.h"
 #include "Console.h"
 #include "Storage.h"
-#include "Datagram.h"
 #include "Command.h"
 
 extern "C" {
 #include "CRC16.h"
+#include "Datagram.h"
 }
 
 // NV store layout

@@ -1,10 +1,12 @@
 #include <AP_HAL/AP_HAL.h>
 #define CONSOLE_PRIVATE_H
 #include "Console.h"
-#include "Serial.h"
-#include "Datagram.h"
 #include <stdarg.h>
 #include <math.h>
+
+extern "C" {
+#include "Datagram.h"
+}
 
 extern const AP_HAL::HAL& hal;
 
@@ -13,8 +15,8 @@ bool talk = true;
 
 #define BUF_SIZE (1<<6)
 
-uint8_t outputBuf[BUF_SIZE];
-uint8_t bufPtr;
+static uint8_t outputBuf[BUF_SIZE];
+static uint8_t bufPtr;
 
 void consoleFlush()
 {

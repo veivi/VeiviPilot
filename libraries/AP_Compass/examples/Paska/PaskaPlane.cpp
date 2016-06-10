@@ -16,7 +16,11 @@
 #include "NVState.h"
 #include "PWMOutput.h"
 #include "PPM.h"
+
+extern "C" {
 #include "Datagram.h"
+}
+
 #include "Command.h"
 #include "Button.h"
 #include <AP_Progmem/AP_Progmem.h>
@@ -123,6 +127,40 @@ struct Task {
 };
 
 #define HZ_TO_PERIOD(f) ((uint32_t) (1.0e6/(f)))
+
+//
+// Datagram protocol integration
+//
+
+#define MAX_DG_SIZE  (1<<6)
+
+int maxDatagramSize = MAX_DG_SIZE;
+uint8_t datagramRxStore[MAX_DG_SIZE];
+
+#include "Serial.h"
+
+void executeCommand(const char *buf, int bufLen);
+  
+extern "C" {
+  
+void datagramInterpreter(uint8_t t, const uint8_t *data, int size)
+{  
+  switch(t) {
+  case DG_CONSOLE_IN:
+    executeCommand((const char*) data, size);
+    break;
+    
+  default:
+    consoleNote_P(PSTR("FUNNY DATAGRAM TYPE "));
+    consolePrintLn(t);
+  }
+}
+  
+void datagramSerialOut(uint8_t c)
+{
+  serialOut(c);
+}
+}
 
 struct ModeRecord {
   bool sensorFailSafe;
@@ -410,9 +448,9 @@ int indexOf(const char *s, const char c)
 void executeCommand(const char *buf, int bufLen)
 {
   if(echoEnabled) {
-    consolePrint("\r// % ");
-    consolePrint(buf, bufLen);  
-    consolePrintLn("          ");
+    consolePrint("// % ");
+    consolePrint(buf, bufLen);
+    consolePrintLn("");
   }
   
   const int maxParams = 8;
@@ -1218,14 +1256,14 @@ void configurationTask(uint32_t currentMicros)
       mode.autoBall = true;
       rudderMix = 0;
       levelBank = 0;
-      aileCtrl.setZieglerNicholsPID
-	(s_Ku*testGain, s_Tu);
-      rudderCtrl.setZieglerNicholsPI
-	(paramRecord.r_Ku*testGain, paramRecord.r_Tu);
+      aileCtrl.
+	setZieglerNicholsPID(s_Ku*testGain, s_Tu);
+      rudderCtrl.
+	setZieglerNicholsPI(paramRecord.r_Ku*testGain, paramRecord.r_Tu);
       break;
 
     case 7:
-      // Auto rudder empirical gain, PI
+      // Auto ball empirical gain, PI
        
       mode.autoBall = true;
       rudderCtrl.setZieglerNicholsPI(testGain = testGainExpo(paramRecord.r_Ku),
@@ -1388,6 +1426,7 @@ void communicationTask(uint32_t currentMicros)
     while(len > 0) {
       char c =  cliSerial->read();
 
+      /*      
       if(c == '\b' || c == 127) {
 	if(serialBufIndex > 0) {
 	  consolePrint("\b \b");
@@ -1417,6 +1456,9 @@ void communicationTask(uint32_t currentMicros)
 	consoleFlush();
 	serialBuf[serialBufIndex++] = c;
       }
+      */
+
+      datagramRxInputChar(c);
       
       len--;
     }

@@ -3,9 +3,9 @@
 #include "Logging.h"
 #include "NVState.h"
 #include "Filter.h"
-#include "Datagram.h"
 
 extern "C" {
+#include "Datagram.h"
 #include "CRC16.h"
 }
 
