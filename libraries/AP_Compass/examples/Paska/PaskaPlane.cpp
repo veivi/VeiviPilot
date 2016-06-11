@@ -465,6 +465,12 @@ void executeCommand(const char *buf, int bufLen)
     consolePrint(buf, bufLen);
     consolePrintLn("");
   }
+
+  if(!bufLen) {
+    looping = false;
+    calibStop(stateRecord.rxMin, stateRecord.rxCenter, stateRecord.rxMax);
+    return;
+  }
   
   const int maxParams = 8;
 
@@ -856,6 +862,21 @@ void receiverTask(uint32_t currentMicros)
 
 void sensorTaskFast(uint32_t currentMicros)
 {
+  if(simulatorConnected) {
+    // We take sensor inputs from the simulator (sensorData record)
+
+    alpha = sensorData.alpha/360;
+    iAS = (12*25.4)*sensorData.ias/1000;
+    rollRate = sensorData.rrate / 360;
+    pitchRate = sensorData.prate / 360;
+    yawRate = sensorData.yrate / 360;
+    rollAngle = sensorData.roll;
+    pitchAngle = sensorData.pitch;
+    heading = sensorData.heading;
+    
+    return;
+  }
+  
   // Alpha input
   
   alpha = alphaBuffer.output();
@@ -906,7 +927,10 @@ void sensorTaskSlow(uint32_t currentMicros)
 {
   // Altitude
 
-  altitude = (float) barometer.get_altitude();
+  if(simulatorConnected)
+    altitude = 12*25.4*sensorData.alt / 1000;
+  else
+    altitude = (float) barometer.get_altitude();
 }
 
 const int numPoles = 4;
@@ -1418,63 +1442,13 @@ void loopTask(uint32_t currentMicros)
   }
 }
 
-const int serialBufLen = 1<<6;
-char serialBuf[serialBufLen+1];
-int serialBufIndex = 0;
-
 void communicationTask(uint32_t currentMicros)
 {
   int len = 0;
        
-  while((len = cliSerial->available()) > 0) {    
-    int spaceLeft = serialBufLen - serialBufIndex;
-    
-    if(len > spaceLeft) {
-      for(int i = 0; i < len - spaceLeft; i++)
-        cliSerial->read();
-    }
-    
-    len = min(len, spaceLeft);
-
-    while(len > 0) {
-      char c =  cliSerial->read();
-
-      /*      
-      if(c == '\b' || c == 127) {
-	if(serialBufIndex > 0) {
-	  consolePrint("\b \b");
-	  consoleFlush();
-	  serialBufIndex--;
-	}
-	
-      } else if(c == '\n' || c == '\r') {
-	looping = false;
-	calibStop(stateRecord.rxMin, stateRecord.rxCenter, stateRecord.rxMax);
-
-	if(serialBufIndex < 1)
-	  consolePrintLn("// %");
-	else if(serialBuf[0] == '/')
-	  consolePrintLn("\n// %");
-	else {
-	  serialBuf[serialBufIndex] = '\0';
-	  executeCommand(serialBuf, serialBufIndex);
-	}
-
-	serialBufIndex = 0;
-	controlCycleEnded = 0;
-	
-      } else if(c != ' ' || serialBufIndex > 0) {
-	const char buf[] = { c, '\0' };
-	consolePrint(buf);
-	consoleFlush();
-	serialBuf[serialBufIndex++] = c;
-      }
-      */
-
-      datagramRxInputChar(c);
-      
-      len--;
-    }
+  while((len = cliSerial->available()) > 0) {
+    while(len-- > 0)
+      datagramRxInputChar(cliSerial->read());
   }
 }
 
@@ -1873,7 +1847,7 @@ void simulatorLinkTask(uint32_t currentMicros)
 {
   if(simulatorConnected && talk) {
     struct ControlData control = { .aileron = aileOutput,
-				   .elevator = elevOutput,
+				   .elevator = -elevOutput,
 				   .throttle = throttleStick,
 				   .rudder = rudderOutput };
 
