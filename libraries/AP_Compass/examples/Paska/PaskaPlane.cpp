@@ -128,40 +128,6 @@ struct Task {
 
 #define HZ_TO_PERIOD(f) ((uint32_t) (1.0e6/(f)))
 
-//
-// Datagram protocol integration
-//
-
-#define MAX_DG_SIZE  (1<<6)
-
-int maxDatagramSize = MAX_DG_SIZE;
-uint8_t datagramRxStore[MAX_DG_SIZE];
-
-#include "Serial.h"
-
-void executeCommand(const char *buf, int bufLen);
-  
-extern "C" {
-  
-void datagramInterpreter(uint8_t t, const uint8_t *data, int size)
-{  
-  switch(t) {
-  case DG_CONSOLE_IN:
-    executeCommand((const char*) data, size);
-    break;
-    
-  default:
-    consoleNote_P(PSTR("FUNNY DATAGRAM TYPE "));
-    consolePrintLn(t);
-  }
-}
-  
-void datagramSerialOut(uint8_t c)
-{
-  serialOut(c);
-}
-}
-
 struct ModeRecord {
   bool sensorFailSafe;
   bool rxFailSafe;
@@ -216,7 +182,7 @@ AlphaBuffer alphaBuffer, pressureBuffer;
 float controlCycle = 10.0e-3;
 uint32_t idleMicros;
 float idleAvg, logBandWidth, ppmFreq;
-bool looping, consoleConnected;
+bool looping, consoleConnected, simulatorConnected;
 RateLimiter aileRateLimiter, flapRateLimiter;
     
 float elevOutput = 0, aileOutput = 0, flapOutput = 0, gearOutput = 0, brakeOutput = 0, rudderOutput = 0;
@@ -227,6 +193,53 @@ struct RxInputRecord rpmInput = { rpmPin };
 #endif
 
 Button upButton, downButton, gearButton;
+
+//
+// Datagram protocol integration
+//
+
+#define MAX_DG_SIZE  (1<<6)
+
+int maxDatagramSize = MAX_DG_SIZE;
+uint8_t datagramRxStore[MAX_DG_SIZE];
+
+#include "Serial.h"
+
+void executeCommand(const char *buf, int bufLen);
+  
+struct SensorData sensorData;
+  
+extern "C" {
+
+void datagramInterpreter(uint8_t t, const uint8_t *data, int size)
+{  
+  switch(t) {
+  case DG_CONSOLE_IN:
+    executeCommand((const char*) data, size);
+    break;
+
+  case DG_SENSOR:
+    if(consoleConnected && size == sizeof(sensorData)) {
+      if(!simulatorConnected) {
+	consoleNoteLn_P(PSTR("Simulator CONNECTED"));
+	simulatorConnected = true;
+      }
+
+      memcpy(&sensorData, data, sizeof(sensorData));
+    }
+    break;
+    
+  default:
+    consoleNote_P(PSTR("FUNNY DATAGRAM TYPE "));
+    consolePrintLn(t);
+  }
+}
+  
+void datagramSerialOut(uint8_t c)
+{
+  serialOut(c);
+}
+}
 
 const uint8_t addr5048B_c = 0x40;
 const uint8_t addr4525_c = 0x28;
@@ -1834,11 +1847,11 @@ void backgroundTask(uint32_t durationMicros)
 
 void heartBeatTask(uint32_t durationMicros)
 {  
-  static uint32_t count = 0;
-
   if(!talk)
     return;
   
+  static uint32_t count = 0;
+
   datagramTxStart(DG_HEARTBEAT);
   datagramTxOut((uint8_t*) &count, sizeof(count));
   datagramTxEnd();
@@ -1854,6 +1867,20 @@ void blinkTask(uint32_t currentMicros)
   tick = (tick + 1) % (LED_TICK/LED_HZ);
 
   setPinState(&RED_LED, tick < ledRatio*LED_TICK/LED_HZ ? 0 : 1);
+}
+
+void simulatorLinkTask(uint32_t currentMicros)
+{
+  if(simulatorConnected && talk) {
+    struct ControlData control = { .aileron = aileOutput,
+				   .elevator = elevOutput,
+				   .throttle = throttleStick,
+				   .rudder = rudderOutput };
+
+    datagramTxStart(DG_CONTROL);
+    datagramTxOut((const uint8_t*) &control, sizeof(control));
+    datagramTxEnd();
+  }
 }
 
 void controlTaskGroup(uint32_t currentMicros)
@@ -1876,6 +1903,8 @@ struct Task taskList[] = {
     HZ_TO_PERIOD(LED_TICK) },
   { controlTaskGroup,
     HZ_TO_PERIOD(CONTROL_HZ) },
+  { simulatorLinkTask,
+    HZ_TO_PERIOD(10) },
   { sensorTaskSlow,
     HZ_TO_PERIOD(CONTROL_HZ/5) },
   { trimTask,
