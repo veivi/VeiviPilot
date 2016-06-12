@@ -181,7 +181,7 @@ Accumulator ball;
 AlphaBuffer alphaBuffer, pressureBuffer;
 float controlCycle = 10.0e-3;
 uint32_t idleMicros;
-float idleAvg, logBandWidth, ppmFreq;
+float idleAvg, logBandWidth, ppmFreq, simInputFreq;
 bool looping, consoleConnected, simulatorConnected;
 RateLimiter aileRateLimiter, flapRateLimiter;
     
@@ -205,20 +205,24 @@ uint8_t datagramRxStore[MAX_DG_SIZE];
 
 #include "Serial.h"
 
-void executeCommand(const char *buf, int bufLen);
-  
+//void executeCommand(const char *buf, int bufLen);
+void executeCommand(const char *buf);
+
 struct SensorData sensorData;
-  
+uint16_t simFrames;
+    
 extern "C" {
 
 void datagramInterpreter(uint8_t t, const uint8_t *data, int size)
 {  
   switch(t) {
   case DG_CONSOLE_IN:
-    executeCommand((const char*) data, size);
+    executeCommand((const char*) data);
     break;
 
   case DG_SENSOR:
+    simFrames++;
+    
     if(consoleConnected && size == sizeof(sensorData)) {
       if(!simulatorConnected) {
 	consoleNoteLn_P(PSTR("Simulator CONNECTED"));
@@ -458,15 +462,17 @@ int indexOf(const char *s, const char c)
   return indexOf(s, c, 0);
 }
 
-void executeCommand(const char *buf, int bufLen)
+void executeCommand(const char *buf)
 {
+  int bufLen = strlen(buf);
+  
   if(echoEnabled) {
     consolePrint("// % ");
     consolePrint(buf, bufLen);
     consolePrintLn("");
   }
 
-  if(!bufLen) {
+  if(bufLen < 1) {
     looping = false;
     calibStop(stateRecord.rxMin, stateRecord.rxCenter, stateRecord.rxMax);
     return;
@@ -714,6 +720,8 @@ void executeCommand(const char *buf, int bufLen)
       consolePrintLn(idleAvg*100,1);
       consoleNote_P(PSTR("PPM frequency = "));
       consolePrintLn(ppmFreq);
+      consoleNote_P(PSTR("Sim link frequency = "));
+      consolePrintLn(simInputFreq);
       consoleNote_P(PSTR("Alpha = "));
       consolePrint(360*alpha);
       if(alphaFailed)
@@ -791,7 +799,10 @@ void executeCommand(const char *buf, int bufLen)
 
 float scaleByIAS(float small, float large)
 {
-  return mixValue((iAS - paramRecord.ias_Low) / (paramRecord.ias_High - paramRecord.ias_Low), small, large);
+  float dpMax = square(paramRecord.ias_High)/2,
+    dpMin = square(paramRecord.ias_Low)/2;
+		   
+  return mixValue((dynPressure - dpMin) / (dpMax - dpMin), small, large);
 }
 
 void cacheTask(uint32_t currentMicros)
@@ -866,13 +877,15 @@ void sensorTaskFast(uint32_t currentMicros)
     // We take sensor inputs from the simulator (sensorData record)
 
     alpha = sensorData.alpha/360;
-    iAS = (12*25.4)*sensorData.ias/1000;
+    iAS = (1852)*sensorData.ias/60/60;
     rollRate = sensorData.rrate / 360;
     pitchRate = sensorData.prate / 360;
     yawRate = sensorData.yrate / 360;
     rollAngle = sensorData.roll;
     pitchAngle = sensorData.pitch;
     heading = sensorData.heading;
+    
+    dynPressure = square(iAS)/2;
     
     return;
   }
@@ -1017,6 +1030,11 @@ void measurementTask(uint32_t currentMicros)
   ppmFreq = 1.0e6 * ppmFrames / (currentMicros - prevMeasurement);
   ppmFrames = 0;
   PERMIT;
+
+  // Sim link monitoring
+
+  simInputFreq = 1.0e6 * simFrames / (currentMicros - prevMeasurement);
+  simFrames = 0;
 
   // Log bandwidth
 
@@ -1326,7 +1344,7 @@ void configurationTask(uint32_t currentMicros)
     case 10:
       // Aileron to rudder mix
 
-      rudderMix = testGain = testGainLinear(0.5, 0.0);
+      rudderMix = testGain = testGainLinear(0.7, 0.0);
       break;
     }
   }
@@ -1664,7 +1682,7 @@ void controlTask(uint32_t currentMicros)
   
   // Aileron
 
-  float maxRollRate = scaleByIAS(270.0/2, 270.0) / 360;
+  float maxRollRate = scaleByIAS(270.0/3, 270.0) / 360;
   float maxBank = 45.0;
 
   if(mode.rxFailSafe)
@@ -1878,7 +1896,7 @@ struct Task taskList[] = {
   { controlTaskGroup,
     HZ_TO_PERIOD(CONTROL_HZ) },
   { simulatorLinkTask,
-    HZ_TO_PERIOD(10) },
+    HZ_TO_PERIOD(CONTROL_HZ) },
   { sensorTaskSlow,
     HZ_TO_PERIOD(CONTROL_HZ/5) },
   { trimTask,
