@@ -1647,9 +1647,9 @@ void controlTask(uint32_t currentMicros)
   targetAlpha = 0.0;
   elevOutput = elevStick;
 
-  const float effStick = elevStick - (mode.autoAlpha ? neutralStick : 0);
-
-  applyNullZone(effStick, &elevPilotInput);
+  const float effStick =
+    applyNullZone(elevStick - (mode.autoAlpha ? neutralStick : 0),
+		  &elevPilotInput);
     
   if(!elevPilotInput)
     elevPilotInputPersistCount = 0;
@@ -1664,13 +1664,13 @@ void controlTask(uint32_t currentMicros)
   if(mode.rxFailSafe)
     targetAlpha = shakerAlpha;
   else {
-    const float stickRange_c = maxAlpha*360; // 90/paramRecord.ff_A;
+    const float stickRange_c = (1 - paramRecord.ff_A)/paramRecord.ff_B;
 
     targetAlpha = clamp(neutralAlpha + effStick*stickRange_c/360,
 			-paramRecord.alphaMax, effMaxAlpha_c);
   }
 	
-  float feedForward = targetAlpha*360/90*paramRecord.ff_A + paramRecord.ff_B;
+  float feedForward = paramRecord.ff_A + targetAlpha*360*paramRecord.ff_B;
 
   float targetPitchRate = (targetAlpha - alpha) * autoAlphaP;      
 
