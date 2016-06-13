@@ -4,7 +4,6 @@
 
 const struct Command commands[] PROGMEM = {
   { "name", c_name, e_string, &paramRecord.name },
-  { "min", c_min, e_angle360, &paramRecord.alphaMin },
   { "max", c_max, e_angle360, &paramRecord.alphaMax },
   { "5048b_ref", c_5048b_ref, e_uint16, &paramRecord.alphaRef },
   { "inner_pid_zn", c_inner_pid_zn,

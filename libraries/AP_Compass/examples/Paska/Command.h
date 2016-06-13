@@ -16,7 +16,6 @@ typedef enum {
   c_edefl,
   c_clear,
   c_dump,
-  c_min,
   c_max,
   c_zero,
   c_eneutral,

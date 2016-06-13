@@ -1112,6 +1112,8 @@ float testGainLinear(float start, float stop)
   return start + q*(stop - start);
 }
 
+float s_Ku_ref, i_Ku_ref;
+
 void configurationTask(uint32_t currentMicros)
 {   
   if(downButton.doublePulse() || gearButton.doublePulse()) {
@@ -1287,14 +1289,14 @@ void configurationTask(uint32_t currentMicros)
       // Wing stabilizer gain
          
       mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
-      aileCtrl.setPID(testGain = testGainExpo(s_Ku), 0, 0);
+      aileCtrl.setPID(testGain = testGainExpo(s_Ku_ref), 0, 0);
       break;
             
     case 3:
       // Elevator stabilizer gain, outer loop enabled
          
       mode.autoTrim = mode.autoAlpha = true;
-      elevCtrl.setPID(testGain = testGainExpo(i_Ku), 0, 0);
+      elevCtrl.setPID(testGain = testGainExpo(i_Ku_ref), 0, 0);
       break;
          
     case 4:
@@ -1358,8 +1360,13 @@ void configurationTask(uint32_t currentMicros)
       rudderMix = testGain = testGainLinear(0.9, 0.0);
       break;
     }
+  } else { 
+    // Track s_Ku until a test is activated
+    
+    s_Ku_ref = s_Ku;
+    i_Ku_ref = i_Ku;
   }
-      
+  
   //
   // Compute effective alpha limits
   //
@@ -1375,7 +1382,7 @@ void configurationTask(uint32_t currentMicros)
  
   if(!mode.autoAlpha) { 
     neutralStick = elevStick;
-    neutralAlpha = clamp(alphaFilter.output(), paramRecord.alphaMin, maxAlpha);
+    neutralAlpha = clamp(alphaFilter.output(), -maxAlpha, maxAlpha);
   }
 }
 
@@ -1640,9 +1647,9 @@ void controlTask(uint32_t currentMicros)
   targetAlpha = 0.0;
   elevOutput = elevStick;
 
-  const float elevOffset = mode.autoAlpha ? neutralStick : 0;
+  const float effStick = elevStick - (mode.autoAlpha ? neutralStick : 0);
 
-  const float effStick = applyNullZone(elevStick - elevOffset, &elevPilotInput);
+  applyNullZone(effStick, &elevPilotInput);
     
   if(!elevPilotInput)
     elevPilotInputPersistCount = 0;
@@ -1650,17 +1657,17 @@ void controlTask(uint32_t currentMicros)
     elevPilotInputPersistCount++;
   
   const float fract_c = 1.0/3;
-  const float stickStrength_c = max(effStick-(1.0-fract_c), 0)/fract_c;
+  const float stickStrength_c = max(effStick-(1-fract_c), 0)/fract_c;
   const float effMaxAlpha_c =
     mixValue(stickStrength_c, shakerAlpha, maxAlpha);
     
   if(mode.rxFailSafe)
     targetAlpha = shakerAlpha;
   else {
-    const float stickRange_c = min(20.0, 90/paramRecord.ff_A);
+    const float stickRange_c = maxAlpha*360; // 90/paramRecord.ff_A;
 
     targetAlpha = clamp(neutralAlpha + effStick*stickRange_c/360,
-			paramRecord.alphaMin, effMaxAlpha_c);
+			-paramRecord.alphaMax, effMaxAlpha_c);
   }
 	
   float feedForward = targetAlpha*360/90*paramRecord.ff_A + paramRecord.ff_B;
