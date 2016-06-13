@@ -30,9 +30,8 @@ const struct ParamRecord paramDefaults = {
   .brakeNeutral = 0, .brakeDefl = 45.0/90,
   .servoAile = 0, .servoElev = 1, .servoRudder = 2, .servoFlap = -1, .servoFlap2 = -1, .servoGear = -1, .servoBrake = -1,
   .alphaMin = -3.0/360, .alphaMax = 12.0/360,
-  .i_Ku = 1.0, .i_Tu = 0.25, .o_P = 10.0, 
-  .s_Ku_fast = 1.3, .s_Tu_fast = 0.25, 
-  .s_Ku_slow = 1.3, .s_Tu_slow = 0.25, 
+  .i_KuDp = 1000, .i_Tu = 0.25, .o_P = 10.0, 
+  .s_KuDp = 1000, .s_Tu = 0.25, 
   .r_Mix = 0.1, .r_Ku = 0.1, .r_Tu = 0.25,
   .ff_A = 0.0, .ff_B = 0.0,
   .wl_Limit = 0.0,
@@ -136,8 +135,8 @@ void printParams()
   consoleNote_P(PSTR("  AS5048B ref = "));
   consolePrintLn(paramRecord.alphaRef);
   consoleNoteLn_P(PSTR("  Autostick/pusher"));
-  consoleNote_P(PSTR("    Inner Ku = "));
-  consolePrint(paramRecord.i_Ku, 4);
+  consoleNote_P(PSTR("    Inner Ku*Dp = "));
+  consolePrint(paramRecord.i_KuDp, 4);
   consolePrint_P(PSTR(" Tu = "));
   consolePrint(paramRecord.i_Tu, 4);
   consolePrint_P(PSTR(" Outer P = "));
@@ -148,14 +147,10 @@ void printParams()
   consolePrint_P(PSTR(" B = "));
   consolePrintLn(paramRecord.ff_B, 4);
   consoleNoteLn_P(PSTR("  Stabilizer"));
-  consoleNote_P(PSTR("    (Fast) Ku = "));
-  consolePrint(paramRecord.s_Ku_fast, 4);
+  consoleNote_P(PSTR("    Ku*Dp = "));
+  consolePrint(paramRecord.s_KuDp, 4);
   consolePrint_P(PSTR(" Tu = "));
-  consolePrintLn(paramRecord.s_Tu_fast, 4);
-  consoleNote_P(PSTR("    (Slow) Ku = "));
-  consolePrint(paramRecord.s_Ku_slow, 4);
-  consolePrint_P(PSTR(" Tu = "));
-  consolePrintLn(paramRecord.s_Tu_slow, 4);
+  consolePrintLn(paramRecord.s_Tu, 4);
   consoleNote_P(PSTR("    Weak leveling limit angle = "));
   consolePrintLn(paramRecord.wl_Limit, 4);
   consoleNote_P(PSTR("    Using "));

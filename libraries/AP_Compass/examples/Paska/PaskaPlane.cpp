@@ -797,6 +797,16 @@ void executeCommand(const char *buf)
   }
 }
 
+float scaleByInvDP(float k)
+{
+  float dpMin = square(paramRecord.ias_Low)/2;
+
+  if(dynPressure < dpMin)
+    return k / dpMin;
+  else
+    return k / dynPressure;
+}
+
 float scaleByIAS(float small, float large)
 {
   float dpMax = square(paramRecord.ias_High)/2,
@@ -1246,17 +1256,18 @@ void configurationTask(uint32_t currentMicros)
   
   // Default controller settings
 
-  float s_Ku = scaleByIAS(paramRecord.s_Ku_slow, paramRecord.s_Ku_fast);
-  float s_Tu = scaleByIAS(paramRecord.s_Tu_slow, paramRecord.s_Tu_fast);
+  float s_Ku = scaleByInvDP(paramRecord.s_KuDp);
+  float i_Ku = scaleByInvDP(paramRecord.i_KuDp);
 
   if(paramRecord.c_PID)
-    aileCtrl.setZieglerNicholsPID(s_Ku*scale, s_Tu);
+    aileCtrl.setZieglerNicholsPID(s_Ku*scale, paramRecord.s_Tu);
   else
-    aileCtrl.setZieglerNicholsPI(s_Ku*scale, s_Tu);
+    aileCtrl.setZieglerNicholsPI(s_Ku*scale, paramRecord.s_Tu);
+  
+  elevCtrl.setZieglerNicholsPID(i_Ku*scale, paramRecord.i_Tu);
+  pushCtrl.setZieglerNicholsPID(i_Ku*scale, paramRecord.i_Tu);
   
   rudderCtrl.setZieglerNicholsPI(paramRecord.r_Ku*scale, paramRecord.r_Tu);
-  elevCtrl.setZieglerNicholsPID(paramRecord.i_Ku*scale, paramRecord.i_Tu);
-  pushCtrl.setZieglerNicholsPID(paramRecord.i_Ku*scale, paramRecord.i_Tu);
 
   autoAlphaP = paramRecord.o_P;
   maxAlpha = paramRecord.alphaMax;
@@ -1283,7 +1294,7 @@ void configurationTask(uint32_t currentMicros)
       // Elevator stabilizer gain, outer loop enabled
          
       mode.autoTrim = mode.autoAlpha = true;
-      elevCtrl.setPID(testGain = testGainExpo(paramRecord.i_Ku), 0, 0);
+      elevCtrl.setPID(testGain = testGainExpo(i_Ku), 0, 0);
       break;
          
     case 4:
@@ -1312,7 +1323,7 @@ void configurationTask(uint32_t currentMicros)
       rudderMix = 0;
       levelBank = 0;
       aileCtrl.
-	setZieglerNicholsPID(s_Ku*testGain, s_Tu);
+	setZieglerNicholsPID(s_Ku*testGain, paramRecord.s_Tu);
       rudderCtrl.
 	setZieglerNicholsPI(paramRecord.r_Ku*testGain, paramRecord.r_Tu);
       break;
@@ -1329,9 +1340,9 @@ void configurationTask(uint32_t currentMicros)
       // Aileron PI vs PID test
        
       if(parameter > 0.5)
-	aileCtrl.setZieglerNicholsPI(s_Ku, s_Tu);
+	aileCtrl.setZieglerNicholsPI(s_Ku, paramRecord.s_Tu);
       else
-	aileCtrl.setZieglerNicholsPID(s_Ku, s_Tu);
+	aileCtrl.setZieglerNicholsPID(s_Ku, paramRecord.s_Tu);
       break;         
 
     case 9:
@@ -1344,7 +1355,7 @@ void configurationTask(uint32_t currentMicros)
     case 10:
       // Aileron to rudder mix
 
-      rudderMix = testGain = testGainLinear(0.7, 0.0);
+      rudderMix = testGain = testGainLinear(0.9, 0.0);
       break;
     }
   }

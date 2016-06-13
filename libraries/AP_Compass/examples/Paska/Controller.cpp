@@ -1,8 +1,5 @@
 #include "Controller.h"
 
-#define ZN_MARGIN (1.0/3)
-#define ZN_SCALE (1-ZN_MARGIN)
-
 void Controller::setPID(float kP, float kI, float kD) {
     Kp = kP; 
     Ki = kI;
@@ -25,7 +22,6 @@ float Controller::getD(void)
 }
 
 void Controller::setZieglerNicholsPID(float Ku, float Tu) {
-  Ku *= ZN_SCALE;
   Kp = 0.6*Ku; 
   Ki = 2*Kp/Tu; 
   Kd = Kp*Tu/8;
@@ -33,7 +29,6 @@ void Controller::setZieglerNicholsPID(float Ku, float Tu) {
 
 void Controller::setZieglerNicholsPI(float Ku, float Tu)
 {
-  Ku *= ZN_SCALE;
   Kp = 0.45*Ku; 
   Ki = 1.2*Kp/Tu; 
   Kd = 0;
@@ -48,7 +43,7 @@ float Controller::getKu(void)
   else
     k = Kp/0.45;
 
-  return k / ZN_SCALE;
+  return k;
 }
 
 float Controller::getTu(void)
