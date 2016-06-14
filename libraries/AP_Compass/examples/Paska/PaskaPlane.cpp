@@ -807,6 +807,14 @@ float scaleByInvDP(float k)
     return k / dynPressure;
 }
 
+float scaleByInvIAS(float k)
+{
+  if(iAS < paramRecord.ias_Low)
+    return k / paramRecord.ias_Low;
+  else
+    return k / iAS;
+}
+
 float scaleByIAS(float small, float large)
 {
   float dpMax = square(paramRecord.ias_High)/2,
@@ -1197,11 +1205,17 @@ void configurationTask(uint32_t currentMicros)
     testMode = true;
 
     consoleNoteLn_P(PSTR("Test mode ENABLED"));
-    
+
+    if(simulatorConnected)
+      logEnable();
+
   } else if(testMode && parameter < 0) {
     testMode = false;
     
     consoleNoteLn_P(PSTR("Test mode DISABLED"));
+
+    if(simulatorConnected)
+      logDisable();
   }
 
   // Wing leveler disable when stick input detected
@@ -1259,7 +1273,7 @@ void configurationTask(uint32_t currentMicros)
   // Default controller settings
 
   float s_Ku = scaleByInvDP(paramRecord.s_KuDp);
-  float i_Ku = scaleByInvDP(paramRecord.i_KuDp);
+  float i_Ku = scaleByInvIAS(paramRecord.i_KuDp);
 
   if(paramRecord.c_PID)
     aileCtrl.setZieglerNicholsPID(s_Ku*scale, paramRecord.s_Tu);
@@ -1392,16 +1406,14 @@ void loopTask(uint32_t currentMicros)
     consolePrint("alpha = ");
     consolePrint(alpha*360);
 
+    /*
     consolePrint(" InputVec = ( ");
     for(uint8_t i = 0; i < sizeof(ppmInputs)/sizeof(void*); i++) {
       consolePrint(inputValue(ppmInputs[i]), 2);
       consolePrint(" ");
     }      
     consolePrint(")");
-    
-    /*    consolePrint(" targAlpha = ");
-    consolePrint(targetAlpha*360);
-    */
+    */    
 
     consolePrint(" IAS = ");
     consolePrint(iAS);
@@ -1417,9 +1429,11 @@ void loopTask(uint32_t currentMicros)
     consolePrint(" rudderStick = ");
     consolePrint(rudderStick);
     */
+    /*
     consolePrint(" ball = ");
     consolePrint(ball.output(), 2);
-
+    */
+    
     /*
     consolePrint(" acc = (");
     consolePrint(accX, 2);
@@ -1458,17 +1472,20 @@ void loopTask(uint32_t currentMicros)
     consolePrint(" speed = ");
     consolePrint(gpsFix.speed);
     */
+ 
     consolePrint(" target = ");
     consolePrint(targetAlpha*360);
     consolePrint(" trim = ");
     consolePrint(neutralAlpha*360);
+
     /*    
     consolePrint(" param = ");
     consolePrint(parameter);  
     */
+    /*
     consolePrint(" testGain = ");
     consolePrint(testGain);
-
+    */
     /* 
     consolePrint(" Qparam = ");
     consolePrint(quantize(parameter));  
