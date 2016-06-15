@@ -132,6 +132,7 @@ struct Task {
 struct ModeRecord {
   bool sensorFailSafe;
   bool rxFailSafe;
+  bool pitchHold;
   bool autoAlpha;
   bool autoTrim;
   bool autoBall;
@@ -1227,7 +1228,7 @@ void configurationTask(uint32_t currentMicros)
   // Mode-to-feature mapping: first nominal values
       
   mode.stabilizer = true;
-  mode.autoAlpha = mode.autoTrim = elevMode > 0;
+  mode.pitchHold = mode.autoAlpha = mode.autoTrim = elevMode > 0;
   mode.autoBall = false; // true; // !switchStateLazy;
   
   // Receiver fail detection
@@ -1246,7 +1247,7 @@ void configurationTask(uint32_t currentMicros)
   if(mode.rxFailSafe) {    
     // Receiver failsafe mode settings
     
-    mode.autoAlpha = mode.autoTrim = mode.bankLimiter = true;
+    mode.pitchHold = mode.autoAlpha = mode.autoTrim = mode.bankLimiter = true;
     neutralStick = 0;
   }
 
@@ -1298,17 +1299,25 @@ void configurationTask(uint32_t currentMicros)
       aileCtrl.setPID(testGain = testGainExpo(s_Ku_ref), 0, 0);
       break;
             
+    case 2:
+      // Elevator stabilizer gain, outer loop disabled
+         
+      mode.pitchHold = true;
+      mode.autoTrim = mode.autoAlpha = false;
+      elevCtrl.setPID(testGain = testGainExpo(i_Ku_ref), 0, 0);
+      break;
+         
     case 3:
       // Elevator stabilizer gain, outer loop enabled
          
-      mode.autoTrim = mode.autoAlpha = true;
+      mode.pitchHold = mode.autoTrim = mode.autoAlpha = true;
       elevCtrl.setPID(testGain = testGainExpo(i_Ku_ref), 0, 0);
       break;
          
     case 4:
       // Auto alpha outer loop gain
          
-      mode.autoTrim = mode.autoAlpha = true;
+      mode.pitchHold = mode.autoTrim = mode.autoAlpha = true;
       autoAlphaP = testGain = testGainExpo(paramRecord.o_P);
       break;
          
@@ -1386,10 +1395,11 @@ void configurationTask(uint32_t currentMicros)
 
   alphaFilter.input(alpha);
  
-  if(!mode.autoAlpha) { 
+  if(!mode.pitchHold)
     neutralStick = elevStick;
+  
+  if(!mode.autoAlpha) 
     neutralAlpha = clamp(alphaFilter.output(), -maxAlpha, maxAlpha);
-  }
 }
 
 void loopTask(uint32_t currentMicros)
@@ -1657,7 +1667,7 @@ void controlTask(uint32_t currentMicros)
   elevOutput = elevStick;
 
   const float effStick =
-    applyNullZone(elevStick - (mode.autoAlpha ? neutralStick : 0),
+    applyNullZone(elevStick - (mode.pitchHold ? neutralStick : 0),
 		  &elevPilotInput);
     
   if(!elevPilotInput)
@@ -1679,22 +1689,23 @@ void controlTask(uint32_t currentMicros)
 			-paramRecord.alphaMax, effMaxAlpha_c);
   }
 	
-  float feedForward = paramRecord.ff_A + targetAlpha*360*paramRecord.ff_B;
-
-  float targetPitchRate = (targetAlpha - alpha) * autoAlphaP;      
+  float targetPitchRate = effStick * 180/360.0;
 
   if(mode.autoAlpha)
+    targetPitchRate = (targetAlpha - alpha) * autoAlphaP;      
+
+  float feedForward = paramRecord.ff_A + targetAlpha*360*paramRecord.ff_B;
+
+  if(mode.pitchHold)
     elevCtrl.input(targetPitchRate - pitchRate, controlCycle);
   else
-    elevCtrl.reset(elevStick - feedForward, 0.0);
+    elevCtrl.reset(effStick - feedForward, 0.0);
     
-  if(!mode.sensorFailSafe && mode.autoAlpha) {
-    // Feed-forward part
-    elevOutput = feedForward;
-    
-    if(!alphaFailed)
-      // Feedback (PID output)
-      elevOutput += elevCtrl.output();
+  if(!mode.sensorFailSafe && mode.pitchHold) {
+    elevOutput = elevCtrl.output();
+      
+    if(mode.autoAlpha)
+      elevOutput += feedForward;
   }
 
   // Pusher
