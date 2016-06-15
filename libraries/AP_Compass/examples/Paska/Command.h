@@ -64,7 +64,6 @@ typedef enum {
   c_name,
   c_ff,
   c_pid,
-  c_console,
   c_wl,
   c_ias,
   c_atrim,

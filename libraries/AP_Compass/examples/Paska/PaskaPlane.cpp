@@ -16,11 +16,6 @@
 #include "NVState.h"
 #include "PWMOutput.h"
 #include "PPM.h"
-
-extern "C" {
-#include "Datagram.h"
-}
-
 #include "Command.h"
 #include "Button.h"
 #include <AP_Progmem/AP_Progmem.h>
@@ -41,7 +36,7 @@ AP_AHRS_DCM ahrs {ins,  barometer, gps};
 // Threshold speed margin
 //
 
-const float thresholdMargin_c = 15.0/100;
+const float thresholdMargin_c = 15/100.0;
 
 //
 // HW timer declarations
@@ -76,6 +71,12 @@ struct RxInputRecord aileInput, elevInput, throttleInput, rudderInput,
   switchInput, tuningKnobInput, gearInput, flapInput;
 struct RxInputRecord *ppmInputs[] = 
   { &aileInput, &elevInput, &throttleInput, &rudderInput, &switchInput, &tuningKnobInput, &gearInput, &flapInput };
+
+struct SwitchRecord modeSwitchRecord = { &switchInput };
+struct SwitchRecord gearSwitchRecord = { &gearInput };
+struct SwitchRecord flapSwitchRecord = { &flapInput };
+
+Button upButton, downButton, gearButton;
 
 //
 // Servo PWM output
@@ -192,37 +193,41 @@ int8_t elevMode = 0;
 struct RxInputRecord rpmInput = { rpmPin };
 #endif
 
-Button upButton, downButton, gearButton;
-
 //
 // Datagram protocol integration
 //
 
+#include "Serial.h"
+
 #define MAX_DG_SIZE  (1<<6)
+
+extern "C" {
+
+#include "Datagram.h"
 
 int maxDatagramSize = MAX_DG_SIZE;
 uint8_t datagramRxStore[MAX_DG_SIZE];
 
-#include "Serial.h"
-
-//void executeCommand(const char *buf, int bufLen);
 void executeCommand(const char *buf);
 
 struct SensorData sensorData;
 uint16_t simFrames;
     
-extern "C" {
-
 void datagramInterpreter(uint8_t t, const uint8_t *data, int size)
 {  
   switch(t) {
+  case DG_HEARTBEAT:
+    if(!consoleConnected) {
+      consoleNoteLn_P(PSTR("Console CONNECTED"));
+      consoleConnected = true;
+    }
+    break;
+    
   case DG_CONSOLE_IN:
     executeCommand((const char*) data);
     break;
 
   case DG_SENSOR:
-    simFrames++;
-    
     if(consoleConnected && size == sizeof(sensorData)) {
       if(!simulatorConnected) {
 	consoleNoteLn_P(PSTR("Simulator CONNECTED"));
@@ -230,6 +235,7 @@ void datagramInterpreter(uint8_t t, const uint8_t *data, int size)
       }
 
       memcpy(&sensorData, data, sizeof(sensorData));
+      simFrames++;    
     }
     break;
     
@@ -251,11 +257,6 @@ const uint8_t addr4525_c = 0x28;
 bool read5048B(uint8_t addr, uint8_t *storage, int bytes) 
 {
   return I2c.read(addr5048B_c, addr, storage, bytes) == 0;
-}
-
-bool read5048B_byte(uint8_t addr, uint8_t *result)
-{
-  return read5048B(addr, result, sizeof(*result));
 }
 
 bool read5048B_word14(uint8_t addr, uint16_t *result)
@@ -355,10 +356,6 @@ void logAttitude(void)
   logGeneric(lc_heading, heading);
   logGeneric(lc_yawrate, yawRate*360);
 }
-
-struct SwitchRecord modeSwitchRecord = { &switchInput };
-struct SwitchRecord gearSwitchRecord = { &gearInput };
-struct SwitchRecord flapSwitchRecord = { &flapInput };
 
 float readParameter()
 {
@@ -648,10 +645,6 @@ void executeCommand(const char *buf)
       storeNVState();
       break;
 
-    case c_console:
-      consoleNoteLn_P(PSTR("Console CONNECTED"));
-      consoleConnected = true;
-      break;
       
     case c_dump:
       if(numParams > 0)
@@ -852,7 +845,6 @@ void alphaTask(uint32_t currentMicros)
   if(!handleFailure("alpha", !readAlpha_5048B(&raw), &alphaWarn, &alphaFailed, &failCount))
     alphaBuffer.input((float) raw / (1L<<(8*sizeof(raw))));
 }
-
 
 void airspeedTask(uint32_t currentMicros)
 {

@@ -61,7 +61,6 @@ const struct Command commands[] PROGMEM = {
   { "talk", c_talk },
   { "rattle", c_rattle },
   { "defaults", c_defaults },
-  { "console", c_console },
   { "atrim", c_atrim },
   { "etrim", c_etrim },
   { "rtrim", c_rtrim },
