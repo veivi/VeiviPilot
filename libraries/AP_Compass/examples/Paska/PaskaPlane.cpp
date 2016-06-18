@@ -804,14 +804,6 @@ float scaleByInvDP(float k)
     return k / dynPressure;
 }
 
-float scaleByInvIAS(float k)
-{
-  if(iAS < paramRecord.ias_Low)
-    return k / paramRecord.ias_Low;
-  else
-    return k / iAS;
-}
-
 float scaleByIAS(float k)
 {
   if(iAS < paramRecord.ias_Low)
