@@ -30,7 +30,7 @@ const struct ParamRecord paramDefaults = {
   .brakeNeutral = 0, .brakeDefl = 45.0/90,
   .servoAile = 0, .servoElev = 1, .servoRudder = 2, .servoFlap = -1, .servoFlap2 = -1, .servoGear = -1, .servoBrake = -1,
   .alphaMin = -1, .alphaMax = 12.0/360,
-  .i_KuDp = 1000, .i_Tu = 0.25, .o_P = 10.0, 
+  .i_KuDp = 1000, .i_Tu = 0.25, .o_P_per_IAS = 5.0, 
   .s_KuDp = 1000, .s_Tu = 0.25, 
   .r_Mix = 0.1, .r_Ku = 0.1, .r_Tu = 0.25,
   .ff_A = 0.0, .ff_B = 0.0,
@@ -139,8 +139,8 @@ void printParams()
   consolePrint(paramRecord.i_KuDp, 4);
   consolePrint_P(PSTR(" Tu = "));
   consolePrint(paramRecord.i_Tu, 4);
-  consolePrint_P(PSTR(" Outer P = "));
-  consolePrintLn(paramRecord.o_P, 4);
+  consolePrint_P(PSTR(" Outer P/IAS = "));
+  consolePrintLn(paramRecord.o_P_per_IAS, 4);
   consoleNoteLn_P(PSTR("  AutoAlpha feedforward A+Bx"));
   consoleNote_P(PSTR("    "));
   consolePrint(paramRecord.ff_A, 5);

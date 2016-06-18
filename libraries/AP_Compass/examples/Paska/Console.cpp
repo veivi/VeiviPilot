@@ -12,6 +12,7 @@ extern const AP_HAL::HAL& hal;
 
 static void newline(void);
 bool talk = true;
+extern bool consoleConnected;
 
 #define BUF_SIZE (1<<6)
 
@@ -21,7 +22,7 @@ static uint8_t bufPtr;
 void consoleFlush()
 {
   if(bufPtr > 0) {
-    datagramTxStart(DG_CONSOLE_OUT);
+    datagramTxStart(DG_CONSOLE);
     datagramTxOut(outputBuf, bufPtr);
     datagramTxEnd();
   }
@@ -31,7 +32,7 @@ void consoleFlush()
 
 void consoleOut(const uint8_t c)
 {
-  if(!talk)
+  if(!consoleConnected || !talk)
     return;
   
   if(bufPtr > BUF_SIZE-1)

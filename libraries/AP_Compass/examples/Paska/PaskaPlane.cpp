@@ -184,7 +184,7 @@ AlphaBuffer alphaBuffer, pressureBuffer;
 float controlCycle = 10.0e-3;
 uint32_t idleMicros;
 float idleAvg, logBandWidth, ppmFreq, simInputFreq;
-bool looping, consoleConnected, simulatorConnected;
+bool looping, consoleConnected = true, simulatorConnected = false;
 RateLimiter aileRateLimiter, flapRateLimiter;
     
 float elevOutput = 0, aileOutput = 0, flapOutput = 0, gearOutput = 0, brakeOutput = 0, rudderOutput = 0;
@@ -211,9 +211,10 @@ uint8_t datagramRxStore[MAX_DG_SIZE];
 
 void executeCommand(const char *buf);
 
-struct SensorData sensorData;
+struct SimLinkSensor sensorData;
 uint16_t simFrames;
-    
+  int linkDownCount = 0, heartBeatCount = 0;
+  
 void datagramInterpreter(uint8_t t, const uint8_t *data, int size)
 {  
   switch(t) {
@@ -222,13 +223,15 @@ void datagramInterpreter(uint8_t t, const uint8_t *data, int size)
       consoleNoteLn_P(PSTR("Console CONNECTED"));
       consoleConnected = true;
     }
+    heartBeatCount++;
+    linkDownCount = 0;
     break;
     
-  case DG_CONSOLE_IN:
+  case DG_CONSOLE:
     executeCommand((const char*) data);
     break;
 
-  case DG_SENSOR:
+  case DG_SIMLINK:
     if(consoleConnected && size == sizeof(sensorData)) {
       if(!simulatorConnected) {
 	consoleNoteLn_P(PSTR("Simulator CONNECTED"));
@@ -809,6 +812,14 @@ float scaleByInvIAS(float k)
     return k / iAS;
 }
 
+float scaleByIAS(float k)
+{
+  if(iAS < paramRecord.ias_Low)
+    return k * paramRecord.ias_Low;
+  else
+    return k * iAS;
+}
+
 float scaleByIAS(float small, float large)
 {
   float dpMax = square(paramRecord.ias_High)/2,
@@ -1113,7 +1124,7 @@ float testGainLinear(float start, float stop)
   return start + q*(stop - start);
 }
 
-float s_Ku_ref, i_Ku_ref;
+float s_Ku_ref, i_Ku_ref, o_P_ref;
 
 void configurationTask(uint32_t currentMicros)
 {   
@@ -1266,8 +1277,9 @@ void configurationTask(uint32_t currentMicros)
   // Default controller settings
 
   float s_Ku = scaleByInvDP(paramRecord.s_KuDp);
-  float i_Ku = scaleByInvIAS(paramRecord.i_KuDp);
-
+  float i_Ku = scaleByInvDP(paramRecord.i_KuDp);
+  float o_P = scaleByIAS(paramRecord.o_P_per_IAS);
+  
   if(paramRecord.c_PID)
     aileCtrl.setZieglerNicholsPID(s_Ku*scale, paramRecord.s_Tu);
   else
@@ -1278,7 +1290,7 @@ void configurationTask(uint32_t currentMicros)
   
   rudderCtrl.setZieglerNicholsPI(paramRecord.r_Ku*scale, paramRecord.r_Tu);
 
-  autoAlphaP = paramRecord.o_P;
+  autoAlphaP = o_P;
   maxAlpha = paramRecord.alphaMax;
   rudderMix = paramRecord.r_Mix;
   levelBank = 0;
@@ -1318,7 +1330,7 @@ void configurationTask(uint32_t currentMicros)
       // Auto alpha outer loop gain
          
       mode.pitchHold = mode.autoTrim = mode.autoAlpha = true;
-      autoAlphaP = testGain = testGainExpo(paramRecord.o_P);
+      autoAlphaP = testGain = testGainExpo(o_P_ref);
       break;
          
     case 5:
@@ -1380,6 +1392,7 @@ void configurationTask(uint32_t currentMicros)
     
     s_Ku_ref = s_Ku;
     i_Ku_ref = i_Ku;
+    o_P_ref = o_P;
   }
   
   //
@@ -1710,7 +1723,7 @@ void controlTask(uint32_t currentMicros)
 
   // Pusher
 
-  pushCtrl.input((effMaxAlpha_c - alpha)*paramRecord.o_P - pitchRate,
+  pushCtrl.input((effMaxAlpha_c - alpha)*autoAlphaP - pitchRate,
 		 controlCycle);
 
   if(!mode.sensorFailSafe && !alphaFailed)
@@ -1876,17 +1889,21 @@ void backgroundTask(uint32_t durationMicros)
 }
 
 void heartBeatTask(uint32_t durationMicros)
-{  
-  if(!talk)
-    return;
-  
-  static uint32_t count = 0;
+{
+  if(!heartBeatCount && linkDownCount++ > 2)
+    consoleConnected = simulatorConnected = false;
 
-  datagramTxStart(DG_HEARTBEAT);
-  datagramTxOut((uint8_t*) &count, sizeof(count));
-  datagramTxEnd();
+  heartBeatCount = 0;
   
-  count++;   
+  if(consoleConnected) {
+    static uint32_t count = 0;
+
+    datagramTxStart(DG_HEARTBEAT);
+    datagramTxOut((uint8_t*) &count, sizeof(count));
+    datagramTxEnd();
+  
+    count++;   
+  }
 }
 
 void blinkTask(uint32_t currentMicros)
@@ -1901,13 +1918,13 @@ void blinkTask(uint32_t currentMicros)
 
 void simulatorLinkTask(uint32_t currentMicros)
 {
-  if(simulatorConnected && talk) {
-    struct ControlData control = { .aileron = aileOutput,
-				   .elevator = -elevOutput,
-				   .throttle = throttleStick,
-				   .rudder = rudderOutput };
+  if(simulatorConnected) {
+    struct SimLinkControl control = { .aileron = aileOutput,
+				      .elevator = -elevOutput,
+				      .throttle = throttleStick,
+				      .rudder = rudderOutput };
 
-    datagramTxStart(DG_CONTROL);
+    datagramTxStart(DG_SIMLINK);
     datagramTxOut((const uint8_t*) &control, sizeof(control));
     datagramTxEnd();
   }

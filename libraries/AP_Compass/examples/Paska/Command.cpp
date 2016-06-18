@@ -8,7 +8,7 @@ const struct Command commands[] PROGMEM = {
   { "5048b_ref", c_5048b_ref, e_uint16, &paramRecord.alphaRef },
   { "inner_pid_zn", c_inner_pid_zn,
     e_float, &paramRecord.i_KuDp, &paramRecord.i_Tu },
-  { "outer_p", c_outer_p, e_float, &paramRecord.o_P },
+  { "outer_p", c_outer_p, e_float, &paramRecord.o_P_per_IAS },
   { "ff", c_ff, e_float, &paramRecord.ff_A, &paramRecord.ff_B },
   { "stabilizer_pid_zn", c_stabilizer_pid_zn,
     e_float, &paramRecord.s_KuDp, &paramRecord.s_Tu },
