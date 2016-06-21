@@ -140,6 +140,7 @@ struct ModeRecord {
   bool wingLeveler;
   bool bankLimiter;
   bool launch;
+  bool autoTest;
 };
 
 struct ModeRecord mode;
@@ -176,7 +177,7 @@ float autoAlphaP, maxAlpha, shakerAlpha, thresholdAlpha, rudderMix;
 float accX, accY, accZ, altitude,  heading, rollAngle, pitchAngle, rollRate, pitchRate, yawRate, levelBank;
 int cycleTimeCounter = 0;
 uint32_t prevMeasurement;
-float parameter;  
+float parameter, effParameter;  
 NewI2C I2c = NewI2C();
 RunningAvgFilter alphaFilter;
 Accumulator ball;
@@ -1082,6 +1083,97 @@ void measurementTask(uint32_t currentMicros)
   }
 }
 
+
+const int analyzerWindow_c = 1<<5;
+int8_t analyzerBuffer[analyzerWindow_c];
+int analyzerBufferPtr;
+int8_t windowMin, windowMax;
+float windowMean;
+int windowSwing;
+const int cycleWindow_c = 1<<2;
+uint32_t cycleBuffer[cycleWindow_c];
+int cycleBufferPtr;
+bool oscillating = false, rising = false, oscillationStopped = false;
+float oscCycleMean;
+
+void analyzerTask(uint32_t currentMicros)
+{
+  const int8_t analyzerInput = (int8_t) (127*aileOutput);
+  
+  analyzerBuffer[analyzerBufferPtr++] = analyzerInput;
+  analyzerBufferPtr %= analyzerWindow_c;
+
+  windowMean = windowMin = windowMax = analyzerBuffer[0];
+  
+  for(int i = 1; i < analyzerWindow_c; i++) {
+    windowMin = min(windowMin, analyzerBuffer[i]);
+    windowMax = max(windowMax, analyzerBuffer[i]);
+    windowMean += analyzerBuffer[i];
+  }
+
+  windowMean /= analyzerWindow_c;
+  windowSwing = windowMax - windowMin;
+
+  static uint32_t prevCrossing;
+  bool crossing = false;
+  
+  if(rising) {
+    if(analyzerInput > windowMean + windowSwing/10) {
+      crossing = true;
+      rising = false;
+    }
+  } else {
+    if(analyzerInput < windowMean - windowSwing/10) {
+      crossing = true;
+      rising = true;
+    }
+  }
+
+  uint32_t halfCycle = currentMicros - prevCrossing;  
+  static uint32_t prevHalfCycle;
+
+  if(halfCycle > 1e6 || windowSwing < 255*0.05) {
+    // Not oscillating
+    
+    if(oscillating) {
+      memset(cycleBuffer, '\0', sizeof(cycleBuffer));
+      consoleNoteLn_P(PSTR("Oscillation STOPPED"));
+      oscillationStopped = true;
+      oscillating = false;
+    }
+    
+    prevHalfCycle = 0;
+  } else if(crossing) {
+    if(prevHalfCycle > 0) {
+      cycleBuffer[cycleBufferPtr++] = prevHalfCycle + halfCycle;
+      cycleBufferPtr %= cycleWindow_c;
+
+      oscCycleMean = 0.0;
+      
+      for(int i = 0; i < cycleWindow_c; i++)
+	oscCycleMean += cycleBuffer[i];
+
+      oscCycleMean /= cycleWindow_c;
+
+      if(!oscillating) {
+	oscillating = true;
+
+	for(int i = 0; i < cycleWindow_c; i++)
+	  if(cycleBuffer[i] < oscCycleMean*0.5 || cycleBuffer[i] > oscCycleMean*1.5)
+	    oscillating = false;
+
+	if(oscillating)
+	  consoleNoteLn_P(PSTR("Oscillation DETECTED"));
+      }
+    }
+
+    prevHalfCycle = halfCycle;
+  }
+
+  if(crossing)
+    prevCrossing = currentMicros;
+}
+
 float quantize(float param)
 {
   static int state;
@@ -1100,20 +1192,37 @@ float testGainExpoFunction(float range, float param)
   return exp(log(4)*(2*quantize(param)-1))*range;
 }
 
+float testGainExpo(float range, float param)
+{
+  return testGainExpoFunction(range, param);
+}
+
+float testGainExpoReversed(float range, float param)
+{
+  return testGainExpoFunction(range, 1 - param);
+}
+
+float testGainLinear(float start, float stop, float param)
+{
+  float q = quantize(param);
+  return start + q*(stop - start);
+}
+
+bool autoTestGain = false;
+
 float testGainExpo(float range)
 {
-  return testGainExpoFunction(range, parameter);
+  return testGainExpo(range, autoTestGain ? effParameter : parameter);
 }
 
 float testGainExpoReversed(float range)
 {
-  return testGainExpoFunction(range, 1 - parameter);
+  return testGainExpoReversed(range, autoTestGain ? effParameter : parameter);
 }
 
 float testGainLinear(float start, float stop)
 {
-  float q = quantize(parameter);
-  return start + q*(stop - start);
+  return testGainLinear(start, stop, autoTestGain ? effParameter : parameter);
 }
 
 float s_Ku_ref, i_Ku_ref, o_P_ref;
@@ -1254,11 +1363,6 @@ void configurationTask(uint32_t currentMicros)
     neutralStick = 0;
   }
 
-  // Flap input
-
-  if(paramRecord.servoFlap > -1)
-    flapOutput = readSwitch(&flapSwitchRecord) + 1;
-  
   // Safety scaling (test mode 0)
   
   float scale = 1.0;
@@ -1303,6 +1407,14 @@ void configurationTask(uint32_t currentMicros)
       aileCtrl.setPID(testGain = testGainExpo(s_Ku_ref), 0, 0);
       break;
             
+    case 21:
+      // Wing stabilizer gain
+
+      mode.autoTest = true;
+      mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
+      aileCtrl.setPID(testGain = testGainExpo(s_Ku_ref), 0, 0);
+      break;
+      
     case 2:
       // Elevator stabilizer gain, outer loop disabled
          
@@ -1385,6 +1497,38 @@ void configurationTask(uint32_t currentMicros)
     s_Ku_ref = s_Ku;
     i_Ku_ref = i_Ku;
     o_P_ref = o_P;
+  }
+
+  //
+  // Auto test
+  //
+
+  if(mode.autoTest) {
+    if(oscillationStopped) {
+      consoleNoteLn_P(PSTR("Test COMPLETED"));
+	
+      mode.autoTest = oscillationStopped = testMode = autoTestGain = false;
+      
+      logGeneric(lc_test_gain, testGain);
+      logGeneric(lc_test_dp, dynPressure);
+      logGeneric(lc_test_cycle, oscCycleMean/1e6);
+      
+      logDisable();
+    } else if(oscillating) {
+      if(!autoTestGain) {
+	effParameter = parameter;
+	autoTestGain = true;
+	consoleNoteLn_P(PSTR("Auto gain reduction STARTED"));
+      }
+	
+      static uint32_t lastStep;
+
+      if(currentMicros - lastStep > 1e6) {
+	if(effParameter > 0)
+	  effParameter -= 0.05;
+	lastStep = currentMicros;
+      }
+    }
   }
   
   //
@@ -1800,6 +1944,12 @@ void controlTask(uint32_t currentMicros)
 
   rudderOutput = clamp(rudderOutput, -1, 1);
 
+  // Flaps
+  
+  flapOutput = readSwitch(&flapSwitchRecord) + 1;
+  
+  flapRateLimiter.input(flapOutput, controlCycle);
+    
   // Brake
     
   if(!mode.sensorFailSafe && gearOutput == 1)
@@ -1840,8 +1990,9 @@ void actuatorTask(uint32_t currentMicros)
 		   + RANGE*clamp(paramRecord.elevDefl*elevOutput 
 				 + paramRecord.elevNeutral, -1, 1));
 
-    flapRateLimiter.input(flapOutput, controlCycle);
-    
+    pwmOutputWrite(rudderHandle, NEUTRAL
+		   + RANGE*clamp(paramRecord.rudderNeutral + 
+				 paramRecord.rudderDefl*rudderOutput, -1, 1));                        
     pwmOutputWrite(flapHandle, NEUTRAL
 		   + RANGE*clamp(paramRecord.flapNeutral 
 				 + paramRecord.flapStep*flapRateLimiter.output(), -1, 1));                              
@@ -1851,9 +2002,9 @@ void actuatorTask(uint32_t currentMicros)
 
     pwmOutputWrite(gearHandle, NEUTRAL + RANGE*(gearOutput*2-1));
 
-    pwmOutputWrite(rudderHandle, NEUTRAL
-		   + RANGE*clamp(paramRecord.rudderNeutral + 
-				 paramRecord.rudderDefl*rudderOutput, -1, 1));                        
+    pwmOutputWrite(brakeHandle, NEUTRAL
+		   + RANGE*clamp(paramRecord.brakeDefl*brakeOutput 
+				 + paramRecord.brakeNeutral, -1, 1));
   } 
 }
 
@@ -1928,6 +2079,7 @@ void controlTaskGroup(uint32_t currentMicros)
   sensorTaskFast(currentMicros);
   controlTask(currentMicros);
   actuatorTask(currentMicros);
+  analyzerTask(currentMicros);
 }
 
 struct Task taskList[] = {

@@ -38,6 +38,9 @@ typedef enum {  lc_alpha,
                 lc_track,
                 lc_altgps, 
                 lc_altbaro,
+		lc_test_dp,
+		lc_test_gain,
+		lc_test_cycle,
                 lc_channels } ChannelId_t;
 
 struct LogChannel {
