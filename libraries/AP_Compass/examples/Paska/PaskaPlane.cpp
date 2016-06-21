@@ -795,25 +795,15 @@ void executeCommand(const char *buf)
   }
 }
 
-float scaleByInvDP(float k)
-{
-  float dpMin = square(paramRecord.ias_Low)/2;
-
-  if(dynPressure < dpMin)
-    return k / dpMin;
-  else
-    return k / dynPressure;
-}
-
-float scaleByIAS(float k)
+float scaleByIAS(float k, float p)
 {
   if(iAS < paramRecord.ias_Low)
-    return k * paramRecord.ias_Low;
+    return k * pow(paramRecord.ias_Low, p);
   else
-    return k * iAS;
+    return k * pow(iAS, p);
 }
 
-float scaleByIAS(float small, float large)
+float scaleByDP(float small, float large)
 {
   float dpMax = square(paramRecord.ias_High)/2,
     dpMin = square(paramRecord.ias_Low)/2;
@@ -1372,9 +1362,9 @@ void configurationTask(uint32_t currentMicros)
   
   // Default controller settings
 
-  float s_Ku = scaleByInvDP(paramRecord.s_KuDp);
-  float i_Ku = scaleByInvDP(paramRecord.i_KuDp);
-  float o_P = scaleByIAS(paramRecord.o_P_per_IAS);
+  float s_Ku = scaleByIAS(paramRecord.s_Ku_C, -1.5);
+  float i_Ku = scaleByIAS(paramRecord.i_Ku_C, -1.5);
+  float o_P = scaleByIAS(paramRecord.o_P_C, 0.5);
   
   if(paramRecord.c_PID)
     aileCtrl.setZieglerNicholsPID(s_Ku*scale, paramRecord.s_Tu);
@@ -1869,7 +1859,7 @@ void controlTask(uint32_t currentMicros)
   
   // Aileron
 
-  float maxRollRate = scaleByIAS(270.0/3, 270.0) / 360;
+  float maxRollRate = scaleByDP(270.0/3, 270.0) / 360;
   float maxBank = 45.0;
 
   if(mode.rxFailSafe)
