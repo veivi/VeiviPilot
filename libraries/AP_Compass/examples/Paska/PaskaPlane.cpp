@@ -191,6 +191,42 @@ RateLimiter aileRateLimiter, flapRateLimiter;
 float elevOutput = 0, aileOutput = 0, flapOutput = 0, gearOutput = 0, brakeOutput = 0, rudderOutput = 0;
 int8_t elevMode = 0;
 
+typedef enum { idle_c, start_c, pert0_c, pert1_c, wait_c, measure_c, stop_c } TestState_t;
+
+TestState_t testState;
+
+const int analyzerWindow_c = 1<<5;
+int8_t analyzerBuffer[analyzerWindow_c];
+int analyzerBufferPtr;
+int8_t windowMin, windowMax;
+float windowMean;
+int windowSwing;
+const int cycleWindow_c = 1<<2;
+uint32_t cycleBuffer[cycleWindow_c];
+int cycleBufferPtr;
+bool oscillating = false, rising = false, oscillationStopped = false;
+float oscCycleMean;
+typedef enum { ac_elev, ac_aile } analyzerInputCh_t;
+analyzerInputCh_t analyzerInputCh;
+int8_t analyzerInput = 0;
+float pertubPolarity = 1;
+
+float testPertub()
+{
+  if(testState == pert0_c)
+    return pertubPolarity;
+  else if(testState == pert1_c)
+    return -pertubPolarity;
+  else
+    return 0;
+}
+
+bool testPertubActive()
+{
+  return testMode && mode.autoTest
+    && (testState == pert0_c || testState == pert1_c);
+}
+
 #ifdef rpmPin
 struct RxInputRecord rpmInput = { rpmPin };
 #endif
@@ -874,6 +910,21 @@ void receiverTask(uint32_t currentMicros)
   upButton.input(modeS > 0);
   downButton.input(modeS < 0);
   gearButton.input(gearS > 0);
+
+  //
+  //
+  //
+
+  if(testPertubActive())
+    switch(analyzerInputCh) {
+    case ac_aile:
+      aileStick = testPertub();
+      break;
+
+    case ac_elev:
+      elevStick = testPertub();
+      break;
+    }
 }
 
 void sensorTaskFast(uint32_t currentMicros)
@@ -1073,25 +1124,75 @@ void measurementTask(uint32_t currentMicros)
   }
 }
 
+void testStateMachine(uint32_t currentMicros)
+{
+  static uint32_t waitUntil;
 
-const int analyzerWindow_c = 1<<5;
-int8_t analyzerBuffer[analyzerWindow_c];
-int analyzerBufferPtr;
-int8_t windowMin, windowMax;
-float windowMean;
-int windowSwing;
-const int cycleWindow_c = 1<<2;
-uint32_t cycleBuffer[cycleWindow_c];
-int cycleBufferPtr;
-bool oscillating = false, rising = false, oscillationStopped = false;
-float oscCycleMean;
-typedef enum { ac_elev, ac_aile } analyzerInputCh_t;
-analyzerInputCh_t analyzerInputCh;
+  if(!testMode || !mode.autoTest) {
+    waitUntil = 0;
+    testState = idle_c;
+    return;
+  }
+  
+  if(currentMicros < waitUntil)
+    return;
+  
+  switch(testState) {
+  case start_c:
+    pertubPolarity = -pertubPolarity;
+    testState = pert0_c;
+    waitUntil = currentMicros+1e6/4;
+    break;
+
+  case pert0_c:
+    testState = pert1_c;
+    waitUntil = currentMicros+1e6/4;
+    break;
+
+  case pert1_c:
+    testState = wait_c;
+    waitUntil = currentMicros+2*1e6/3;
+    break;
+
+  case wait_c:
+    testState = measure_c;
+    waitUntil = currentMicros+1e6;
+    memset(analyzerBuffer, analyzerInput, sizeof(analyzerBuffer));
+    break;
+
+  case measure_c:
+    if(oscillating) {
+      testState = stop_c;
+      waitUntil = currentMicros + 1e6;
+      
+      consoleNote_P(PSTR("Test COMPLETED, final K*IAS^1.5 = "));
+      consolePrintLn(testGain*pow(iAS, 1.5));
+
+      logGeneric(lc_test_gain, testGain);
+      logGeneric(lc_test_dp, dynPressure);
+      logGeneric(lc_test_cycle, oscCycleMean/1e6);
+    } else {
+      testGain *= 1.05;
+      testState = start_c;
+
+      consoleNote_P(PSTR("Gain increased to = "));
+      consolePrintLn(testGain);
+    }
+    break;
+
+  case stop_c:
+    logDisable();
+    testState = idle_c;
+    testMode = mode.autoTest = false;
+    break;
+    
+  default:
+    break;
+  }
+}
 
 void analyzerTask(uint32_t currentMicros)
 {
-  int8_t analyzerInput = 0;
-
   switch(analyzerInputCh) {
   case ac_aile:
     analyzerInput = (int8_t) (127*aileOutput);
@@ -1101,7 +1202,12 @@ void analyzerTask(uint32_t currentMicros)
     analyzerInput = (int8_t) (127*elevOutput);
     break;
   }
-  
+
+  if(testState != measure_c) {
+    oscillating = false;
+    return;
+  }
+    
   analyzerBuffer[analyzerBufferPtr++] = analyzerInput;
   analyzerBufferPtr %= analyzerWindow_c;
 
@@ -1120,12 +1226,12 @@ void analyzerTask(uint32_t currentMicros)
   bool crossing = false;
   
   if(rising) {
-    if(analyzerInput > windowMean + windowSwing/10) {
+    if(analyzerInput > windowMean + 1 + windowSwing/7) {
       crossing = true;
       rising = false;
     }
   } else {
-    if(analyzerInput < windowMean - windowSwing/10) {
+    if(analyzerInput < windowMean - 1 - windowSwing/7) {
       crossing = true;
       rising = true;
     }
@@ -1134,13 +1240,12 @@ void analyzerTask(uint32_t currentMicros)
   uint32_t halfCycle = currentMicros - prevCrossing;  
   static uint32_t prevHalfCycle;
 
-  if(halfCycle > 1e6 || windowSwing < 255*0.05) {
+  if(halfCycle > 1e6 || windowSwing < 255*0.02) {
     // Not oscillating
     
     if(oscillating) {
       memset(cycleBuffer, '\0', sizeof(cycleBuffer));
       consoleNoteLn_P(PSTR("Oscillation STOPPED"));
-      oscillationStopped = true;
       oscillating = false;
     }
     
@@ -1150,7 +1255,7 @@ void analyzerTask(uint32_t currentMicros)
       cycleBuffer[cycleBufferPtr++] = prevHalfCycle + halfCycle;
       cycleBufferPtr %= cycleWindow_c;
 
-      if(windowSwing > 255*0.3) {
+      if(windowSwing > 255*0.03) {
 	oscCycleMean = 0.0;
       
 	for(int i = 0; i < cycleWindow_c; i++)
@@ -1320,7 +1425,7 @@ void configurationTask(uint32_t currentMicros)
       logEnable();
 
   } else if(testMode && parameter < 0) {
-    testMode = false;
+    testMode = mode.autoTest = false;
     
     consoleNoteLn_P(PSTR("Test mode DISABLED"));
 
@@ -1402,8 +1507,6 @@ void configurationTask(uint32_t currentMicros)
   // Then apply test modes
   
   if(testMode) {
-    testGain = testGainLinear(0, 1);
-    
     switch(stateRecord.testChannel) {
     case 1:
       // Wing stabilizer gain
@@ -1419,6 +1522,19 @@ void configurationTask(uint32_t currentMicros)
       analyzerInputCh = ac_aile;
       mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
       aileCtrl.setPID(testGain = testGainExpo(s_Ku_ref), 0, 0);
+      break;
+      
+    case 31:
+      // Wing stabilizer gain
+
+      if(!mode.autoTest) {
+	mode.autoTest = true;
+	analyzerInputCh = ac_aile;
+	mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
+	testGain = s_Ku_ref;
+	testState = start_c;
+      } else
+	aileCtrl.setPID(testGain, 0, 0);
       break;
       
     case 2:
@@ -1524,38 +1640,6 @@ void configurationTask(uint32_t currentMicros)
     o_P_ref = o_P;
   }
 
-  //
-  // Auto test
-  //
-
-  if(mode.autoTest) {
-    if(oscillationStopped) {
-      consoleNote_P(PSTR("Test COMPLETED, final K*IAS^1.5 = "));
-      consolePrintLn(testGain*pow(iAS, 1.5));
-
-      mode.autoTest = oscillationStopped = testMode = autoTestGain = false;
-      
-      logGeneric(lc_test_gain, testGain);
-      logGeneric(lc_test_dp, dynPressure);
-      logGeneric(lc_test_cycle, oscCycleMean/1e6);
-      
-      logDisable();
-    } else if(oscillating) {
-      if(!autoTestGain) {
-	effParameter = parameter;
-	autoTestGain = true;
-      }
-	
-      static uint32_t lastStep;
-
-      if(currentMicros - lastStep > 1e6) {
-	if(effParameter > 0)
-	  effParameter -= 0.05;
-	lastStep = currentMicros;
-      }
-    }
-  }
-  
   //
   // Compute effective alpha limits
   //
@@ -2038,7 +2122,7 @@ void trimTask(uint32_t currentMicros)
   if(mode.autoTrim && elevPilotInputPersistCount > 2*CONTROL_HZ
      && fabsf(rollAngle) < 15)
     neutralAlpha +=
-      clamp((min(targetAlpha, thresholdAlpha) - neutralAlpha)/2/TRIM_HZ,
+      clamp((min(targetAlpha, thresholdAlpha) - neutralAlpha)/TRIM_HZ,
 	    -1.5/360/TRIM_HZ, 1.5/360/TRIM_HZ);
 }
 
@@ -2100,6 +2184,7 @@ void simulatorLinkTask(uint32_t currentMicros)
 
 void controlTaskGroup(uint32_t currentMicros)
 {
+  testStateMachine(currentMicros);
   receiverTask(currentMicros);
   sensorTaskFast(currentMicros);
   controlTask(currentMicros);
