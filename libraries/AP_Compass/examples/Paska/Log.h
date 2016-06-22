@@ -41,6 +41,7 @@ typedef enum {  lc_alpha,
 		lc_test_dp,
 		lc_test_gain,
 		lc_test_cycle,
+		lc_analyzer,
                 lc_channels } ChannelId_t;
 
 struct LogChannel {

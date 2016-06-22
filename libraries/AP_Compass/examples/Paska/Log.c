@@ -32,5 +32,6 @@ struct LogChannel logChannels[] = {
    { lc_altbaro, "ALTB", -10, 300 },
    { lc_test_dp, "TSTP", -100, 10000 },
    { lc_test_gain, "TSTG", 0, 50},
-   { lc_test_cycle, "TSTT", 0, 10 } };
+   { lc_test_cycle, "TSTT", 0, 10 },
+   { lc_analyzer, "ANAL", -1, 1 } };
 
