@@ -1085,10 +1085,22 @@ uint32_t cycleBuffer[cycleWindow_c];
 int cycleBufferPtr;
 bool oscillating = false, rising = false, oscillationStopped = false;
 float oscCycleMean;
+typedef enum { ac_elev, ac_aile } analyzerInputCh_t;
+analyzerInputCh_t analyzerInputCh;
 
 void analyzerTask(uint32_t currentMicros)
 {
-  const int8_t analyzerInput = (int8_t) (127*aileOutput);
+  int8_t analyzerInput = 0;
+
+  switch(analyzerInputCh) {
+  case ac_aile:
+    analyzerInput = (int8_t) (127*aileOutput);
+    break;
+
+  case ac_elev:
+    analyzerInput = (int8_t) (127*elevOutput);
+    break;
+  }
   
   analyzerBuffer[analyzerBufferPtr++] = analyzerInput;
   analyzerBufferPtr %= analyzerWindow_c;
@@ -1138,25 +1150,28 @@ void analyzerTask(uint32_t currentMicros)
       cycleBuffer[cycleBufferPtr++] = prevHalfCycle + halfCycle;
       cycleBufferPtr %= cycleWindow_c;
 
-      oscCycleMean = 0.0;
+      if(windowSwing > 255*0.3) {
+	oscCycleMean = 0.0;
       
-      for(int i = 0; i < cycleWindow_c; i++)
-	oscCycleMean += cycleBuffer[i];
-
-      oscCycleMean /= cycleWindow_c;
-
-      if(!oscillating) {
-	oscillating = true;
-
 	for(int i = 0; i < cycleWindow_c; i++)
-	  if(cycleBuffer[i] < oscCycleMean*0.5 || cycleBuffer[i] > oscCycleMean*1.5)
-	    oscillating = false;
+	  oscCycleMean += cycleBuffer[i];
 
-	if(oscillating)
-	  consoleNoteLn_P(PSTR("Oscillation DETECTED"));
+	oscCycleMean /= cycleWindow_c;
+
+	if(!oscillating) {
+	  oscillating = true;
+
+	  for(int i = 0; i < cycleWindow_c; i++)
+	    if(cycleBuffer[i] < oscCycleMean/1.3
+	       || cycleBuffer[i] > oscCycleMean*1.3)
+	      oscillating = false;
+
+	  if(oscillating)
+	    consoleNoteLn_P(PSTR("Oscillation DETECTED"));
+	}
       }
     }
-
+    
     prevHalfCycle = halfCycle;
   }
 
@@ -1401,6 +1416,7 @@ void configurationTask(uint32_t currentMicros)
       // Wing stabilizer gain
 
       mode.autoTest = true;
+      analyzerInputCh = ac_aile;
       mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
       aileCtrl.setPID(testGain = testGainExpo(s_Ku_ref), 0, 0);
       break;
@@ -1413,9 +1429,28 @@ void configurationTask(uint32_t currentMicros)
       elevCtrl.setPID(testGain = testGainExpo(i_Ku_ref), 0, 0);
       break;
          
+    case 22:
+      // Elevator stabilizer gain, outer loop disabled
+         
+      mode.autoTest = true;
+      analyzerInputCh = ac_elev;
+      mode.pitchHold = true;
+      mode.autoTrim = mode.autoAlpha = false;
+      elevCtrl.setPID(testGain = testGainExpo(i_Ku_ref), 0, 0);
+      break;
+         
     case 3:
       // Elevator stabilizer gain, outer loop enabled
          
+      mode.pitchHold = mode.autoTrim = mode.autoAlpha = true;
+      elevCtrl.setPID(testGain = testGainExpo(i_Ku_ref), 0, 0);
+      break;
+         
+    case 23:
+      // Elevator stabilizer gain, outer loop enabled
+         
+      mode.autoTest = true;
+      analyzerInputCh = ac_elev;
       mode.pitchHold = mode.autoTrim = mode.autoAlpha = true;
       elevCtrl.setPID(testGain = testGainExpo(i_Ku_ref), 0, 0);
       break;
@@ -1495,8 +1530,9 @@ void configurationTask(uint32_t currentMicros)
 
   if(mode.autoTest) {
     if(oscillationStopped) {
-      consoleNoteLn_P(PSTR("Test COMPLETED"));
-	
+      consoleNote_P(PSTR("Test COMPLETED, final K*IAS^1.5 = "));
+      consolePrintLn(testGain*pow(iAS, 1.5));
+
       mode.autoTest = oscillationStopped = testMode = autoTestGain = false;
       
       logGeneric(lc_test_gain, testGain);
@@ -1508,7 +1544,6 @@ void configurationTask(uint32_t currentMicros)
       if(!autoTestGain) {
 	effParameter = parameter;
 	autoTestGain = true;
-	consoleNoteLn_P(PSTR("Auto gain reduction STARTED"));
       }
 	
       static uint32_t lastStep;
@@ -1811,7 +1846,7 @@ void controlTask(uint32_t currentMicros)
     
   if(!elevPilotInput)
     elevPilotInputPersistCount = 0;
-  else if(elevPilotInputPersistCount < CONTROL_HZ*2)
+  else if(elevPilotInputPersistCount < CONTROL_HZ*3)
     elevPilotInputPersistCount++;
   
   const float fract_c = 1.0/3;
@@ -2000,7 +2035,7 @@ void actuatorTask(uint32_t currentMicros)
 
 void trimTask(uint32_t currentMicros)
 {
-  if(mode.autoTrim && elevPilotInputPersistCount > CONTROL_HZ
+  if(mode.autoTrim && elevPilotInputPersistCount > 2*CONTROL_HZ
      && fabsf(rollAngle) < 15)
     neutralAlpha +=
       clamp((min(targetAlpha, thresholdAlpha) - neutralAlpha)/2/TRIM_HZ,
