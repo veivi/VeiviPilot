@@ -198,11 +198,9 @@ TestState_t testState;
 const int analyzerWindow_c = 1<<5;
 float analyzerBuffer[analyzerWindow_c];
 int analyzerBufferPtr;
-float windowMin, windowMax;
-int windowSwing;
 const int cycleWindow_c = 1<<2;
 uint32_t cycleBuffer[cycleWindow_c];
-int cycleBufferPtr;
+int cycleBufferPtr, cycleCount;
 bool oscillating = false, rising = false, oscillationStopped = false;
 float oscCycleMean;
 typedef enum { ac_elev, ac_aile } analyzerInputCh_t;
@@ -1124,6 +1122,8 @@ void measurementTask(uint32_t currentMicros)
   }
 }
 
+const float testGainStep_c = 0.05;
+
 void testStateMachine(uint32_t currentMicros)
 {
   static uint32_t waitUntil;
@@ -1151,18 +1151,19 @@ void testStateMachine(uint32_t currentMicros)
 
   case pert1_c:
     testState = wait_c;
-    waitUntil = currentMicros+2*1e6/3;
+    waitUntil = currentMicros+2*1e6;
     break;
 
   case wait_c:
     testState = measure_c;
-    waitUntil = currentMicros+1e6;
     break;
 
   case measure_c:
     if(oscillating) {
       testState = stop_c;
-      waitUntil = currentMicros + 1e6;
+      waitUntil = currentMicros + 1e6/5;
+
+      testGain /= 1 + testGainStep_c;
       
       consoleNote_P(PSTR("Test COMPLETED, final K*IAS^1.5 = "));
       consolePrintLn(testGain*pow(iAS, 1.5));
@@ -1171,7 +1172,7 @@ void testStateMachine(uint32_t currentMicros)
       logGeneric(lc_test_dp, dynPressure);
       logGeneric(lc_test_cycle, oscCycleMean/1e6);
     } else {
-      testGain *= 1.05;
+      testGain *= 1 + testGainStep_c;
       testState = start_c;
 
       consoleNote_P(PSTR("Gain increased to = "));
@@ -1191,6 +1192,7 @@ void testStateMachine(uint32_t currentMicros)
 }
 
 Accumulator analAvg, analLowpass;
+float upSwing, downSwing, prevUpSwing, prevDownSwing;
 
 void analyzerTask(uint32_t currentMicros)
 {
@@ -1212,43 +1214,28 @@ void analyzerTask(uint32_t currentMicros)
   analyzerBuffer[analyzerBufferPtr++] = analyzerInput;
   analyzerBufferPtr %= analyzerWindow_c;
 
-  if(testState != measure_c) {
-    oscillating = false;
-    return;
-  }
-  
-  windowMin = windowMax = analyzerBuffer[0];
-  
-  for(int i = 1; i < analyzerWindow_c; i++) {
-    windowMin = min(windowMin, analyzerBuffer[i]);
-    windowMax = max(windowMax, analyzerBuffer[i]);
-  }
-
-  windowSwing = windowMax - windowMin;
-
-  static uint32_t prevCrossing;
   bool crossing = false;
-  static float upSwing, downSwing, prevUpSwing, prevDownSwing;
+  static uint32_t prevCrossing;
 
-  const float hystheresis_c = 0.01;
+  const float hystheresis_c = 0.005;
   
   if(rising) {
-    downSwing = min(downSwing, analyzerInput);
-    
-    if(analyzerInput > hystheresis_c) {
-      crossing = true;
-      rising = false;
-      prevDownSwing = downSwing;
-      downSwing = 0;
-    }
-  } else {
-    upSwing = max(upSwing, analyzerInput);
+    upSwing = fmaxf(upSwing, analyzerInput);
     
     if(analyzerInput < -hystheresis_c) {
       crossing = true;
-      rising = true;
+      rising = false;
       prevUpSwing = upSwing;
-      upSwing = 0;
+      downSwing = analyzerInput;
+    }
+  } else {
+    downSwing = fminf(downSwing, analyzerInput);
+    
+    if(analyzerInput > hystheresis_c) {
+      crossing = true;
+      rising = true;
+      prevDownSwing = downSwing;
+      upSwing = analyzerInput;
     }
   }
 
@@ -1257,26 +1244,21 @@ void analyzerTask(uint32_t currentMicros)
   uint32_t halfCycle = currentMicros - prevCrossing;  
   static uint32_t prevHalfCycle;
 
-  if(halfCycle > 1e6 || windowSwing < 0.02) {
-    // Not oscillating
+  if(oscillating && (lastSwing < 0.075 || halfCycle > 1e6/2)) {
+    // Not oscillating (anymore)
     
-    if(oscillating) {
-      memset(cycleBuffer, '\0', sizeof(cycleBuffer));
-      consoleNoteLn_P(PSTR("Oscillation STOPPED"));
-      oscillating = false;
-    }
-    
+    oscillating = false;
     prevHalfCycle = 0;
     upSwing = downSwing = prevUpSwing = prevDownSwing = 0.0;
-  } else if(crossing) {
+    cycleCount = 0;
+    
+  } else if(crossing && lastSwing > 0.1) {
     if(prevHalfCycle > 0) {
       cycleBuffer[cycleBufferPtr++] = prevHalfCycle + halfCycle;
       cycleBufferPtr %= cycleWindow_c;
+      cycleCount++;
 
-      consoleNote_P(PSTR("Crossing, swing = "));
-      consolePrintLn(lastSwing);
-      
-      if(lastSwing > 0.02) {
+      if(cycleCount > cycleWindow_c-1) {
 	oscCycleMean = 0.0;
       
 	for(int i = 0; i < cycleWindow_c; i++)
@@ -1291,9 +1273,6 @@ void analyzerTask(uint32_t currentMicros)
 	    if(cycleBuffer[i] < oscCycleMean/1.3
 	       || cycleBuffer[i] > oscCycleMean*1.3)
 	      oscillating = false;
-
-	  if(oscillating)
-	    consoleNoteLn_P(PSTR("Oscillation DETECTED"));
 	}
       }
     }
@@ -1552,7 +1531,7 @@ void configurationTask(uint32_t currentMicros)
 	mode.autoTest = true;
 	analyzerInputCh = ac_aile;
 	mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
-	testGain = 1.5*s_Ku_ref;
+	testGain = 1.3*s_Ku_ref;
 	testState = start_c;
       } else
 	aileCtrl.setPID(testGain, 0, 0);
@@ -1696,8 +1675,10 @@ void loopTask(uint32_t currentMicros)
     consolePrint(")");
     */    
 
+    /*
     consolePrint(" IAS = ");
     consolePrint(iAS);
+    */
     /*    consolePrint(" IAS(rel) = ");
     consolePrint(scaleByIAS(0, 1));
     */
@@ -2374,12 +2355,15 @@ void setup() {
   setPinState(&GREEN_LED, 1);
   setPinState(&BLUE_LED, 1);
 
-  analLowpass.setTau(2.5);
+  analLowpass.setTau(2);
   analAvg.setTau(10);
   
   // Done
   
   consoleNoteLn_P(PSTR("Initialized"));
+  
+  datagramTxStart(DG_INITIALIZED);
+  datagramTxEnd();
 }
 
 void loop() 
