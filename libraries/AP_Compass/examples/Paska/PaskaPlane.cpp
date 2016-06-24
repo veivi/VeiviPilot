@@ -1122,7 +1122,10 @@ void measurementTask(uint32_t currentMicros)
   }
 }
 
-const float testGainStep_c = 0.05;
+const float testGainStep_c = 0.075;
+
+bool increasing;
+int oscCount;
 
 void testStateMachine(uint32_t currentMicros)
 {
@@ -1139,6 +1142,7 @@ void testStateMachine(uint32_t currentMicros)
   
   switch(testState) {
   case start_c:
+    increasing = true;
     pertubPolarity = -pertubPolarity;
     testState = pert0_c;
     waitUntil = currentMicros+1e6/4;
@@ -1159,24 +1163,39 @@ void testStateMachine(uint32_t currentMicros)
     break;
 
   case measure_c:
-    if(oscillating) {
-      testState = stop_c;
-      waitUntil = currentMicros + 1e6/5;
-
-      testGain /= 1 + testGainStep_c;
+    if(oscillating && oscCount > 2) {
+      if(increasing) {
+	increasing = false;	
+	consoleNoteLn_P(PSTR("Reached oscillation"));
+      }
       
+      waitUntil = currentMicros + 3*1e6/2;
+      testGain /= 1 + testGainStep_c/10;
+      consoleNote_P(PSTR("Gain decreased to = "));
+      consolePrintLn(testGain);	
+      testState = wait_c;
+
+    } else if(increasing) {
+      if(oscillating)
+	oscCount++;
+      else
+	oscCount = 0;
+      
+      testGain *= 1 + testGainStep_c;
+      testState = start_c;
+
+      consoleNote_P(PSTR("Gain increased to = "));
+      consolePrintLn(testGain);
+    } else {
       consoleNote_P(PSTR("Test COMPLETED, final K*IAS^1.5 = "));
       consolePrintLn(testGain*pow(iAS, 1.5));
 
       logGeneric(lc_test_gain, testGain);
       logGeneric(lc_test_dp, dynPressure);
       logGeneric(lc_test_cycle, oscCycleMean/1e6);
-    } else {
-      testGain *= 1 + testGainStep_c;
-      testState = start_c;
 
-      consoleNote_P(PSTR("Gain increased to = "));
-      consolePrintLn(testGain);
+      testState = stop_c;
+      waitUntil = currentMicros + 1e6/5;
     }
     break;
 
@@ -1217,7 +1236,8 @@ void analyzerTask(uint32_t currentMicros)
   bool crossing = false;
   static uint32_t prevCrossing;
 
-  const float hystheresis_c = 0.005;
+  const float threshold_c = increasing ? 0.03 : 0.01;
+  const float hystheresis_c = threshold_c/3;
   
   if(rising) {
     upSwing = fmaxf(upSwing, analyzerInput);
@@ -1244,15 +1264,7 @@ void analyzerTask(uint32_t currentMicros)
   uint32_t halfCycle = currentMicros - prevCrossing;  
   static uint32_t prevHalfCycle;
 
-  if(oscillating && (lastSwing < 0.075 || halfCycle > 1e6/2)) {
-    // Not oscillating (anymore)
-    
-    oscillating = false;
-    prevHalfCycle = 0;
-    upSwing = downSwing = prevUpSwing = prevDownSwing = 0.0;
-    cycleCount = 0;
-    
-  } else if(crossing && lastSwing > 0.1) {
+  if(crossing && lastSwing > threshold_c) {
     if(prevHalfCycle > 0) {
       cycleBuffer[cycleBufferPtr++] = prevHalfCycle + halfCycle;
       cycleBufferPtr %= cycleWindow_c;
@@ -1273,11 +1285,23 @@ void analyzerTask(uint32_t currentMicros)
 	    if(cycleBuffer[i] < oscCycleMean/1.3
 	       || cycleBuffer[i] > oscCycleMean*1.3)
 	      oscillating = false;
+
+	  if(oscillating)
+	    consoleNoteLn_P(PSTR("Oscillation DETECTED"));
 	}
       }
     }
     
     prevHalfCycle = halfCycle;
+  } else if(oscillating && prevHalfCycle + halfCycle > oscCycleMean*1.3) {
+    // Not oscillating (anymore)
+    
+    oscillating = false;
+    prevHalfCycle = 0;
+    upSwing = downSwing = prevUpSwing = prevDownSwing = 0.0;
+    cycleCount = 0;
+
+    consoleNoteLn_P(PSTR("Oscillation STOPPED"));    
   }
 
   if(crossing)
@@ -1516,16 +1540,8 @@ void configurationTask(uint32_t currentMicros)
       break;
             
     case 21:
-      // Wing stabilizer gain
-
-      mode.autoTest = true;
-      analyzerInputCh = ac_aile;
-      mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
-      aileCtrl.setPID(testGain = testGainExpo(s_Ku_ref), 0, 0);
-      break;
-      
     case 31:
-      // Wing stabilizer gain
+      // Wing stabilizer gain autotest
 
       if(!mode.autoTest) {
 	mode.autoTest = true;
@@ -2121,7 +2137,7 @@ void actuatorTask(uint32_t currentMicros)
 
 void trimTask(uint32_t currentMicros)
 {
-  if(mode.autoTrim && elevPilotInputPersistCount > 2*CONTROL_HZ
+  if(mode.autoTrim && elevPilotInputPersistCount > 3*CONTROL_HZ/2
      && fabsf(rollAngle) < 15)
     neutralAlpha +=
       clamp((min(targetAlpha, thresholdAlpha) - neutralAlpha)/TRIM_HZ,
