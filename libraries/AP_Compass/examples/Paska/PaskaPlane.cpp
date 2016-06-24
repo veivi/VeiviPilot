@@ -186,12 +186,12 @@ float controlCycle = 10.0e-3;
 uint32_t idleMicros;
 float idleAvg, logBandWidth, ppmFreq, simInputFreq;
 bool looping, consoleConnected = true, simulatorConnected = false;
-RateLimiter aileRateLimiter, flapRateLimiter;
+RateLimiter aileRateLimiter, flapRateLimiter, trimRateLimiter;
     
 float elevOutput = 0, aileOutput = 0, flapOutput = 0, gearOutput = 0, brakeOutput = 0, rudderOutput = 0;
 int8_t elevMode = 0;
 
-typedef enum { idle_c, start_c, pert0_c, pert1_c, wait_c, measure_c, stop_c } TestState_t;
+typedef enum { idle_c, start_c, init_c, pert0_c, pert1_c, wait_c, measure_c, stop_c } TestState_t;
 
 TestState_t testState;
 
@@ -1124,8 +1124,9 @@ void measurementTask(uint32_t currentMicros)
 
 const float testGainStep_c = 0.075;
 
-bool increasing;
+bool increasing, autoTestCompleted;
 int oscCount;
+float finalK, finalT, finalIAS;
 
 void testStateMachine(uint32_t currentMicros)
 {
@@ -1142,10 +1143,16 @@ void testStateMachine(uint32_t currentMicros)
   
   switch(testState) {
   case start_c:
+    testState = init_c;
+    waitUntil = currentMicros+4*1e6;
+    break;
+    
+  case init_c:
     increasing = true;
     pertubPolarity = -pertubPolarity;
     testState = pert0_c;
     waitUntil = currentMicros+1e6/4;
+    autoTestCompleted = false;
     break;
 
   case pert0_c:
@@ -1166,7 +1173,7 @@ void testStateMachine(uint32_t currentMicros)
     if(oscillating && oscCount > 2) {
       if(increasing) {
 	increasing = false;	
-	consoleNoteLn_P(PSTR("Reached oscillation"));
+	consoleNoteLn_P(PSTR("Reached stable oscillation"));
       }
       
       waitUntil = currentMicros + 3*1e6/2;
@@ -1182,7 +1189,7 @@ void testStateMachine(uint32_t currentMicros)
 	oscCount = 0;
       
       testGain *= 1 + testGainStep_c;
-      testState = start_c;
+      testState = init_c;
 
       consoleNote_P(PSTR("Gain increased to = "));
       consolePrintLn(testGain);
@@ -1190,19 +1197,18 @@ void testStateMachine(uint32_t currentMicros)
       consoleNote_P(PSTR("Test COMPLETED, final K*IAS^1.5 = "));
       consolePrintLn(testGain*pow(iAS, 1.5));
 
-      logGeneric(lc_test_gain, testGain);
+      finalK = testGain;
+      finalIAS = 2*sqrt(dynPressure);
+      finalT = oscCycleMean/1e6;
+      
+      /*      logGeneric(lc_test_gain, testGain);
       logGeneric(lc_test_dp, dynPressure);
       logGeneric(lc_test_cycle, oscCycleMean/1e6);
-
-      testState = stop_c;
-      waitUntil = currentMicros + 1e6/5;
+      */
+      testState = idle_c;
+      testMode = mode.autoTest = false;
+      autoTestCompleted = true;
     }
-    break;
-
-  case stop_c:
-    logDisable();
-    testState = idle_c;
-    testMode = mode.autoTest = false;
     break;
     
   default:
@@ -1361,6 +1367,12 @@ float testGainLinear(float start, float stop)
 
 float s_Ku_ref, i_Ku_ref, o_P_ref;
 
+const int maxTests_c = 50;
+float autoTestIAS[maxTests_c], autoTestK[maxTests_c], autoTestT[maxTests_c];
+int autoTestCount;
+
+#define minAlpha (-3.0/360)
+
 void configurationTask(uint32_t currentMicros)
 {   
   if(downButton.doublePulse() || gearButton.doublePulse()) {
@@ -1442,19 +1454,61 @@ void configurationTask(uint32_t currentMicros)
 
   if(!testMode && parameter > 0.5) {
     testMode = true;
-
     consoleNoteLn_P(PSTR("Test mode ENABLED"));
 
-    if(simulatorConnected)
-      logEnable();
+    if(autoTestCompleted) {
+      if(autoTestCount < maxTests_c) {
+	autoTestIAS[autoTestCount] = finalIAS;
+	autoTestT[autoTestCount] = finalT;
+	autoTestK[autoTestCount] = finalK;
+	autoTestCount++;
+      }
 
+      autoTestCompleted = false;
+
+      neutralAlpha = (neutralAlpha - minAlpha) * 1.1111111 + minAlpha;
+      
+      if(neutralAlpha > shakerAlpha)
+	neutralAlpha -= shakerAlpha;
+    }
   } else if(testMode && parameter < 0) {
     testMode = mode.autoTest = false;
-    
     consoleNoteLn_P(PSTR("Test mode DISABLED"));
 
     if(simulatorConnected)
       logDisable();
+    if(autoTestCount > 0) {
+      consoleNote_P(PSTR("AutoTest ias = ("));
+
+      for(int i = 0; i < autoTestCount; i++) {
+	if(i > 0)
+	  consolePrint(",");
+	consolePrint(autoTestIAS[i]);
+      }
+
+      consolePrintLn_P(PSTR(")"));
+      
+      consoleNote_P(PSTR("AutoTest K = ("));
+
+      for(int i = 0; i < autoTestCount; i++) {
+	if(i > 0)
+	  consolePrint(",");
+	consolePrint(autoTestK[i]);
+      }
+
+      consolePrintLn_P(PSTR(")"));
+
+      consoleNote_P(PSTR("AutoTest T = ("));
+
+      for(int i = 0; i < autoTestCount; i++) {
+	if(i > 0)
+	  consolePrint(",");
+	consolePrint(autoTestT[i]);
+      }
+
+      consolePrintLn_P(PSTR(")"));
+      autoTestCount = 0;
+    }
   }
 
   // Wing leveler disable when stick input detected
@@ -1527,6 +1581,7 @@ void configurationTask(uint32_t currentMicros)
   
   aileRateLimiter.setRate(paramRecord.servoRate/(90.0/2)/paramRecord.aileDefl);
   flapRateLimiter.setRate(0.5);
+  trimRateLimiter.setRate(1.5/360);
   
   // Then apply test modes
   
@@ -1549,7 +1604,7 @@ void configurationTask(uint32_t currentMicros)
 	mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
 	testGain = 1.3*s_Ku_ref;
 	testState = start_c;
-      } else
+      } else if(testState != init_c)
 	aileCtrl.setPID(testGain, 0, 0);
       break;
       
@@ -1691,10 +1746,9 @@ void loopTask(uint32_t currentMicros)
     consolePrint(")");
     */    
 
-    /*
     consolePrint(" IAS = ");
     consolePrint(iAS);
-    */
+
     /*    consolePrint(" IAS(rel) = ");
     consolePrint(scaleByIAS(0, 1));
     */
@@ -1942,7 +1996,7 @@ void controlTask(uint32_t currentMicros)
   targetAlpha = 0.0;
   elevOutput = elevStick;
 
-  const float effStick =
+  const float effStick = mode.rxFailSafe ? 0 :
     applyNullZone(elevStick - (mode.pitchHold ? neutralStick : 0),
 		  &elevPilotInput);
     
@@ -1957,13 +2011,14 @@ void controlTask(uint32_t currentMicros)
     mixValue(stickStrength_c, shakerAlpha, maxAlpha);
     
   if(mode.rxFailSafe)
-    targetAlpha = shakerAlpha;
-  else {
-    const float stickRange_c = (1 - paramRecord.ff_A)/paramRecord.ff_B;
+    neutralAlpha = shakerAlpha;
+  
+  const float stickRange_c = (1 - paramRecord.ff_A)/paramRecord.ff_B;
 
-    targetAlpha = clamp(neutralAlpha + effStick*stickRange_c/360,
-			-paramRecord.alphaMax, effMaxAlpha_c);
-  }
+  trimRateLimiter.input(neutralAlpha, controlCycle);
+    
+  targetAlpha = clamp(trimRateLimiter.output() + effStick*stickRange_c/360,
+		      -paramRecord.alphaMax, effMaxAlpha_c);
 	
   float targetPitchRate = effStick * 180/360.0;
 
