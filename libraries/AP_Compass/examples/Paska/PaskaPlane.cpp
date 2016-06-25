@@ -656,7 +656,7 @@ void executeCommand(const char *buf)
 
     case c_rollrate:
       if(numParams > 0) {
-	paramRecord.roll_C = param[0]/360 / sqrt(paramRecord.ias_Low);
+	paramRecord.roll_C = param[0]/360 / sqrt(paramRecord.iasMin);
 	consoleNote_P(PSTR("Roll rate K = "));
 	consolePrintLn(paramRecord.roll_C);
 	storeNVState();
@@ -839,8 +839,8 @@ void executeCommand(const char *buf)
 
 float scaleByIAS(float k, float p)
 {
-  if(iAS < paramRecord.ias_Low)
-    return k * pow(paramRecord.ias_Low, p);
+  if(iAS < paramRecord.iasMin)
+    return k * pow(paramRecord.iasMin, p);
   else
     return k * pow(iAS, p);
 }
@@ -1400,7 +1400,7 @@ void configurationTask(uint32_t currentMicros)
 	consoleNote_P(PSTR("Elevator mode DECREMENTED to "));
 	consolePrintLn(elevMode);
 	    
-      } else if(!mode.launch && iAS < paramRecord.ias_Low / 3) {
+      } else if(!mode.launch && iAS < paramRecord.iasMin / 3) {
 	consoleNoteLn_P(PSTR("Launch mode ENABLED"));
 	mode.launch = true;
       }
@@ -1504,7 +1504,7 @@ void configurationTask(uint32_t currentMicros)
 
   // Launch mode disabled when airspeed detected (or fails)
 
-  if(mode.launch && (iasFailed || iAS > paramRecord.ias_Low / 2)) {
+  if(mode.launch && (iasFailed || iAS > paramRecord.iasMin / 2)) {
     consoleNoteLn_P(PSTR("Launch mode DISABLED"));
     mode.launch = false;
   }

@@ -28,7 +28,7 @@ struct ParamRecord {
   float ff_A, ff_B;
   float wl_Limit;
   bool c_PID;
-  float ias_Low;
+  float iasMin;
   float roll_C;
   float servoRate;
   };
