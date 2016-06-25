@@ -662,6 +662,14 @@ void executeCommand(const char *buf)
 	storeNVState();
       }
           
+    case c_pitchrate:
+      if(numParams > 0) {
+	paramRecord.pitch_C = param[0]/360 / sqrt(paramRecord.iasMin);
+	consoleNote_P(PSTR("Pitch rate K = "));
+	consolePrintLn(paramRecord.pitch_C);
+	storeNVState();
+      }
+          
     case c_zero:
       paramRecord.alphaRef += (int16_t) ((1L<<16) * alpha);
       consoleNoteLn_P(PSTR("Alpha zero set"));
@@ -1365,7 +1373,7 @@ float testGainLinear(float start, float stop)
   return testGainLinear(start, stop, autoTestGain ? effParameter : parameter);
 }
 
-float s_Ku_ref, i_Ku_ref, o_P_ref;
+float s_Ku_ref, i_Ku_ref;
 
 const int maxTests_c = 50;
 float autoTestIAS[maxTests_c], autoTestK[maxTests_c], autoTestT[maxTests_c];
@@ -1546,7 +1554,6 @@ void configurationTask(uint32_t currentMicros)
 
   float s_Ku = scaleByIAS(paramRecord.s_Ku_C, -1.5);
   float i_Ku = scaleByIAS(paramRecord.i_Ku_C, -1.5);
-  float o_P = scaleByIAS(paramRecord.o_P_C, 0.5);
   
   if(paramRecord.c_PID)
     aileCtrl.setZieglerNicholsPID(s_Ku*scale, paramRecord.s_Tu);
@@ -1558,7 +1565,7 @@ void configurationTask(uint32_t currentMicros)
   
   rudderCtrl.setZieglerNicholsPI(paramRecord.r_Ku*scale, paramRecord.r_Tu);
 
-  autoAlphaP = o_P;
+  autoAlphaP = paramRecord.o_P;
   maxAlpha = paramRecord.alphaMax;
   rudderMix = paramRecord.r_Mix;
   levelBank = 0;
@@ -1630,7 +1637,7 @@ void configurationTask(uint32_t currentMicros)
       // Auto alpha outer loop gain
          
       mode.pitchHold = mode.autoTrim = mode.autoAlpha = true;
-      autoAlphaP = testGain = testGainExpo(o_P_ref);
+      autoAlphaP = testGain = testGainExpo(paramRecord.o_P);
       break;
          
     case 5:
@@ -1692,7 +1699,6 @@ void configurationTask(uint32_t currentMicros)
     
     s_Ku_ref = s_Ku;
     i_Ku_ref = i_Ku;
-    o_P_ref = o_P;
   }
 
   //
@@ -1980,6 +1986,8 @@ void controlTask(uint32_t currentMicros)
   targetAlpha = 0.0;
   elevOutput = elevStick;
 
+  const float maxPitchRate = scaleByIAS(paramRecord.pitch_C, 0.5);
+  
   const float effStick = mode.rxFailSafe ? 0 :
     applyNullZone(elevStick - (mode.pitchHold ? neutralStick : 0),
 		  &elevPilotInput);
@@ -2004,10 +2012,10 @@ void controlTask(uint32_t currentMicros)
   targetAlpha = clamp(trimRateLimiter.output() + effStick*stickRange_c/360,
 		      -paramRecord.alphaMax, effMaxAlpha_c);
 	
-  float targetPitchRate = effStick * 180/360.0;
+  float targetPitchRate = effStick * maxPitchRate;
 
   if(mode.autoAlpha)
-    targetPitchRate = (targetAlpha - alpha) * autoAlphaP;      
+    targetPitchRate = (targetAlpha - alpha) * autoAlphaP * maxPitchRate;      
 
   float feedForward = paramRecord.ff_A + targetAlpha*360*paramRecord.ff_B;
 
@@ -2025,7 +2033,7 @@ void controlTask(uint32_t currentMicros)
 
   // Pusher
 
-  pushCtrl.input((effMaxAlpha_c - alpha)*autoAlphaP - pitchRate,
+  pushCtrl.input((effMaxAlpha_c - alpha)*autoAlphaP*maxPitchRate - pitchRate,
 		 controlCycle);
 
   if(!mode.sensorFailSafe && !alphaFailed)
@@ -2035,7 +2043,7 @@ void controlTask(uint32_t currentMicros)
   
   // Aileron
 
-  float maxRollRate = scaleByIAS(paramRecord.roll_C, 0.5);
+  const float maxRollRate = scaleByIAS(paramRecord.roll_C, 0.5);
   float maxBank = 45.0;
 
   if(mode.rxFailSafe)

@@ -22,14 +22,14 @@ struct ParamRecord {
   float brakeNeutral, brakeDefl;
   int8_t servoAile, servoElev, servoRudder, servoFlap, servoFlap2, servoGear, servoBrake;
   float alphaMin, alphaMax;
-  float i_Ku_C, i_Tu, o_P_C;
+  float i_Ku_C, i_Tu, o_P;
   float s_Ku_C, s_Tu;
   float r_Mix, r_Ku, r_Tu;
   float ff_A, ff_B;
   float wl_Limit;
   bool c_PID;
   float iasMin;
-  float roll_C;
+  float roll_C, pitch_C;
   float servoRate;
   };
 

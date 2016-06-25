@@ -8,7 +8,7 @@ const struct Command commands[] PROGMEM = {
   { "5048b_ref", c_5048b_ref, e_uint16, &paramRecord.alphaRef },
   { "inner_pid_zn", c_inner_pid_zn,
     e_float, &paramRecord.i_Ku_C, &paramRecord.i_Tu },
-  { "outer_p", c_outer_p, e_float, &paramRecord.o_P_C },
+  { "outer_p", c_outer_p, e_float, &paramRecord.o_P },
   { "ff", c_ff, e_float, &paramRecord.ff_A, &paramRecord.ff_B },
   { "stabilizer_pid_zn", c_stabilizer_pid_zn,
     e_float, &paramRecord.s_Ku_C, &paramRecord.s_Tu },
@@ -66,6 +66,7 @@ const struct Command commands[] PROGMEM = {
   { "etrim", c_etrim },
   { "rtrim", c_rtrim },
   { "rollrate", c_rollrate },
+  { "pitchrate", c_pitchrate },
   { "calibrate", c_calibrate },  
   { "", c_invalid },  
 };

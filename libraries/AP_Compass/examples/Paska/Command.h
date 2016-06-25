@@ -68,6 +68,7 @@ typedef enum {
   c_ias,
   c_roll_k,
   c_rollrate,
+  c_pitchrate,
   c_atrim,
   c_etrim,
   c_rtrim,
