@@ -653,6 +653,14 @@ void executeCommand(const char *buf)
       consoleNoteLn_P(PSTR("Receiver calibration STARTED"));
       calibStart();
       break;
+
+    case c_rollrate:
+      if(numParams > 0) {
+	paramRecord.roll_C = param[0]/360 / sqrt(paramRecord.ias_Low);
+	consoleNote_P(PSTR("Roll rate K = "));
+	consolePrintLn(paramRecord.roll_C);
+	storeNVState();
+      }
           
     case c_zero:
       paramRecord.alphaRef += (int16_t) ((1L<<16) * alpha);
@@ -835,14 +843,6 @@ float scaleByIAS(float k, float p)
     return k * pow(paramRecord.ias_Low, p);
   else
     return k * pow(iAS, p);
-}
-
-float scaleByDP(float small, float large)
-{
-  float dpMax = square(paramRecord.ias_High)/2,
-    dpMin = square(paramRecord.ias_Low)/2;
-		   
-  return mixValue((dynPressure - dpMin) / (dpMax - dpMin), small, large);
 }
 
 void cacheTask(uint32_t currentMicros)
@@ -1242,7 +1242,7 @@ void analyzerTask(uint32_t currentMicros)
   bool crossing = false;
   static uint32_t prevCrossing;
 
-  const float threshold_c = increasing ? 0.03 : 0.01;
+  const float threshold_c = increasing ? 0.03 : 0.005;
   const float hystheresis_c = threshold_c/3;
   
   if(rising) {
@@ -1475,38 +1475,22 @@ void configurationTask(uint32_t currentMicros)
     testMode = mode.autoTest = false;
     consoleNoteLn_P(PSTR("Test mode DISABLED"));
 
-    if(simulatorConnected)
-      logDisable();
     if(autoTestCount > 0) {
-      consoleNote_P(PSTR("AutoTest ias = ("));
+      consoleNote_P(PSTR("autotestR = ["));
 
       for(int i = 0; i < autoTestCount; i++) {
 	if(i > 0)
-	  consolePrint(",");
+	  consolePrint("; ");
+	
 	consolePrint(autoTestIAS[i]);
-      }
-
-      consolePrintLn_P(PSTR(")"));
-      
-      consoleNote_P(PSTR("AutoTest K = ("));
-
-      for(int i = 0; i < autoTestCount; i++) {
-	if(i > 0)
-	  consolePrint(",");
+	consolePrint(", ");
 	consolePrint(autoTestK[i]);
-      }
-
-      consolePrintLn_P(PSTR(")"));
-
-      consoleNote_P(PSTR("AutoTest T = ("));
-
-      for(int i = 0; i < autoTestCount; i++) {
-	if(i > 0)
-	  consolePrint(",");
+	consolePrint(", ");
 	consolePrint(autoTestT[i]);
       }
 
-      consolePrintLn_P(PSTR(")"));
+      consolePrintLn_P(PSTR("]"));
+      
       autoTestCount = 0;
     }
   }
@@ -2051,7 +2035,7 @@ void controlTask(uint32_t currentMicros)
   
   // Aileron
 
-  float maxRollRate = scaleByDP(270.0/3, 270.0) / 360;
+  float maxRollRate = scaleByIAS(paramRecord.roll_C, 0.5);
   float maxBank = 45.0;
 
   if(mode.rxFailSafe)

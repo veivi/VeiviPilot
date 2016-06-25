@@ -35,7 +35,8 @@ const struct Command commands[] PROGMEM = {
   { "bservo", c_bservo, e_int8, &paramRecord.servoBrake },
   { "gservo", c_gservo, e_int8, &paramRecord.servoGear },  
   { "pid", c_pid, e_int8, &paramRecord.c_PID },  
-  { "ias", c_ias, e_float, &paramRecord.ias_Low, &paramRecord.ias_High },
+  { "ias", c_ias, e_float, &paramRecord.ias_Low },
+  { "roll_k", c_roll_k, e_float, &paramRecord.roll_C },
   { "servorate", c_servorate, e_float, &paramRecord.servoRate },
   { "model", c_model },
   { "zero", c_zero },
@@ -64,6 +65,7 @@ const struct Command commands[] PROGMEM = {
   { "atrim", c_atrim },
   { "etrim", c_etrim },
   { "rtrim", c_rtrim },
+  { "rollrate", c_rollrate },
   { "calibrate", c_calibrate },  
   { "", c_invalid },  
 };

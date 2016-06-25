@@ -36,7 +36,8 @@ const struct ParamRecord paramDefaults = {
   .ff_A = 0.0, .ff_B = 0.0,
   .wl_Limit = 0.0,
   .c_PID = true,
-  .ias_Low = 12, .ias_High = 25,
+  .ias_Low = 12,
+  .roll_C = 0.1,
   .servoRate = 60/0.09
 };
 
@@ -165,9 +166,9 @@ void printParams()
   consoleNote_P(PSTR("  Alpha max = "));
   consolePrintLn(paramRecord.alphaMax*360);
   consoleNote_P(PSTR("  IAS low = "));
-  consolePrint(paramRecord.ias_Low);
-  consolePrint_P(PSTR("  high = "));
-  consolePrintLn(paramRecord.ias_High);
+  consolePrintLn(paramRecord.ias_Low);
+  consoleNote_P(PSTR("  Roll rate K = "));
+  consolePrintLn(paramRecord.roll_C);
   consoleNoteLn_P(PSTR("  Elevator"));
   consoleNote_P(PSTR("    deflection = "));
   consolePrint(paramRecord.elevDefl*90);
