@@ -78,6 +78,8 @@ struct SwitchRecord flapSwitchRecord = { &flapInput };
 
 Button upButton, downButton, gearButton;
 
+int8_t modeSwitchValue, gearSwitchValue, flapSwitchValue;
+
 //
 // Servo PWM output
 //
@@ -850,9 +852,9 @@ void executeCommand(const char *buf)
 float scaleByIAS(float k, float p)
 {
   if(iAS < paramRecord.iasMin)
-    return k * pow(paramRecord.iasMin, p);
+    return k * powf(paramRecord.iasMin, p);
   else
-    return k * pow(iAS, p);
+    return k * powf(iAS, p);
 }
 
 void cacheTask(uint32_t currentMicros)
@@ -913,11 +915,13 @@ void receiverTask(uint32_t currentMicros)
   if(inputValid(&throttleInput))
     throttleStick = inputValue(&throttleInput);
 
-  int8_t modeS = readSwitch(&modeSwitchRecord), gearS = readSwitch(&gearSwitchRecord);
+  modeSwitchValue = readSwitch(&modeSwitchRecord);
+  gearSwitchValue = readSwitch(&gearSwitchRecord);
+  flapSwitchValue = readSwitch(&flapSwitchRecord);
   
-  upButton.input(modeS > 0);
-  downButton.input(modeS < 0);
-  gearButton.input(gearS > 0);
+  upButton.input(modeSwitchValue > 0);
+  downButton.input(modeSwitchValue < 0);
+  gearButton.input(gearSwitchValue > 0);
 
   //
   //
@@ -1204,7 +1208,7 @@ void testStateMachine(uint32_t currentMicros)
       consolePrintLn(testGain);
     } else {
       consoleNote_P(PSTR("Test COMPLETED, final K*IAS^1.5 = "));
-      consolePrintLn(testGain*pow(iAS, 1.5));
+      consolePrintLn(testGain*powf(iAS, 1.5));
 
       finalK = testGain;
       finalIAS = 2*sqrt(dynPressure);
@@ -1481,17 +1485,19 @@ void configurationTask(uint32_t currentMicros)
     consoleNoteLn_P(PSTR("Test mode DISABLED"));
 
     if(autoTestCount > 0) {
-      consoleNote_P(PSTR("autotestR = ["));
+      consolePrint_P(PSTR("testR = ["));
 
       for(int i = 0; i < autoTestCount; i++) {
 	if(i > 0)
-	  consolePrint("; ");
+	  consolePrint(";\n  ");
 	
 	consolePrint(autoTestIAS[i]);
 	consolePrint(", ");
 	consolePrint(autoTestK[i]);
 	consolePrint(", ");
 	consolePrint(autoTestT[i]);
+	consolePrint(", ");
+	consolePrint(powf(autoTestIAS[i], 1.5)*autoTestK[i]);
       }
 
       consolePrintLn_P(PSTR("]"));
@@ -1522,7 +1528,7 @@ void configurationTask(uint32_t currentMicros)
   
   // Receiver fail detection
 
-  if(upButton.state() && aileStick < -0.90 && elevStick > 0.90) {
+  if(modeSwitchValue == 1 && aileStick < -0.90 && elevStick > 0.90) {
     if(!mode.rxFailSafe) {
       consoleNoteLn_P(PSTR("Receiver failsafe mode ENABLED"));
       mode.rxFailSafe = true;
@@ -2021,7 +2027,7 @@ void controlTask(uint32_t currentMicros)
   float targetPitchRate = effStick * maxPitchRate;
 
   if(mode.autoAlpha)
-    targetPitchRate = (targetAlpha - alpha) * autoAlphaP * maxPitchRate;      
+    targetPitchRate = (targetAlpha - alpha)*autoAlphaP*maxPitchRate;      
 
   float feedForward = paramRecord.ff_A + targetAlpha*360*paramRecord.ff_B;
 
@@ -2126,7 +2132,7 @@ void controlTask(uint32_t currentMicros)
 
   // Flaps
   
-  flapOutput = readSwitch(&flapSwitchRecord) + 1;
+  flapOutput = flapSwitchValue + 1;
   
   flapRateLimiter.input(flapOutput, controlCycle);
     
