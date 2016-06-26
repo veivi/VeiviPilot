@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#define MAX_MODELS   4
+#define MAX_MODELS   8
 #define NAME_LEN     8
 #define MAX_CH       8
 

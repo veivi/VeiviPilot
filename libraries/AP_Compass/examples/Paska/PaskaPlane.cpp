@@ -197,8 +197,6 @@ typedef enum { idle_c, start_c, init_c, pert0_c, pert1_c, wait_c, measure_c, sto
 TestState_t testState;
 
 const int analyzerWindow_c = 1<<5;
-float analyzerBuffer[analyzerWindow_c];
-int analyzerBufferPtr;
 const int cycleWindow_c = 1<<2;
 uint32_t cycleBuffer[cycleWindow_c];
 int cycleBufferPtr, cycleCount;
@@ -1142,39 +1140,40 @@ float finalK, finalT, finalIAS;
 
 void testStateMachine(uint32_t currentMicros)
 {
-  static uint32_t waitUntil;
+  static uint32_t nextTransition;
 
   if(!testMode || !mode.autoTest) {
-    waitUntil = 0;
+    nextTransition = 0;
     testState = idle_c;
     return;
   }
   
-  if(currentMicros < waitUntil)
+  if(currentMicros < nextTransition)
     return;
   
   switch(testState) {
   case start_c:
+    increasing = true;
+    oscCount = 0;
     testState = init_c;
-    waitUntil = currentMicros+4*1e6;
+    nextTransition = currentMicros+4*1e6;
     break;
     
   case init_c:
-    increasing = true;
     pertubPolarity = -pertubPolarity;
     testState = pert0_c;
-    waitUntil = currentMicros+1e6/4;
+    nextTransition = currentMicros+1e6/4;
     autoTestCompleted = false;
     break;
 
   case pert0_c:
     testState = pert1_c;
-    waitUntil = currentMicros+1e6/4;
+    nextTransition = currentMicros+1e6/4;
     break;
 
   case pert1_c:
     testState = wait_c;
-    waitUntil = currentMicros+3*1e6;
+    nextTransition = currentMicros+4*1e6;
     break;
 
   case wait_c:
@@ -1182,22 +1181,20 @@ void testStateMachine(uint32_t currentMicros)
     break;
 
   case measure_c:
-    if(oscillating && oscCount > 1) {
+    if(oscillating && ++oscCount > 1) {
       if(increasing) {
 	increasing = false;	
 	consoleNoteLn_P(PSTR("Reached stable oscillation"));
       }
       
-      waitUntil = currentMicros + 3*1e6/2;
+      nextTransition = currentMicros + 3*1e6/2;
       testGain /= 1 + testGainStep_c/5;
       consoleNote_P(PSTR("Gain decreased to = "));
       consolePrintLn(testGain);	
       testState = wait_c;
 
     } else if(increasing) {
-      if(oscillating)
-	oscCount++;
-      else
+      if(!oscillating)
 	oscCount = 0;
       
       testGain *= 1 + testGainStep_c;
@@ -1248,13 +1245,10 @@ void analyzerTask(uint32_t currentMicros)
 
   analyzerInput = analLowpass.output() - analAvg.output();
 
-  analyzerBuffer[analyzerBufferPtr++] = analyzerInput;
-  analyzerBufferPtr %= analyzerWindow_c;
-
   bool crossing = false;
   static uint32_t prevCrossing;
 
-  const float threshold_c = increasing ? 0.02 : 0.005;
+  const float threshold_c = increasing ? 0.015 : 0.005;
   const float hystheresis_c = threshold_c/3;
   
   if(rising) {
@@ -1304,8 +1298,8 @@ void analyzerTask(uint32_t currentMicros)
 	       || cycleBuffer[i] > oscCycleMean*1.3)
 	      oscillating = false;
 
-	  //	  if(oscillating)
-	  //	    consoleNoteLn_P(PSTR("Oscillation DETECTED"));
+	  	  if(oscillating)
+	  	    consoleNoteLn_P(PSTR("Oscillation DETECTED"));
 	}
       }
     }
@@ -1317,9 +1311,8 @@ void analyzerTask(uint32_t currentMicros)
     oscillating = false;
     prevHalfCycle = 0;
     upSwing = downSwing = prevUpSwing = prevDownSwing = 0.0;
-    cycleCount = 0;
 
-    // consoleNoteLn_P(PSTR("Oscillation STOPPED"));    
+     consoleNoteLn_P(PSTR("Oscillation STOPPED"));    
   }
 
   if(crossing)
