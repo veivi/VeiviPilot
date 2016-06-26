@@ -1590,7 +1590,6 @@ void configurationTask(uint32_t currentMicros)
       break;
             
     case 21:
-    case 31:
       // Wing stabilizer gain autotest
 
       if(!mode.autoTest) {
