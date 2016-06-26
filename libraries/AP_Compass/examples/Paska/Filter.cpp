@@ -81,6 +81,11 @@ void RateLimiter::setRate(float r)
   maxRate = r;
 }  
 
+void RateLimiter::reset(float v)
+{
+  state = v;
+}  
+
 void RateLimiter::input(float v, float dt)
 {
   state += clamp(v - state, -maxRate*dt, maxRate*dt);

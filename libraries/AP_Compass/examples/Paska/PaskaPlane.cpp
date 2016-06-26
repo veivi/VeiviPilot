@@ -186,6 +186,7 @@ float controlCycle = 10.0e-3;
 uint32_t idleMicros;
 float idleAvg, logBandWidth, ppmFreq, simInputFreq;
 bool looping, consoleConnected = true, simulatorConnected = false;
+uint32_t simTimeStamp;
 RateLimiter aileRateLimiter, flapRateLimiter, trimRateLimiter;
     
 float elevOutput = 0, aileOutput = 0, flapOutput = 0, gearOutput = 0, brakeOutput = 0, rudderOutput = 0;
@@ -273,6 +274,7 @@ void datagramInterpreter(uint8_t t, const uint8_t *data, int size)
       }
 
       memcpy(&sensorData, data, sizeof(sensorData));
+      simTimeStamp = hal.scheduler->micros();
       simFrames++;    
     }
     break;
@@ -661,6 +663,7 @@ void executeCommand(const char *buf)
 	consolePrintLn(paramRecord.roll_C);
 	storeNVState();
       }
+      break;
           
     case c_pitchrate:
       if(numParams > 0) {
@@ -669,6 +672,7 @@ void executeCommand(const char *buf)
 	consolePrintLn(paramRecord.pitch_C);
 	storeNVState();
       }
+      break;
           
     case c_zero:
       paramRecord.alphaRef += (int16_t) ((1L<<16) * alpha);
@@ -1130,7 +1134,7 @@ void measurementTask(uint32_t currentMicros)
   }
 }
 
-const float testGainStep_c = 0.075;
+const float testGainStep_c = 0.05;
 
 bool increasing, autoTestCompleted;
 int oscCount;
@@ -1170,7 +1174,7 @@ void testStateMachine(uint32_t currentMicros)
 
   case pert1_c:
     testState = wait_c;
-    waitUntil = currentMicros+2*1e6;
+    waitUntil = currentMicros+3*1e6;
     break;
 
   case wait_c:
@@ -1178,14 +1182,14 @@ void testStateMachine(uint32_t currentMicros)
     break;
 
   case measure_c:
-    if(oscillating && oscCount > 2) {
+    if(oscillating && oscCount > 1) {
       if(increasing) {
 	increasing = false;	
 	consoleNoteLn_P(PSTR("Reached stable oscillation"));
       }
       
       waitUntil = currentMicros + 3*1e6/2;
-      testGain /= 1 + testGainStep_c/10;
+      testGain /= 1 + testGainStep_c/5;
       consoleNote_P(PSTR("Gain decreased to = "));
       consolePrintLn(testGain);	
       testState = wait_c;
@@ -1250,7 +1254,7 @@ void analyzerTask(uint32_t currentMicros)
   bool crossing = false;
   static uint32_t prevCrossing;
 
-  const float threshold_c = increasing ? 0.03 : 0.005;
+  const float threshold_c = increasing ? 0.02 : 0.005;
   const float hystheresis_c = threshold_c/3;
   
   if(rising) {
@@ -1300,8 +1304,8 @@ void analyzerTask(uint32_t currentMicros)
 	       || cycleBuffer[i] > oscCycleMean*1.3)
 	      oscillating = false;
 
-	  if(oscillating)
-	    consoleNoteLn_P(PSTR("Oscillation DETECTED"));
+	  //	  if(oscillating)
+	  //	    consoleNoteLn_P(PSTR("Oscillation DETECTED"));
 	}
       }
     }
@@ -1315,7 +1319,7 @@ void analyzerTask(uint32_t currentMicros)
     upSwing = downSwing = prevUpSwing = prevDownSwing = 0.0;
     cycleCount = 0;
 
-    consoleNoteLn_P(PSTR("Oscillation STOPPED"));    
+    // consoleNoteLn_P(PSTR("Oscillation STOPPED"));    
   }
 
   if(crossing)
@@ -1474,7 +1478,7 @@ void configurationTask(uint32_t currentMicros)
 
       autoTestCompleted = false;
 
-      neutralAlpha = (neutralAlpha - minAlpha) * 1.1111111 + minAlpha;
+      neutralAlpha = (neutralAlpha - minAlpha) * 1.0555555 + minAlpha;
       
       if(neutralAlpha > shakerAlpha)
 	neutralAlpha -= shakerAlpha;
@@ -1609,14 +1613,18 @@ void configurationTask(uint32_t currentMicros)
          
     case 22:
       // Elevator stabilizer gain, outer loop disabled
-         
-      mode.autoTest = true;
-      analyzerInputCh = ac_elev;
-      mode.pitchHold = true;
-      mode.autoTrim = mode.autoAlpha = false;
-      elevCtrl.setPID(testGain = testGainExpo(i_Ku_ref), 0, 0);
+   
+      if(!mode.autoTest) {
+	mode.autoTest = true;
+	analyzerInputCh = ac_elev;
+	mode.pitchHold = true;
+	mode.autoTrim = mode.autoAlpha = false;
+	testGain = 1.3*i_Ku_ref;
+	testState = start_c;
+      } else if(testState != init_c)
+	elevCtrl.setPID(testGain, 0, 0);
       break;
-         
+      
     case 3:
       // Elevator stabilizer gain, outer loop enabled
          
@@ -1627,10 +1635,14 @@ void configurationTask(uint32_t currentMicros)
     case 23:
       // Elevator stabilizer gain, outer loop enabled
          
-      mode.autoTest = true;
-      analyzerInputCh = ac_elev;
-      mode.pitchHold = mode.autoTrim = mode.autoAlpha = true;
-      elevCtrl.setPID(testGain = testGainExpo(i_Ku_ref), 0, 0);
+      if(!mode.autoTest) {
+	mode.autoTest = true;
+	analyzerInputCh = ac_elev;
+	mode.pitchHold = mode.autoTrim = mode.autoAlpha = true;
+	testGain = 1.3*i_Ku_ref;
+	testState = start_c;
+      } else if(testState != init_c)
+	elevCtrl.setPID(testGain, 0, 0);
       break;
          
     case 4:
@@ -1717,8 +1729,10 @@ void configurationTask(uint32_t currentMicros)
   if(!mode.pitchHold)
     neutralStick = elevStick;
   
-  if(!mode.autoAlpha) 
+  if(!mode.autoAlpha) {
     neutralAlpha = clamp(alphaFilter.output(), -maxAlpha, maxAlpha);
+    trimRateLimiter.reset(neutralAlpha);
+  }
 }
 
 void loopTask(uint32_t currentMicros)
@@ -2205,11 +2219,16 @@ void backgroundTask(uint32_t durationMicros)
   idleMicros += hal.scheduler->micros() - idleStart;
 }
 
-void heartBeatTask(uint32_t durationMicros)
+void heartBeatTask(uint32_t currentMicros)
 {
   if(!heartBeatCount && linkDownCount++ > 2)
     consoleConnected = simulatorConnected = false;
 
+  if(simulatorConnected && currentMicros - simTimeStamp > 1e6) {
+    consoleNoteLn_P(PSTR("Simulator link LOST"));
+    simulatorConnected = false;
+  }    
+  
   heartBeatCount = 0;
   
   if(consoleConnected) {

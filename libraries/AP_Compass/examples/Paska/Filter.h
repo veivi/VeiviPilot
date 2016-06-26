@@ -51,6 +51,7 @@ class RateLimiter {
   void input(float v, float dt);
   float output();
   void setRate(float v);
+  void reset(float v);
     
   private:
   float maxRate;
