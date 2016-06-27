@@ -24,6 +24,13 @@
 #include <AP_InertialSensor/AP_InertialSensor.h>
 #include <AP_AHRS/AP_AHRS.h>
 
+//
+//
+//
+
+const float exponent1 = -1.7;
+const float exponent2 = 0.5;
+
 const AP_HAL::HAL& hal = AP_HAL_BOARD_DRIVER;
 AP_HAL::BetterStream* cliSerial;
 
@@ -1070,8 +1077,8 @@ void cycleTimeMonitor(float value)
   if(cycleMin < 0.0) {
     cycleMin = cycleMax = cycleCum = value;
   } else {
-    cycleMin = min(cycleMin, value);
-    cycleMax = max(cycleMax, value);
+    cycleMin = fminf(cycleMin, value);
+    cycleMax = fmaxf(cycleMax, value);
     cycleCum = cycleCum*(1-tau) + value*tau;
   }
 }
@@ -1207,8 +1214,8 @@ void testStateMachine(uint32_t currentMicros)
       consoleNote_P(PSTR("Gain increased to = "));
       consolePrintLn(testGain);
     } else {
-      consoleNote_P(PSTR("Test COMPLETED, final K*IAS^1.5 = "));
-      consolePrintLn(testGain*powf(iAS, 1.5));
+      consoleNote_P(PSTR("Test COMPLETED, final K*IAS^exp1 = "));
+      consolePrintLn(testGain*powf(iAS, -exponent1));
 
       finalK = testGain;
       finalIAS = 2*sqrt(dynPressure);
@@ -1252,7 +1259,7 @@ void analyzerTask(uint32_t currentMicros)
   bool crossing = false;
   static uint32_t prevCrossing;
 
-  const float threshold_c = increasing ? 0.015 : 0.005;
+  const float threshold_c = increasing ? 0.03 : 0.005;
   const float hystheresis_c = threshold_c/3;
   
   if(rising) {
@@ -1380,7 +1387,7 @@ const int maxTests_c = 50;
 float autoTestIAS[maxTests_c], autoTestK[maxTests_c], autoTestT[maxTests_c];
 int autoTestCount;
 
-#define minAlpha (-3.0/360)
+#define minAlpha (-1.5/360)
 
 void configurationTask(uint32_t currentMicros)
 {   
@@ -1478,7 +1485,7 @@ void configurationTask(uint32_t currentMicros)
       neutralAlpha = (neutralAlpha - minAlpha) * 1.0555555 + minAlpha;
       
       if(neutralAlpha > shakerAlpha)
-	neutralAlpha -= shakerAlpha;
+	neutralAlpha -= shakerAlpha - minAlpha;
     }
   } else if(testMode && parameter < 0) {
     testMode = mode.autoTest = false;
@@ -1497,7 +1504,7 @@ void configurationTask(uint32_t currentMicros)
 	consolePrint(", ");
 	consolePrint(autoTestT[i]);
 	consolePrint(", ");
-	consolePrint(powf(autoTestIAS[i], 1.5)*autoTestK[i]);
+	consolePrint(powf(autoTestIAS[i], -exponent1)*autoTestK[i]);
       }
 
       consolePrintLn_P(PSTR("]"));
@@ -1555,8 +1562,8 @@ void configurationTask(uint32_t currentMicros)
   
   // Default controller settings
 
-  float s_Ku = scaleByIAS(paramRecord.s_Ku_C, -1.5);
-  float i_Ku = scaleByIAS(paramRecord.i_Ku_C, -1.5);
+  float s_Ku = scaleByIAS(paramRecord.s_Ku_C, exponent1);
+  float i_Ku = scaleByIAS(paramRecord.i_Ku_C, exponent1);
   
   if(paramRecord.c_PID)
     aileCtrl.setZieglerNicholsPID(s_Ku*scale, paramRecord.s_Tu);
@@ -1998,7 +2005,7 @@ void controlTask(uint32_t currentMicros)
   targetAlpha = 0.0;
   elevOutput = elevStick;
 
-  const float maxPitchRate = scaleByIAS(paramRecord.pitch_C, 0.5);
+  const float maxPitchRate = scaleByIAS(paramRecord.pitch_C, exponent2);
   
   const float effStick = mode.rxFailSafe ? 0 :
     applyNullZone(elevStick - (mode.pitchHold ? neutralStick : 0),
@@ -2010,7 +2017,7 @@ void controlTask(uint32_t currentMicros)
     elevPilotInputPersistCount++;
   
   const float fract_c = 1.0/3;
-  const float stickStrength_c = max(effStick-(1-fract_c), 0)/fract_c;
+  const float stickStrength_c = fmaxf(effStick-(1-fract_c), 0)/fract_c;
   const float effMaxAlpha_c =
     mixValue(stickStrength_c, shakerAlpha, maxAlpha);
     
@@ -2049,13 +2056,13 @@ void controlTask(uint32_t currentMicros)
 		 controlCycle);
 
   if(!mode.sensorFailSafe && !alphaFailed)
-    elevOutput = min(elevOutput, pushCtrl.output());
+    elevOutput = fminf(elevOutput, pushCtrl.output());
 
   elevOutput = clamp(elevOutput, -1, 1);
   
   // Aileron
 
-  const float maxRollRate = scaleByIAS(paramRecord.roll_C, 0.5);
+  const float maxRollRate = scaleByIAS(paramRecord.roll_C, exponent2);
   float maxBank = 45.0;
 
   if(mode.rxFailSafe)
@@ -2141,7 +2148,7 @@ void controlTask(uint32_t currentMicros)
   if(!mode.sensorFailSafe && gearOutput == 1)
     brakeOutput = 0;
   else
-    brakeOutput = max(-elevStick, 0);
+    brakeOutput = fmaxf(-elevStick, 0);
 }
 
 void actuatorTask(uint32_t currentMicros)
@@ -2199,7 +2206,7 @@ void trimTask(uint32_t currentMicros)
   if(mode.autoTrim && elevPilotInputPersistCount > 3*CONTROL_HZ/2
      && fabsf(rollAngle) < 15)
     neutralAlpha +=
-      clamp((min(targetAlpha, thresholdAlpha) - neutralAlpha)/TRIM_HZ,
+      clamp((fminf(targetAlpha, thresholdAlpha) - neutralAlpha)/TRIM_HZ,
 	    -1.5/360/TRIM_HZ, 1.5/360/TRIM_HZ);
 }
 
