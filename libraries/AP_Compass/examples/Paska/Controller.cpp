@@ -88,14 +88,10 @@ void Controller::input(float err, float d) {
   errorFilter.input(D);
   delta = d;
   
-  // float range = 1.0 - Kp*err;
-  // I = clamp(I + Ki*err*delta, -range, range);
-  // I = clamp(I + Ki*err*delta, -1.0, 1.0);
-    
-  if(abs(Ki) > 0.05)
-    I = clamp(I + Ki*err*delta, -1.0 - Kp*err, 1.0 - Kp*err);
+  if(Ki < 0.02)
+    I = 0;
   else
-    I = 0.0;
+    I = clamp(I + Ki*err*delta, -1.0 - Kp*err, 1.0 - Kp*err);
 }
 
 float Controller::output(void) {

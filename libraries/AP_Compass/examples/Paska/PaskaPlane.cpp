@@ -28,7 +28,7 @@
 //
 //
 
-const float exponent1 = -1.7;
+const float exponent1 = 1.5;
 const float exponent2 = 0.5;
 
 const AP_HAL::HAL& hal = AP_HAL_BOARD_DRIVER;
@@ -197,9 +197,12 @@ float idleAvg, logBandWidth, ppmFreq, simInputFreq;
 bool looping, consoleConnected = true, simulatorConnected = false;
 uint32_t simTimeStamp;
 RateLimiter aileRateLimiter, flapRateLimiter, trimRateLimiter;
-    
 float elevOutput = 0, aileOutput = 0, flapOutput = 0, gearOutput = 0, brakeOutput = 0, rudderOutput = 0;
 int8_t elevMode = 0;
+
+const int maxTests_c = 70;
+float autoTestIAS[maxTests_c], autoTestK[maxTests_c], autoTestT[maxTests_c];
+int autoTestCount;
 
 typedef enum { idle_c, start_c, init_c, pert0_c, pert1_c, wait_c, measure_c, stop_c } TestState_t;
 
@@ -1214,17 +1217,15 @@ void testStateMachine(uint32_t currentMicros)
       consoleNote_P(PSTR("Gain increased to = "));
       consolePrintLn(testGain);
     } else {
-      consoleNote_P(PSTR("Test COMPLETED, final K*IAS^exp1 = "));
-      consolePrintLn(testGain*powf(iAS, -exponent1));
-
       finalK = testGain;
-      finalIAS = 2*sqrt(dynPressure);
+      finalIAS = iAS;
       finalT = oscCycleMean/1e6;
       
-      /*      logGeneric(lc_test_gain, testGain);
-      logGeneric(lc_test_dp, dynPressure);
-      logGeneric(lc_test_cycle, oscCycleMean/1e6);
-      */
+      consoleNote_P(PSTR("Test "));
+      consolePrint(autoTestCount);
+      consolePrint_P(PSTR(" COMPLETED, final K*IAS^exp1 = "));
+      consolePrintLn(finalK*powf(finalIAS, exponent1));
+
       testState = idle_c;
       testMode = mode.autoTest = false;
       autoTestCompleted = true;
@@ -1383,11 +1384,7 @@ float testGainLinear(float start, float stop)
 
 float s_Ku_ref, i_Ku_ref;
 
-const int maxTests_c = 50;
-float autoTestIAS[maxTests_c], autoTestK[maxTests_c], autoTestT[maxTests_c];
-int autoTestCount;
-
-#define minAlpha (-1.5/360)
+#define minAlpha (-5.0/360)
 
 void configurationTask(uint32_t currentMicros)
 {   
@@ -1504,7 +1501,7 @@ void configurationTask(uint32_t currentMicros)
 	consolePrint(", ");
 	consolePrint(autoTestT[i]);
 	consolePrint(", ");
-	consolePrint(powf(autoTestIAS[i], -exponent1)*autoTestK[i]);
+	consolePrint(powf(autoTestIAS[i], exponent1)*autoTestK[i]);
       }
 
       consolePrintLn_P(PSTR("]"));
@@ -1562,8 +1559,8 @@ void configurationTask(uint32_t currentMicros)
   
   // Default controller settings
 
-  float s_Ku = scaleByIAS(paramRecord.s_Ku_C, exponent1);
-  float i_Ku = scaleByIAS(paramRecord.i_Ku_C, exponent1);
+  float s_Ku = scaleByIAS(paramRecord.s_Ku_C, -exponent1);
+  float i_Ku = scaleByIAS(paramRecord.i_Ku_C, -exponent1);
   
   if(paramRecord.c_PID)
     aileCtrl.setZieglerNicholsPID(s_Ku*scale, paramRecord.s_Tu);
@@ -1598,14 +1595,17 @@ void configurationTask(uint32_t currentMicros)
     case 21:
       // Wing stabilizer gain autotest
 
+      analyzerInputCh = ac_aile;
+      mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
+	
       if(!mode.autoTest) {
 	mode.autoTest = true;
-	analyzerInputCh = ac_aile;
-	mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
 	testGain = 1.3*s_Ku_ref;
 	testState = start_c;
-      } else if(testState != init_c)
+      } else if(testState != init_c) {
 	aileCtrl.setPID(testGain, 0, 0);
+	//	mode.wingLeveler = false;
+      }
       break;
       
     case 2:
@@ -1619,11 +1619,12 @@ void configurationTask(uint32_t currentMicros)
     case 22:
       // Elevator stabilizer gain, outer loop disabled
    
+      analyzerInputCh = ac_elev;
+      mode.pitchHold = true;
+      mode.autoTrim = mode.autoAlpha = false;
+	
       if(!mode.autoTest) {
 	mode.autoTest = true;
-	analyzerInputCh = ac_elev;
-	mode.pitchHold = true;
-	mode.autoTrim = mode.autoAlpha = false;
 	testGain = 1.3*i_Ku_ref;
 	testState = start_c;
       } else if(testState != init_c)
@@ -1640,10 +1641,11 @@ void configurationTask(uint32_t currentMicros)
     case 23:
       // Elevator stabilizer gain, outer loop enabled
          
+      analyzerInputCh = ac_elev;
+      mode.pitchHold = mode.autoTrim = mode.autoAlpha = true;
+	
       if(!mode.autoTest) {
 	mode.autoTest = true;
-	analyzerInputCh = ac_elev;
-	mode.pitchHold = mode.autoTrim = mode.autoAlpha = true;
 	testGain = 1.3*i_Ku_ref;
 	testState = start_c;
       } else if(testState != init_c)
@@ -1663,7 +1665,6 @@ void configurationTask(uint32_t currentMicros)
       mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
       mode.autoBall = true;
       rudderMix = 0;
-      levelBank = 0;
       rudderCtrl.setPID(testGain = testGainExpo(paramRecord.r_Ku), 0, 0);
       break;
             
@@ -1674,7 +1675,6 @@ void configurationTask(uint32_t currentMicros)
       mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
       mode.autoBall = true;
       rudderMix = 0;
-      levelBank = 0;
       aileCtrl.
 	setZieglerNicholsPID(s_Ku*testGain, paramRecord.s_Tu);
       rudderCtrl.
