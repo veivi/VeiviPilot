@@ -186,7 +186,7 @@ float autoAlphaP, maxAlpha, shakerAlpha, thresholdAlpha, rudderMix;
 float accX, accY, accZ, altitude,  heading, rollAngle, pitchAngle, rollRate, pitchRate, yawRate, levelBank;
 int cycleTimeCounter = 0;
 uint32_t prevMeasurement;
-float parameter, effParameter;  
+float parameter;  
 NewI2C I2c = NewI2C();
 RunningAvgFilter alphaFilter;
 Accumulator ball;
@@ -861,10 +861,7 @@ void executeCommand(const char *buf)
 
 float scaleByIAS(float k, float p)
 {
-  if(iAS < paramRecord.iasMin)
-    return k * powf(paramRecord.iasMin, p);
-  else
-    return k * powf(iAS, p);
+  return k * powf(fmax(iAS, paramRecord.iasMin), p);
 }
 
 void cacheTask(uint32_t currentMicros)
@@ -955,7 +952,7 @@ void sensorTaskFast(uint32_t currentMicros)
     // We take sensor inputs from the simulator (sensorData record)
 
     alpha = sensorData.alpha/360;
-    iAS = (1852)*sensorData.ias/60/60;
+    iAS = 1852*sensorData.ias/60/60;
     rollRate = sensorData.rrate / 360;
     pitchRate = sensorData.prate / 360;
     yawRate = sensorData.yrate / 360;
@@ -1024,8 +1021,6 @@ void sensorTaskSlow(uint32_t currentMicros)
     altitude = (float) barometer.get_altitude();
 }
 
-const int numPoles = 4;
-
 void rpmTask(uint32_t currentMicros)
 {
 #if defined(rpmPin)
@@ -1042,6 +1037,8 @@ void rpmTask(uint32_t currentMicros)
   
   prev = currentMicros;
   
+  const int numPoles = 4;
+
   if(prev > 0)
     rpmOutput = 1.0e6*2.0*60*count/numPoles/delta;
 #endif
@@ -1365,21 +1362,19 @@ float testGainLinear(float start, float stop, float param)
   return start + q*(stop - start);
 }
 
-bool autoTestGain = false;
-
 float testGainExpo(float range)
 {
-  return testGainExpo(range, autoTestGain ? effParameter : parameter);
+  return testGainExpo(range, parameter);
 }
 
 float testGainExpoReversed(float range)
 {
-  return testGainExpoReversed(range, autoTestGain ? effParameter : parameter);
+  return testGainExpoReversed(range, parameter);
 }
 
 float testGainLinear(float start, float stop)
 {
-  return testGainLinear(start, stop, autoTestGain ? effParameter : parameter);
+  return testGainLinear(start, stop, parameter);
 }
 
 float s_Ku_ref, i_Ku_ref;
@@ -1602,10 +1597,8 @@ void configurationTask(uint32_t currentMicros)
 	mode.autoTest = true;
 	testGain = 1.3*s_Ku;
 	testState = start_c;
-      } else if(testState != init_c) {
+      } else if(testState != init_c)
 	aileCtrl.setPID(testGain, 0, 0);
-	//	mode.wingLeveler = false;
-      }
       break;
       
     case 2:
@@ -2345,8 +2338,6 @@ int scheduler(uint32_t currentMicros)
 }
 
 void setup() {
-  // Serial comms
-
   // HAL
 
   hal.init(0, NULL);
