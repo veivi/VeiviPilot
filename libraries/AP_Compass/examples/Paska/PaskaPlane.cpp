@@ -1600,7 +1600,7 @@ void configurationTask(uint32_t currentMicros)
 	
       if(!mode.autoTest) {
 	mode.autoTest = true;
-	testGain = 1.3*s_Ku_ref;
+	testGain = 1.3*s_Ku;
 	testState = start_c;
       } else if(testState != init_c) {
 	aileCtrl.setPID(testGain, 0, 0);
@@ -1625,7 +1625,7 @@ void configurationTask(uint32_t currentMicros)
 	
       if(!mode.autoTest) {
 	mode.autoTest = true;
-	testGain = 1.3*i_Ku_ref;
+	testGain = 1.3*i_Ku;
 	testState = start_c;
       } else if(testState != init_c)
 	elevCtrl.setPID(testGain, 0, 0);
@@ -1646,7 +1646,7 @@ void configurationTask(uint32_t currentMicros)
 	
       if(!mode.autoTest) {
 	mode.autoTest = true;
-	testGain = 1.3*i_Ku_ref;
+	testGain = 1.3*i_Ku;
 	testState = start_c;
       } else if(testState != init_c)
 	elevCtrl.setPID(testGain, 0, 0);
