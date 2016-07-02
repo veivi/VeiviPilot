@@ -167,14 +167,12 @@ struct GPSFix gpsFix;
 bool testMode = false;
 bool rattling = false;
 float testGain = 0;
-bool echoEnabled = true;
 bool iasFailed = false, iasWarn = false, alphaFailed = false, alphaWarn = false;
 const int cycleTimeWindow = 31;
 float cycleTimeStore[cycleTimeWindow];
 int cycleTimePtr = 0;
 bool cycleTimesValid;
-float cycleMin = -1.0, cycleMax = -1.0, cycleMean = -1.0, cycleCum = -1.0;
-const float tau = 0.1;
+float cycleMin = -1.0, cycleMax = -1.0, cycleMean = -1.0;
 float iAS, dynPressure, alpha, aileStick, elevStick, throttleStick, rudderStick;
 bool ailePilotInput, elevPilotInput, rudderPilotInput;
 uint32_t controlCycleEnded;
@@ -189,7 +187,7 @@ uint32_t prevMeasurement;
 float parameter;  
 NewI2C I2c = NewI2C();
 RunningAvgFilter alphaFilter;
-Accumulator ball;
+Accumulator ball, cycleTimeAcc;
 AlphaBuffer alphaBuffer, pressureBuffer;
 float controlCycle = 10.0e-3;
 uint32_t idleMicros;
@@ -200,7 +198,7 @@ RateLimiter aileRateLimiter, flapRateLimiter, trimRateLimiter;
 float elevOutput = 0, aileOutput = 0, flapOutput = 0, gearOutput = 0, brakeOutput = 0, rudderOutput = 0;
 int8_t elevMode = 0;
 
-const int maxTests_c = 70;
+const int maxTests_c = 32;
 float autoTestIAS[maxTests_c], autoTestK[maxTests_c], autoTestT[maxTests_c];
 int autoTestCount;
 
@@ -208,7 +206,6 @@ typedef enum { idle_c, start_c, init_c, pert0_c, pert1_c, wait_c, measure_c, sto
 
 TestState_t testState;
 
-const int analyzerWindow_c = 1<<5;
 const int cycleWindow_c = 1<<2;
 uint32_t cycleBuffer[cycleWindow_c];
 int cycleBufferPtr, cycleCount;
@@ -514,11 +511,9 @@ void executeCommand(const char *buf)
 {
   int bufLen = strlen(buf);
   
-  if(echoEnabled) {
-    consolePrint("// % ");
-    consolePrint(buf, bufLen);
-    consolePrintLn("");
-  }
+  consolePrint("// % ");
+  consolePrint(buf, bufLen);
+  consolePrintLn("");
 
   if(bufLen < 1) {
     looping = false;
@@ -760,7 +755,7 @@ void executeCommand(const char *buf)
 
     case c_clear:
       logClear();
-      cycleMin = cycleMax = cycleCum = cycleMean = -1;
+      cycleMin = cycleMax = cycleMean = -1;
       cycleTimesValid = false;
       cycleTimePtr = 0;
       break;
@@ -801,7 +796,7 @@ void executeCommand(const char *buf)
       consoleNote_P(PSTR("  mean       = "));
       consolePrintLn(cycleMean*1e3);
       consoleNote_P(PSTR("  cum. value = "));
-      consolePrintLn(cycleCum*1e3);
+      consolePrintLn(cycleTimeAcc.output());
       consoleNote_P(PSTR("Warning flags :"));
       if(pciWarn)
 	consolePrint_P(PSTR(" SPURIOUS_PCINT"));
@@ -1075,12 +1070,13 @@ void cycleTimeMonitor(float value)
   }
   
   if(cycleMin < 0.0) {
-    cycleMin = cycleMax = cycleCum = value;
+    cycleMin = cycleMax = value;
   } else {
     cycleMin = fminf(cycleMin, value);
     cycleMax = fmaxf(cycleMax, value);
-    cycleCum = cycleCum*(1-tau) + value*tau;
   }
+
+  cycleTimeAcc.input(value);
 }
 
 int compareFloat(const void *a, const void *b)
@@ -2401,11 +2397,6 @@ void setup() {
   pwmTimerInit(hwTimers, sizeof(hwTimers)/sizeof(struct HWTimer*));
   pwmOutputInitList(pwmOutput, sizeof(pwmOutput)/sizeof(struct PWMOutput));
 
-  //
-  
-  alphaFilter.setWindowLen(-1);
-  ball.setTau(70);
-
   // Misc sensors
   
   consoleNote_P(PSTR("Initializing barometer... "));
@@ -2433,6 +2424,11 @@ void setup() {
   setPinState(&GREEN_LED, 1);
   setPinState(&BLUE_LED, 1);
 
+  // Misc filters
+  
+  alphaFilter.setWindowLen(-1);
+  ball.setTau(70);
+  cycleTimeAcc.setTau(10);
   analLowpass.setTau(2);
   analAvg.setTau(10);
   
