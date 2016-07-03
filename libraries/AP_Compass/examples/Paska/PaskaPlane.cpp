@@ -28,8 +28,10 @@
 //
 //
 
-const float exponent1 = 1.5;
-const float exponent2 = 0.5;
+const float stabilityElevExp1_c = 1.5;
+const float stabilityElevExp2_c = 0.3;
+const float stabilityAileExp1_c = 1.5;
+const float stabilityAileExp2_c = 0.5;
 
 const AP_HAL::HAL& hal = AP_HAL_BOARD_DRIVER;
 AP_HAL::BetterStream* cliSerial;
@@ -199,10 +201,10 @@ float elevOutput = 0, aileOutput = 0, flapOutput = 0, gearOutput = 0, brakeOutpu
 int8_t elevMode = 0;
 
 const int maxTests_c = 32;
-float autoTestIAS[maxTests_c], autoTestK[maxTests_c], autoTestT[maxTests_c];
+float autoTestIAS[maxTests_c], autoTestK[maxTests_c], autoTestT[maxTests_c], autoTestKxIAS[maxTests_c];
 int autoTestCount;
 
-typedef enum { idle_c, start_c, init_c, pert0_c, pert1_c, wait_c, measure_c, stop_c } TestState_t;
+typedef enum { idle_c, start_c, trim_c, init_c, pert0_c, pert1_c, wait_c, measure_c, stop_c } TestState_t;
 
 TestState_t testState;
 
@@ -230,6 +232,12 @@ bool testPertubActive()
 {
   return testMode && mode.autoTest
     && (testState == pert0_c || testState == pert1_c);
+}
+
+bool testActive()
+{
+  return testMode && mode.autoTest
+    && testState != idle_c && testState != start_c && testState != trim_c;
 }
 
 #ifdef rpmPin
@@ -663,7 +671,8 @@ void executeCommand(const char *buf)
 
     case c_rollrate:
       if(numParams > 0) {
-	paramRecord.roll_C = param[0]/360 / sqrt(paramRecord.iasMin);
+	paramRecord.roll_C
+	  = param[0]/360/powf(paramRecord.iasMin, stabilityAileExp2_c);
 	consoleNote_P(PSTR("Roll rate K = "));
 	consolePrintLn(paramRecord.roll_C);
 	storeNVState();
@@ -672,7 +681,8 @@ void executeCommand(const char *buf)
           
     case c_pitchrate:
       if(numParams > 0) {
-	paramRecord.pitch_C = param[0]/360 / sqrt(paramRecord.iasMin);
+	paramRecord.pitch_C
+	  = param[0]/360/powf(paramRecord.iasMin, stabilityElevExp2_c);
 	consoleNote_P(PSTR("Pitch rate K = "));
 	consolePrintLn(paramRecord.pitch_C);
 	storeNVState();
@@ -1143,7 +1153,7 @@ const float testGainStep_c = 0.05;
 
 bool increasing, autoTestCompleted;
 int oscCount;
-float finalK, finalT, finalIAS;
+float finalK, finalKxIAS, finalT, finalIAS;
 
 void testStateMachine(uint32_t currentMicros)
 {
@@ -1162,12 +1172,19 @@ void testStateMachine(uint32_t currentMicros)
   case start_c:
     increasing = true;
     oscCount = 0;
-    testState = init_c;
+    testState = trim_c;
     nextTransition = currentMicros+4*1e6;
+    break;
+
+  case trim_c:
+    testState = init_c;
     break;
     
   case init_c:
-    pertubPolarity = -pertubPolarity;
+    if(analyzerInputCh == ac_aile)
+      pertubPolarity = -pertubPolarity;
+    else
+      pertubPolarity = 1.0;
     testState = pert0_c;
     nextTransition = currentMicros+1e6/4;
     autoTestCompleted = false;
@@ -1213,11 +1230,12 @@ void testStateMachine(uint32_t currentMicros)
       finalK = testGain;
       finalIAS = iAS;
       finalT = oscCycleMean/1e6;
+      finalKxIAS = finalK*powf(finalIAS, (analyzerInputCh == ac_aile ? stabilityAileExp1_c : stabilityElevExp1_c));
       
       consoleNote_P(PSTR("Test "));
       consolePrint(autoTestCount);
       consolePrint_P(PSTR(" COMPLETED, final K*IAS^exp1 = "));
-      consolePrintLn(finalK*powf(finalIAS, exponent1));
+      consolePrintLn(finalKxIAS);
 
       testState = idle_c;
       testMode = mode.autoTest = false;
@@ -1465,6 +1483,7 @@ void configurationTask(uint32_t currentMicros)
 	autoTestIAS[autoTestCount] = finalIAS;
 	autoTestT[autoTestCount] = finalT;
 	autoTestK[autoTestCount] = finalK;
+	autoTestKxIAS[autoTestCount] = finalKxIAS;
 	autoTestCount++;
       }
 
@@ -1492,7 +1511,7 @@ void configurationTask(uint32_t currentMicros)
 	consolePrint(", ");
 	consolePrint(autoTestT[i]);
 	consolePrint(", ");
-	consolePrint(powf(autoTestIAS[i], exponent1)*autoTestK[i]);
+	consolePrint(autoTestKxIAS[i]);
       }
 
       consolePrintLn_P(PSTR("]"));
@@ -1550,8 +1569,8 @@ void configurationTask(uint32_t currentMicros)
   
   // Default controller settings
 
-  float s_Ku = scaleByIAS(paramRecord.s_Ku_C, -exponent1);
-  float i_Ku = scaleByIAS(paramRecord.i_Ku_C, -exponent1);
+  float s_Ku = scaleByIAS(paramRecord.s_Ku_C, -stabilityAileExp1_c);
+  float i_Ku = scaleByIAS(paramRecord.i_Ku_C, -stabilityElevExp1_c);
   
   if(paramRecord.c_PID)
     aileCtrl.setZieglerNicholsPID(s_Ku*scale, paramRecord.s_Tu);
@@ -1593,7 +1612,7 @@ void configurationTask(uint32_t currentMicros)
 	mode.autoTest = true;
 	testGain = 1.3*s_Ku;
 	testState = start_c;
-      } else if(testState != init_c)
+      } else if(testActive())
 	aileCtrl.setPID(testGain, 0, 0);
       break;
       
@@ -1616,7 +1635,7 @@ void configurationTask(uint32_t currentMicros)
 	mode.autoTest = true;
 	testGain = 1.3*i_Ku;
 	testState = start_c;
-      } else if(testState != init_c)
+      } else if(testActive())
 	elevCtrl.setPID(testGain, 0, 0);
       break;
       
@@ -1637,7 +1656,7 @@ void configurationTask(uint32_t currentMicros)
 	mode.autoTest = true;
 	testGain = 1.3*i_Ku;
 	testState = start_c;
-      } else if(testState != init_c)
+      } else if(testActive())
 	elevCtrl.setPID(testGain, 0, 0);
       break;
          
@@ -1991,10 +2010,10 @@ void controlTask(uint32_t currentMicros)
   // Elevator control
   //
   
-  targetAlpha = 0.0;
   elevOutput = elevStick;
 
-  const float maxPitchRate = scaleByIAS(paramRecord.pitch_C, exponent2);
+  const float maxPitchRate
+    = scaleByIAS(paramRecord.pitch_C, stabilityElevExp2_c);
   
   const float effStick = mode.rxFailSafe ? 0 :
     applyNullZone(elevStick - (mode.pitchHold ? neutralStick : 0),
@@ -2013,11 +2032,11 @@ void controlTask(uint32_t currentMicros)
   if(mode.rxFailSafe)
     neutralAlpha = shakerAlpha;
   
-  const float stickRange_c = (1 - paramRecord.ff_A)/paramRecord.ff_B;
+  const float stickRange_c = (1 - paramRecord.ff_A)/(paramRecord.ff_B*360);
 
   trimRateLimiter.input(neutralAlpha, controlCycle);
     
-  targetAlpha = clamp(trimRateLimiter.output() + effStick*stickRange_c/360,
+  targetAlpha = clamp(trimRateLimiter.output() + effStick*stickRange_c,
 		      -paramRecord.alphaMax, effMaxAlpha_c);
 	
   float targetPitchRate = effStick * maxPitchRate;
@@ -2025,7 +2044,7 @@ void controlTask(uint32_t currentMicros)
   if(mode.autoAlpha)
     targetPitchRate = (targetAlpha - alpha)*autoAlphaP*maxPitchRate;      
 
-  float feedForward = paramRecord.ff_A + targetAlpha*360*paramRecord.ff_B;
+  float feedForward = paramRecord.ff_A + targetAlpha*paramRecord.ff_B*360;
 
   if(mode.pitchHold)
     elevCtrl.input(targetPitchRate - pitchRate, controlCycle);
@@ -2034,7 +2053,14 @@ void controlTask(uint32_t currentMicros)
     
   if(!mode.sensorFailSafe && mode.pitchHold) {
     elevOutput = elevCtrl.output();
-      
+
+    static float elevTestBias = 0;
+    
+    if(!testActive())
+      elevTestBias = elevOutput;
+    else
+      elevOutput += elevTestBias;
+    
     if(mode.autoAlpha)
       elevOutput += feedForward;
   }
@@ -2051,7 +2077,8 @@ void controlTask(uint32_t currentMicros)
   
   // Aileron
 
-  const float maxRollRate = scaleByIAS(paramRecord.roll_C, exponent2);
+  const float maxRollRate
+    = scaleByIAS(paramRecord.roll_C, stabilityAileExp2_c);
   float maxBank = 45.0;
 
   if(mode.rxFailSafe)
@@ -2249,7 +2276,7 @@ void blinkTask(uint32_t currentMicros)
 void simulatorLinkTask(uint32_t currentMicros)
 {
   if(simulatorConnected) {
-    struct SimLinkControl control = { .aileron = aileOutput,
+    struct SimLinkControl control = { .aileron = aileRateLimiter.output(),
 				      .elevator = -elevOutput,
 				      .throttle = throttleStick,
 				      .rudder = rudderOutput };

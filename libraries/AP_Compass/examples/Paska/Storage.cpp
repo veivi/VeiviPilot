@@ -5,7 +5,7 @@
 
 extern const AP_HAL::HAL& hal;
 
-#define CACHE_PAGE (1L<<6)
+#define CACHE_PAGE (1L<<7)
 #define PAGE_MASK ~(CACHE_PAGE-1)
 #define EEPROM_I2C_ADDR 80
 
