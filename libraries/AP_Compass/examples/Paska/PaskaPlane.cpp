@@ -28,8 +28,8 @@
 //
 //
 
-const float stabilityElevExp1_c = 1.5;
-const float stabilityElevExp2_c = 0.3;
+const float stabilityElevExp1_c = 1.7;
+const float stabilityElevExp2_c = 0.5;
 const float stabilityAileExp1_c = 1.5;
 const float stabilityAileExp2_c = 0.5;
 
