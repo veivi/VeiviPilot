@@ -42,7 +42,7 @@ AP_GPS gps;
 AP_AHRS_DCM ahrs {ins,  barometer, gps};
 
 //
-// Threshold speed margin
+// Threshold speed margin (IAS)
 //
 
 const float thresholdMargin_c = 15/100.0;
@@ -117,13 +117,13 @@ const struct PWMOutput pwmOutput[] = {
 #define flap2Handle    (paramRecord.servoFlap2 < 0 ? NULL : (&pwmOutput[paramRecord.servoFlap2]))
 #define gearHandle     (paramRecord.servoGear < 0 ? NULL : (&pwmOutput[paramRecord.servoGear]))
 #define brakeHandle    (paramRecord.servoBrake < 0 ? NULL : (&pwmOutput[paramRecord.servoBrake]))
-#define rudderHandle      (paramRecord.servoRudder < 0 ? NULL : (&pwmOutput[paramRecord.servoRudder]))
+#define rudderHandle   (paramRecord.servoRudder < 0 ? NULL : (&pwmOutput[paramRecord.servoRudder]))
 
 //
 // Periodic task stuff
 //
 
-#define CONTROL_HZ 50.0
+#define CONTROL_HZ 50
 #define ALPHA_HZ (CONTROL_HZ*10)
 #define AIRSPEED_HZ (CONTROL_HZ*5)
 #define TRIM_HZ 10
@@ -150,7 +150,7 @@ struct ModeRecord {
   bool stabilizer;
   bool wingLeveler;
   bool bankLimiter;
-  bool launch;
+  bool takeOff;
   bool autoTest;
 };
 
@@ -1253,6 +1253,9 @@ float upSwing, downSwing, prevUpSwing, prevDownSwing;
 
 void analyzerTask(uint32_t currentMicros)
 {
+  if(!testMode || !mode.autoTest)
+    return;
+  
   switch(analyzerInputCh) {
   case ac_aile:
     analyzerInput = aileOutput;
@@ -1393,7 +1396,8 @@ float testGainLinear(float start, float stop)
 
 float s_Ku_ref, i_Ku_ref;
 
-#define minAlpha (-5.0/360)
+const float minAlpha = (-2.0/360);
+const float origoAlpha = (-5.0/360);
 
 void configurationTask(uint32_t currentMicros)
 {   
@@ -1413,6 +1417,7 @@ void configurationTask(uint32_t currentMicros)
     } else if(!armed) {
       consoleNoteLn_P(PSTR("We're now ARMED"));
       armed = true;
+      
       if(!consoleConnected)
 	talk = false;
           
@@ -1422,9 +1427,9 @@ void configurationTask(uint32_t currentMicros)
 	consoleNote_P(PSTR("Elevator mode DECREMENTED to "));
 	consolePrintLn(elevMode);
 	    
-      } else if(!mode.launch && iAS < paramRecord.iasMin / 3) {
-	consoleNoteLn_P(PSTR("Launch mode ENABLED"));
-	mode.launch = true;
+      } else if(!mode.takeOff && iAS < paramRecord.iasMin / 3) {
+	consoleNoteLn_P(PSTR("TakeOff mode ENABLED"));
+	mode.takeOff = true;
       }
     }
   }
@@ -1489,7 +1494,7 @@ void configurationTask(uint32_t currentMicros)
 
       autoTestCompleted = false;
 
-      neutralAlpha = (neutralAlpha - minAlpha) * 1.0555555 + minAlpha;
+      neutralAlpha = (neutralAlpha - origoAlpha) * 1.0555555 + origoAlpha;
       
       if(neutralAlpha > shakerAlpha)
 	neutralAlpha -= shakerAlpha - minAlpha;
@@ -1527,11 +1532,11 @@ void configurationTask(uint32_t currentMicros)
     mode.wingLeveler = false;
   }
 
-  // Launch mode disabled when airspeed detected (or fails)
+  // TakeOff mode disabled when airspeed detected (or fails)
 
-  if(mode.launch && (iasFailed || iAS > paramRecord.iasMin / 2)) {
-    consoleNoteLn_P(PSTR("Launch mode DISABLED"));
-    mode.launch = false;
+  if(mode.takeOff && (iasFailed || iAS > paramRecord.iasMin / 2)) {
+    consoleNoteLn_P(PSTR("TakeOff mode DISABLED"));
+    mode.takeOff = false;
   }
 
   // Mode-to-feature mapping: first nominal values
@@ -1546,7 +1551,7 @@ void configurationTask(uint32_t currentMicros)
     if(!mode.rxFailSafe) {
       consoleNoteLn_P(PSTR("Receiver failsafe mode ENABLED"));
       mode.rxFailSafe = true;
-      mode.sensorFailSafe = mode.launch = false;
+      mode.sensorFailSafe = mode.takeOff = false;
     }
   } else if(mode.rxFailSafe) {
     consoleNoteLn_P(PSTR("Receiver failsafe mode DISABLED"));
@@ -2051,7 +2056,7 @@ void controlTask(uint32_t currentMicros)
   else
     elevCtrl.reset(effStick - feedForward, 0.0);
     
-  if(!mode.sensorFailSafe && mode.pitchHold) {
+  if(!mode.sensorFailSafe && !mode.takeOff && mode.pitchHold) {
     elevOutput = elevCtrl.output();
 
     static float elevTestBias = 0;
@@ -2067,12 +2072,14 @@ void controlTask(uint32_t currentMicros)
 
   // Pusher
 
-  pushCtrl.input((effMaxAlpha_c - alpha)*autoAlphaP*maxPitchRate - pitchRate,
-		 controlCycle);
+  if(!mode.sensorFailSafe && !mode.takeOff && !alphaFailed) {
+    pushCtrl.input((effMaxAlpha_c - alpha)*autoAlphaP*maxPitchRate - pitchRate,
+		   controlCycle);
 
-  if(!mode.sensorFailSafe && !alphaFailed)
     elevOutput = fminf(elevOutput, pushCtrl.output());
-
+  } else
+    pushCtrl.reset(elevOutput, 0);
+  
   elevOutput = clamp(elevOutput, -1, 1);
   
   // Aileron
@@ -2084,11 +2091,11 @@ void controlTask(uint32_t currentMicros)
   if(mode.rxFailSafe)
     maxBank = 15.0;
   else if(mode.autoTrim)
-    maxBank /= 1.25 + neutralAlpha / thresholdAlpha;
+    maxBank /= 1 + 1.5*neutralAlpha / thresholdAlpha;
   
   float targetRollRate = maxRollRate*aileStick;
 
-  if(mode.sensorFailSafe || !mode.stabilizer || mode.launch) {
+  if(mode.sensorFailSafe || !mode.stabilizer || mode.takeOff) {
 
     aileOutput = aileStick;
     
@@ -2128,9 +2135,9 @@ void controlTask(uint32_t currentMicros)
     
   rudderOutput = rudderStick;
     
-  if(mode.sensorFailSafe || !mode.autoBall || mode.launch) {
+  if(mode.sensorFailSafe || !mode.autoBall || mode.takeOff) {
 
-    // Failsafe mode or auto ball disabled or launching
+    // Failsafe mode or auto ball disabled or taking off
     
     rudderCtrl.reset(rudderOutput, 0);
     
