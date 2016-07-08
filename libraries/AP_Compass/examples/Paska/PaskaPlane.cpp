@@ -1427,7 +1427,7 @@ void configurationTask(uint32_t currentMicros)
 	consoleNote_P(PSTR("Elevator mode DECREMENTED to "));
 	consolePrintLn(elevMode);
 	    
-      } else if(!mode.takeOff && iAS < paramRecord.iasMin / 3) {
+      } else if(!mode.takeOff && iAS < paramRecord.iasMin / 2) {
 	consoleNoteLn_P(PSTR("TakeOff mode ENABLED"));
 	mode.takeOff = true;
       }
