@@ -28,9 +28,9 @@
 //
 //
 
-const float stabilityElevExp1_c = 1.7;
-const float stabilityElevExp2_c = 0.5;
-const float stabilityAileExp1_c = 1.5;
+const float stabilityElevExp1_c = -1.5;
+const float stabilityElevExp2_c = 0.3;
+const float stabilityAileExp1_c = -1.5;
 const float stabilityAileExp2_c = 0.5;
 
 const AP_HAL::HAL& hal = AP_HAL_BOARD_DRIVER;
@@ -1230,11 +1230,11 @@ void testStateMachine(uint32_t currentMicros)
       finalK = testGain;
       finalIAS = iAS;
       finalT = oscCycleMean/1e6;
-      finalKxIAS = finalK*powf(finalIAS, (analyzerInputCh == ac_aile ? stabilityAileExp1_c : stabilityElevExp1_c));
+      finalKxIAS = finalK/powf(finalIAS, (analyzerInputCh == ac_aile ? stabilityAileExp1_c : stabilityElevExp1_c));
       
       consoleNote_P(PSTR("Test "));
       consolePrint(autoTestCount);
-      consolePrint_P(PSTR(" COMPLETED, final K*IAS^exp1 = "));
+      consolePrint_P(PSTR(" COMPLETED, final K/IAS^exp1 = "));
       consolePrintLn(finalKxIAS);
 
       testState = idle_c;
@@ -1574,8 +1574,8 @@ void configurationTask(uint32_t currentMicros)
   
   // Default controller settings
 
-  float s_Ku = scaleByIAS(paramRecord.s_Ku_C, -stabilityAileExp1_c);
-  float i_Ku = scaleByIAS(paramRecord.i_Ku_C, -stabilityElevExp1_c);
+  float s_Ku = scaleByIAS(paramRecord.s_Ku_C, stabilityAileExp1_c);
+  float i_Ku = scaleByIAS(paramRecord.i_Ku_C, stabilityElevExp1_c);
   
   if(paramRecord.c_PID)
     aileCtrl.setZieglerNicholsPID(s_Ku*scale, paramRecord.s_Tu);
