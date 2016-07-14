@@ -19,6 +19,7 @@ struct LogChannel logChannels[] = {
    { lc_rudstick, "RSTK", -1, 1 },
    { lc_aileron, "AILE", -1, 1 },
    { lc_elevator, "ELEV", -1, 1 },
+   { lc_elevator_ff, "ELFF", -1, 1 },
    { lc_rudder, "RUDR", -1, 1 },
    { lc_mode, "MODE", 0, 255 },
    { lc_target, "TARG", -180, 180 },
@@ -29,9 +30,5 @@ struct LogChannel logChannels[] = {
    { lc_speed, "VELO", 0, 300 },
    { lc_track, "TRAK", 0, 360 },
    { lc_altgps, "ALTG", -10, 300 },
-   { lc_altbaro, "ALTB", -10, 300 },
-   { lc_test_dp, "TSTP", -100, 10000 },
-   { lc_test_gain, "TSTG", 0, 50},
-   { lc_test_cycle, "TSTT", 0, 10 },
-   { lc_analyzer, "ANAL", -1, 1 } };
+   { lc_altbaro, "ALTB", -10, 300 } };
 

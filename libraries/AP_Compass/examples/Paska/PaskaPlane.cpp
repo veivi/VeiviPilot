@@ -197,7 +197,7 @@ float idleAvg, logBandWidth, ppmFreq, simInputFreq;
 bool looping, consoleConnected = true, simulatorConnected = false;
 uint32_t simTimeStamp;
 RateLimiter aileRateLimiter, flapRateLimiter, trimRateLimiter;
-float elevOutput = 0, aileOutput = 0, flapOutput = 0, gearOutput = 0, brakeOutput = 0, rudderOutput = 0;
+float elevOutput, elevOutputFeedForward, aileOutput = 0, flapOutput = 0, gearOutput = 0, brakeOutput = 0, rudderOutput = 0;
 int8_t elevMode = 0;
 
 const int maxTests_c = 32;
@@ -390,8 +390,8 @@ void logActuator(void)
 {
   logGeneric(lc_aileron, aileRateLimiter.output());
   logGeneric(lc_elevator, elevOutput);
+  logGeneric(lc_elevator_ff, elevOutputFeedForward);
   logGeneric(lc_rudder, rudderOutput);
-  logGeneric(lc_analyzer, analyzerInput);
 }
 
 void logRPM(void)
@@ -2005,7 +2005,8 @@ float randomNum(float small, float large)
 
 float levelTurnPitchRate(float bank, float aoa)
 {
-  return 2*PI/360*sin(fabsf(bank/2/PI))*aoa/paramRecord.alphaMax*iAS*G/square(paramRecord.iasMin);
+  return 2*PI/360*sin(fabsf(bank/2/PI))
+    *aoa/paramRecord.alphaMax*iAS*G/square(paramRecord.iasMin);
 }
 
 void controlTask(uint32_t currentMicros)
@@ -2059,12 +2060,12 @@ void controlTask(uint32_t currentMicros)
       levelTurnPitchRate(rollAngle, targetAlpha)
       + (targetAlpha - alpha)*autoAlphaP*maxPitchRate;      
   
-  float feedForward = paramRecord.ff_A + targetAlpha*paramRecord.ff_B*360;
+  elevOutputFeedForward = paramRecord.ff_A + targetAlpha*paramRecord.ff_B*360;
 
   if(mode.pitchHold)
     elevCtrl.input(targetPitchRate - pitchRate, controlCycle);
   else
-    elevCtrl.reset(effStick - feedForward, 0.0);
+    elevCtrl.reset(effStick - elevOutputFeedForward, 0.0);
     
   if(!mode.sensorFailSafe && !mode.takeOff && mode.pitchHold) {
     elevOutput = elevCtrl.output();
@@ -2077,7 +2078,7 @@ void controlTask(uint32_t currentMicros)
       elevOutput += elevTestBias;
     
     if(mode.autoAlpha)
-      elevOutput += feedForward;
+      elevOutput += elevOutputFeedForward;
   }
 
   // Pusher
