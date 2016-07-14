@@ -183,7 +183,7 @@ float neutralStick = 0.0, neutralAlpha, targetAlpha;
 float switchValue, gearValue, flapValue, tuningKnobValue, rpmOutput;
 Controller elevCtrl, aileCtrl, pushCtrl, rudderCtrl;
 float autoAlphaP, maxAlpha, shakerAlpha, thresholdAlpha, rudderMix;
-float accX, accY, accZ, altitude,  heading, rollAngle, pitchAngle, rollRate, pitchRate, yawRate, levelBank;
+float accX, accY, accZ, altitude,  heading, rollAngle, pitchAngle, rollRate, pitchRate, targetPitchRate, yawRate, levelBank;
 int cycleTimeCounter = 0;
 uint32_t prevMeasurement;
 float parameter;  
@@ -360,6 +360,7 @@ void logConfig(void)
     + (mode.autoAlpha ? 1 : 0)); 
     
   logGeneric(lc_target, targetAlpha*360);
+  logGeneric(lc_target_pr, targetPitchRate*360);
   logGeneric(lc_trim, neutralAlpha*360);
 
   if(testMode) {
@@ -2053,7 +2054,7 @@ void controlTask(uint32_t currentMicros)
   targetAlpha = clamp(trimRateLimiter.output() + effStick*stickRange_c,
 		      -paramRecord.alphaMax, effMaxAlpha_c);
 	
-  float targetPitchRate = (5 + effStick*30 - pitchAngle)/90 * maxPitchRate;
+  targetPitchRate = (5 + effStick*30 - pitchAngle)/90 * maxPitchRate;
 
   if(mode.autoAlpha)
     targetPitchRate =
