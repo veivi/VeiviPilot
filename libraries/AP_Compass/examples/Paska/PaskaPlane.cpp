@@ -29,7 +29,7 @@
 //
 
 const float stabilityElevExp1_c = -1.5;
-const float stabilityElevExp2_c = 0.3;
+const float stabilityElevExp2_c = 0.0;
 const float stabilityAileExp1_c = -1.5;
 const float stabilityAileExp2_c = 0.5;
 
@@ -1542,7 +1542,8 @@ void configurationTask(uint32_t currentMicros)
   // Mode-to-feature mapping: first nominal values
       
   mode.stabilizer = true;
-  mode.pitchHold = mode.autoAlpha = mode.autoTrim = elevMode > 0;
+  mode.pitchHold = elevMode > 0;
+  mode.autoAlpha = mode.autoTrim = elevMode == 1;
   mode.autoBall = false; // true; // !switchStateLazy;
   
   // Receiver fail detection
@@ -2000,6 +2001,13 @@ float randomNum(float small, float large)
   return small + (large-small)*(float) (rand() % 1000) / 1000;
 }
 
+#define G 9.81
+
+float levelTurnPitchRate(float bank, float aoa)
+{
+  return 2*PI/360*sin(fabsf(bank/2/PI))*aoa/paramRecord.alphaMax*iAS*G/square(paramRecord.iasMin);
+}
+
 void controlTask(uint32_t currentMicros)
 {
   // Cycle time bookkeeping 
@@ -2044,11 +2052,13 @@ void controlTask(uint32_t currentMicros)
   targetAlpha = clamp(trimRateLimiter.output() + effStick*stickRange_c,
 		      -paramRecord.alphaMax, effMaxAlpha_c);
 	
-  float targetPitchRate = effStick * maxPitchRate;
+  float targetPitchRate = (5 + effStick*30 - pitchAngle)/90 * maxPitchRate;
 
   if(mode.autoAlpha)
-    targetPitchRate = (targetAlpha - alpha)*autoAlphaP*maxPitchRate;      
-
+    targetPitchRate =
+      levelTurnPitchRate(rollAngle, targetAlpha)
+      + (targetAlpha - alpha)*autoAlphaP*maxPitchRate;      
+  
   float feedForward = paramRecord.ff_A + targetAlpha*paramRecord.ff_B*360;
 
   if(mode.pitchHold)
@@ -2073,7 +2083,9 @@ void controlTask(uint32_t currentMicros)
   // Pusher
 
   if(!mode.sensorFailSafe && !mode.takeOff && !alphaFailed) {
-    pushCtrl.input((effMaxAlpha_c - alpha)*autoAlphaP*maxPitchRate - pitchRate,
+    pushCtrl.input(levelTurnPitchRate(rollAngle, effMaxAlpha_c)
+		   + (effMaxAlpha_c - alpha)*autoAlphaP*maxPitchRate
+		   - pitchRate,
 		   controlCycle);
 
     elevOutput = fminf(elevOutput, pushCtrl.output());
