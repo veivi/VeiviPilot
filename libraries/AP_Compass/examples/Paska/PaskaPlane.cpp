@@ -1804,12 +1804,14 @@ void loopTask(uint32_t currentMicros)
     consolePrint(rollAngle, 2);
     consolePrint(" (rate = ");
     consolePrint(rollRate*360, 1);
+
+    */
     consolePrint(") pitch = ");
     consolePrint(pitchAngle, 2);
     consolePrint(" (rate = ");
     consolePrint(pitchRate*360, 1);
     consolePrint(")");
-    */
+    
     /*
     consolePrint(" rpm = ");
     consolePrint(readRPM());
@@ -1829,6 +1831,9 @@ void loopTask(uint32_t currentMicros)
     consolePrint(gpsFix.speed);
     */
  
+    consolePrint(" targetPR = ");
+    consolePrint(targetPitchRate*360);
+   
     consolePrint(" target = ");
     consolePrint(targetAlpha*360);
     consolePrint(" trim = ");
@@ -2006,7 +2011,7 @@ float randomNum(float small, float large)
 
 float levelTurnPitchRate(float bank, float aoa)
 {
-  return 2*PI/360*sin(fabsf(bank/2/PI))
+  return square(sin(fabsf(bank/(360/2/PI))))/2/PI
     *aoa/paramRecord.alphaMax*iAS*G/square(paramRecord.iasMin);
 }
 
