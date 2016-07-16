@@ -2011,7 +2011,7 @@ float randomNum(float small, float large)
 
 float levelTurnPitchRate(float bank, float aoa)
 {
-  return square(sin(fabsf(bank/(360/2/PI))))/2/PI
+  return square(sin(bank/(360/2/PI)))/2/PI
     *aoa/paramRecord.alphaMax*iAS*G/square(paramRecord.iasMin);
 }
 
