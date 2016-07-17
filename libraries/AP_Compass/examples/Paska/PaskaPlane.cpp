@@ -1579,11 +1579,7 @@ void configurationTask(uint32_t currentMicros)
   float s_Ku = scaleByIAS(paramRecord.s_Ku_C, stabilityAileExp1_c);
   float i_Ku = scaleByIAS(paramRecord.i_Ku_C, stabilityElevExp1_c);
   
-  if(paramRecord.c_PID)
-    aileCtrl.setZieglerNicholsPID(s_Ku*scale, paramRecord.s_Tu);
-  else
-    aileCtrl.setZieglerNicholsPI(s_Ku*scale, paramRecord.s_Tu);
-  
+  aileCtrl.setZieglerNicholsPID(s_Ku*scale, paramRecord.s_Tu);
   elevCtrl.setZieglerNicholsPID(i_Ku*scale, paramRecord.i_Tu);
   pushCtrl.setZieglerNicholsPID(i_Ku*scale, paramRecord.i_Tu);
   
@@ -1704,15 +1700,6 @@ void configurationTask(uint32_t currentMicros)
 				     paramRecord.r_Tu);
       break;
        
-    case 8:
-      // Aileron PI vs PID test
-       
-      if(parameter > 0.5)
-	aileCtrl.setZieglerNicholsPI(s_Ku, paramRecord.s_Tu);
-      else
-	aileCtrl.setZieglerNicholsPID(s_Ku, paramRecord.s_Tu);
-      break;         
-
     case 9:
       // Max alpha
 
@@ -1805,14 +1792,13 @@ void loopTask(uint32_t currentMicros)
     consolePrint(" (rate = ");
     consolePrint(rollRate*360, 1);
 
-    */
     consolePrint(") pitch = ");
     consolePrint(pitchAngle, 2);
     consolePrint(" (rate = ");
     consolePrint(pitchRate*360, 1);
     consolePrint(")");
-    
-    /*
+    */
+    /*    
     consolePrint(" rpm = ");
     consolePrint(readRPM());
     */
@@ -1830,10 +1816,10 @@ void loopTask(uint32_t currentMicros)
     consolePrint(" speed = ");
     consolePrint(gpsFix.speed);
     */
- 
+    /* 
     consolePrint(" targetPR = ");
     consolePrint(targetPitchRate*360);
-   
+    */
     consolePrint(" target = ");
     consolePrint(targetAlpha*360);
     consolePrint(" trim = ");
@@ -2007,12 +1993,15 @@ float randomNum(float small, float large)
   return small + (large-small)*(float) (rand() % 1000) / 1000;
 }
 
-#define G 9.81
+const float G = 9.81, RAD = 360/2/PI;
 
 float levelTurnPitchRate(float bank, float aoa)
 {
-  return square(sin(bank/(360/2/PI)))/2/PI
-    *aoa/paramRecord.alphaMax*iAS*G/square(paramRecord.iasMin);
+  const float zl_c = paramRecord.alphaZeroLift,
+    ratio_c = (aoa - zl_c) / (paramRecord.alphaMax - zl_c);
+  
+  return square(sin(bank/RAD))
+    *ratio_c*iAS*G/square(paramRecord.iasMin)*RAD/360;
 }
 
 void controlTask(uint32_t currentMicros)
@@ -2078,11 +2067,11 @@ void controlTask(uint32_t currentMicros)
 
     static float elevTestBias = 0;
     
-    if(!testActive())
-      elevTestBias = elevOutput;
-    else
+    if(testActive() && analyzerInputCh == ac_elev)
       elevOutput += elevTestBias;
-    
+    else
+      elevTestBias = elevOutput;
+      
     if(mode.autoAlpha)
       elevOutput += elevOutputFeedForward;
   }

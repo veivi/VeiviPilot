@@ -29,7 +29,7 @@ const struct ParamRecord paramDefaults = {
   .rudderNeutral = 0, .rudderDefl = 45.0/90,
   .brakeNeutral = 0, .brakeDefl = 45.0/90,
   .servoAile = 0, .servoElev = 1, .servoRudder = 2, .servoFlap = -1, .servoFlap2 = -1, .servoGear = -1, .servoBrake = -1,
-  .alphaMin = -1, .alphaMax = 12.0/360,
+  .alphaZeroLift = -2.0/360, .alphaMax = 12.0/360,
   .i_Ku_C = 100, .i_Tu = 0.25, .o_P = 0.3, 
   .s_Ku_C = 400, .s_Tu = 0.25, 
   .r_Mix = 0.1, .r_Ku = 0.1, .r_Tu = 0.25,
@@ -156,17 +156,16 @@ void printParams()
   consolePrintLn(paramRecord.s_Tu, 4);
   consoleNote_P(PSTR("    Weak leveling limit angle = "));
   consolePrintLn(paramRecord.wl_Limit, 4);
-  consoleNote_P(PSTR("    Using "));
-  consolePrint_P(paramRecord.c_PID ? PSTR("PID") : PSTR("PI"));
-  consolePrintLn_P(PSTR(" controller"));
   consoleNoteLn_P(PSTR("  Auto rudder"));
   consoleNote_P(PSTR("    Ku = "));
   consolePrint(paramRecord.r_Ku, 4);
   consolePrint_P(PSTR(" Tu = "));
   consolePrintLn(paramRecord.r_Tu, 4);
-  consoleNote_P(PSTR("  Alpha max = "));
-  consolePrintLn(paramRecord.alphaMax*360);
-  consoleNote_P(PSTR("  Minimum IAS = "));
+  consoleNote_P(PSTR("  Alpha (max) = "));
+  consolePrint(paramRecord.alphaMax*360);
+  consolePrint_P(PSTR(" (CL0) = "));
+  consolePrintLn(paramRecord.alphaZeroLift*360);
+  consoleNote_P(PSTR("  Stall IAS = "));
   consolePrintLn(paramRecord.iasMin);
   consoleNote_P(PSTR("  Roll rate K = "));
   consolePrintLn(paramRecord.roll_C);
