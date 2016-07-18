@@ -2066,8 +2066,10 @@ void controlTask(uint32_t currentMicros)
     elevOutput = elevCtrl.output();
 
     static float elevTestBias = 0;
-    
-    if(testActive() && analyzerInputCh == ac_elev)
+
+    if((testMode && (stateRecord.testChannel == 2
+		       || stateRecord.testChannel == 3))
+    || (testActive() && analyzerInputCh == ac_elev))
       elevOutput += elevTestBias;
     else
       elevTestBias = elevOutput;
