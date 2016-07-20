@@ -1,3 +1,4 @@
+
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -2000,8 +2001,12 @@ float levelTurnPitchRate(float bank, float aoa)
   const float zl_c = paramRecord.alphaZeroLift,
     ratio_c = (aoa - zl_c) / (paramRecord.alphaMax - zl_c);
   
-  return square(sin(bank/RAD))
-    *ratio_c*iAS*G/square(paramRecord.iasMin)*RAD/360;
+  // return square(sin(bank/RAD))
+  //    *ratio_c*iAS*G/square(paramRecord.iasMin)*RAD/360;
+
+  // IDEA: siis lennetään vaakakaartoa eli 1 G kohti taivasta joten
+  // kiihtyvyys tulee siitä suoraan kallistuksen perusteella!!
+  // Yksinkertaisempi!!
 }
 
 void controlTask(uint32_t currentMicros)
