@@ -82,13 +82,10 @@ struct RxInputRecord aileInput, elevInput, throttleInput, rudderInput,
 struct RxInputRecord *ppmInputs[] = 
   { &aileInput, &elevInput, &throttleInput, &rudderInput, &switchInput, &tuningKnobInput, &gearInput, &flapInput };
 
-struct SwitchRecord gearSwitchRecord = { &gearInput };
-struct SwitchRecord flapSwitchRecord = { &flapInput };
-
 ButtonInputChannel buttonInput;
-Button upButton(-0.7), downButton(1.0), gearButton(1.0), trimButton(-1.0), auxButton(0.16);
+Button upButton(-0.7), downButton(1.0), trimButton(-1.0), gearButton(0.16);
 
-int8_t gearSwitchValue, flapSwitchValue;
+int8_t flapSwitchValue;
 
 //
 // Servo PWM output
@@ -929,18 +926,15 @@ void receiverTask(uint32_t currentMicros)
   if(inputValid(&throttleInput))
     throttleStick = inputValue(&throttleInput);
 
-  gearSwitchValue = readSwitch(&gearSwitchRecord);
-  flapSwitchValue = readSwitch(&flapSwitchRecord);
+  flapSwitchValue = inputValue(&flapInput);
   
-  gearButton.input(gearSwitchValue);
-
   buttonInput.input(inputValue(&switchInput));  
   switchValue = buttonInput.value();
 
   upButton.input(switchValue);
   downButton.input(switchValue);
   trimButton.input(switchValue);
-  auxButton.input(switchValue);
+  gearButton.input(switchValue);
   
   //
   //
@@ -1408,7 +1402,7 @@ const float origoAlpha = (-5.0/360);
 
 void configurationTask(uint32_t currentMicros)
 {   
-  if(auxButton.doublePulse() || gearButton.doublePulse()) {
+  if(gearButton.doublePulse()) {
     if(!mode.sensorFailSafe) {
       consoleNoteLn_P(PSTR("Failsafe ENABLED"));
       mode.sensorFailSafe = true;
