@@ -135,6 +135,40 @@ int8_t readSwitch(struct SwitchRecord *record)
   return record->state;
 }
 
+void ButtonInputChannel :: input(float inputVal)
+{
+  filter[filterPtr++] = inputVal;
+  filterPtr %= INERTIA;
+
+  float sum = 0.0;
+  
+  for(uint8_t i = 0; i < INERTIA; i++)
+    sum += filter[i];
+
+  sum /= INERTIA;
+  
+  stable = true;
+  
+  for(uint8_t i = 0; i < INERTIA; i++)
+    if(fabs(filter[i]) < 0.05 || fabsf(sum - filter[i]) > 0.03)
+      stable = false;
+  
+  if(stable)
+    filterOutput = sum;
+  else
+    filterOutput = 0.0;
+}
+
+float ButtonInputChannel :: value()
+{
+  return filterOutput;
+}
+
+bool ButtonInputChannel :: active()
+{
+  return stable;
+}
+
 float applyNullZone(float value, bool *pilotInput)
 {
   if(pilotInput)

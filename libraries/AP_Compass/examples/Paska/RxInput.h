@@ -20,6 +20,20 @@ struct SwitchRecord {
   float prevValue;
 };
 
+#define INERTIA 3
+
+class ButtonInputChannel {
+ public:
+  bool active();
+  float value();
+  void input(float v);
+
+ private:
+  float filter[INERTIA], filterOutput;
+  uint8_t filterPtr;
+  bool stable;
+};
+
 void rxInputInit(struct RxInputRecord *record);
 bool inputValid(struct RxInputRecord *record);
 float inputValue(struct RxInputRecord *record);

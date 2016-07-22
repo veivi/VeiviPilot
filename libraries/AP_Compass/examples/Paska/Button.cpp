@@ -1,15 +1,28 @@
 #include <AP_HAL/AP_HAL.h>
 #include <AP_HAL_AVR/AP_HAL_AVR.h>
+#include <math.h>
 #include "Button.h"
 
 extern AP_HAL::HAL& hal;
 
-void Button :: input(bool newState)
+Button :: Button(float aValue)
 {
-  if(newState != statePrev) {
+  activeValue = aValue;
+}
+
+void Button :: input(float inputValue)
+{
+  bool inputState = fabs(inputValue - activeValue) < 0.05;
+
+  if(inertia != inputState) {
+    inertia = inputState;
+    return;
+  }
+  
+  if(inputState != statePrev) {
     pulseStart = hal.scheduler->micros();
 
-    if(newState)
+    if(inputState)
       pulseArmed = true;
     else if(pulseArmed) {
       if(count > 0) {
@@ -21,15 +34,15 @@ void Button :: input(bool newState)
       pulseArmed = false;
     }
     
-    statePrev = newState;
-  } else if(hal.scheduler->micros() - pulseStart > 1.0e6/3) {
+    statePrev = inputState;
+  } else if(hal.scheduler->micros() - pulseStart > 1.0e6/2) {
 
-    if(stateLazy != newState)
-      stateActive = newState;
+    if(stateLazy != inputState)
+      stateActive = inputState;
     
-    stateLazy = newState;
+    stateLazy = inputState;
     
-    if(!newState && count > 0)
+    if(!inputState && count > 0)
       pulseSingle = true;
 
     count = 0;

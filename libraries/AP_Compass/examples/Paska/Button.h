@@ -5,14 +5,16 @@
 
 class Button {
 public:
-  void input(bool);
+  Button(float activeValue);
+  void input(float);
   bool singlePulse();
   bool doublePulse();
   bool state();
   bool active();
 
 private:
-  bool statePrev, stateLazy, stateActive;
+  float activeValue;
+  bool inertia, filterOutput, statePrev, stateLazy, stateActive;
   uint32_t pulseStart;
   bool pulseArmed;
   uint8_t count;

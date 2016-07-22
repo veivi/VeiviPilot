@@ -82,13 +82,13 @@ struct RxInputRecord aileInput, elevInput, throttleInput, rudderInput,
 struct RxInputRecord *ppmInputs[] = 
   { &aileInput, &elevInput, &throttleInput, &rudderInput, &switchInput, &tuningKnobInput, &gearInput, &flapInput };
 
-struct SwitchRecord modeSwitchRecord = { &switchInput };
 struct SwitchRecord gearSwitchRecord = { &gearInput };
 struct SwitchRecord flapSwitchRecord = { &flapInput };
 
-Button upButton, downButton, gearButton;
+ButtonInputChannel buttonInput;
+Button upButton(-0.7), downButton(1.0), gearButton(1.0), trimButton(-1.0), auxButton(0.16);
 
-int8_t modeSwitchValue, gearSwitchValue, flapSwitchValue;
+int8_t gearSwitchValue, flapSwitchValue;
 
 //
 // Servo PWM output
@@ -181,7 +181,7 @@ bool ailePilotInput, elevPilotInput, rudderPilotInput;
 uint32_t controlCycleEnded;
 bool armed = false;
 float neutralStick = 0.0, neutralAlpha, targetAlpha;
-float switchValue, gearValue, flapValue, tuningKnobValue, rpmOutput;
+float switchValue, tuningKnobValue, rpmOutput;
 Controller elevCtrl, aileCtrl, pushCtrl, rudderCtrl;
 float autoAlphaP, maxAlpha, shakerAlpha, thresholdAlpha, rudderMix;
 float accX, accY, accZ, altitude,  heading, rollAngle, pitchAngle, rollRate, pitchRate, targetPitchRate, yawRate, levelBank;
@@ -929,14 +929,19 @@ void receiverTask(uint32_t currentMicros)
   if(inputValid(&throttleInput))
     throttleStick = inputValue(&throttleInput);
 
-  modeSwitchValue = readSwitch(&modeSwitchRecord);
   gearSwitchValue = readSwitch(&gearSwitchRecord);
   flapSwitchValue = readSwitch(&flapSwitchRecord);
   
-  upButton.input(modeSwitchValue > 0);
-  downButton.input(modeSwitchValue < 0);
-  gearButton.input(gearSwitchValue > 0);
+  gearButton.input(gearSwitchValue);
 
+  buttonInput.input(inputValue(&switchInput));  
+  switchValue = buttonInput.value();
+
+  upButton.input(switchValue);
+  downButton.input(switchValue);
+  trimButton.input(switchValue);
+  auxButton.input(switchValue);
+  
   //
   //
   //
@@ -1403,7 +1408,7 @@ const float origoAlpha = (-5.0/360);
 
 void configurationTask(uint32_t currentMicros)
 {   
-  if(downButton.doublePulse() || gearButton.doublePulse()) {
+  if(auxButton.doublePulse() || gearButton.doublePulse()) {
     if(!mode.sensorFailSafe) {
       consoleNoteLn_P(PSTR("Failsafe ENABLED"));
       mode.sensorFailSafe = true;
@@ -1544,13 +1549,12 @@ void configurationTask(uint32_t currentMicros)
   // Mode-to-feature mapping: first nominal values
       
   mode.stabilizer = true;
-  mode.pitchHold = elevMode > 0;
-  mode.autoAlpha = mode.autoTrim = elevMode == 1;
-  mode.autoBall = false; // true; // !switchStateLazy;
+  mode.pitchHold = mode.autoAlpha = elevMode > 0;
+  mode.autoBall = mode.autoTrim = false; // true; // !switchStateLazy;
   
   // Receiver fail detection
 
-  if(modeSwitchValue == 1 && aileStick < -0.90 && elevStick > 0.90) {
+  if(switchValue > 0.90 && aileStick < -0.90 && elevStick > 0.90) {
     if(!mode.rxFailSafe) {
       consoleNoteLn_P(PSTR("Receiver failsafe mode ENABLED"));
       mode.rxFailSafe = true;
@@ -1749,18 +1753,20 @@ void loopTask(uint32_t currentMicros)
     consolePrint("alpha = ");
     consolePrint(alpha*360);
 
-    /*
+    /*    
     consolePrint(" InputVec = ( ");
     for(uint8_t i = 0; i < sizeof(ppmInputs)/sizeof(void*); i++) {
       consolePrint(inputValue(ppmInputs[i]), 2);
       consolePrint(" ");
     }      
     consolePrint(")");
-    */    
-
+    */
     consolePrint(" IAS = ");
     consolePrint(iAS);
 
+    consolePrint(" swInput = ");
+    consolePrint(switchValue);
+    
     /*    consolePrint(" IAS(rel) = ");
     consolePrint(scaleByIAS(0, 1));
     */
@@ -2001,12 +2007,10 @@ float levelTurnPitchRate(float bank, float aoa)
   const float zl_c = paramRecord.alphaZeroLift,
     ratio_c = (aoa - zl_c) / (paramRecord.alphaMax - zl_c);
   
-  // return square(sin(bank/RAD))
-  //    *ratio_c*iAS*G/square(paramRecord.iasMin)*RAD/360;
+  return square(sin(bank/RAD))
+    *ratio_c*iAS*G/square(paramRecord.iasMin)*RAD/360;
 
-  // IDEA: siis lennetään vaakakaartoa eli 1 G kohti taivasta joten
-  // kiihtyvyys tulee siitä suoraan kallistuksen perusteella!!
-  // Yksinkertaisempi!!
+  // return G*tan(fabsf(bank)/RAD)/iAS*RAD/360;
 }
 
 void controlTask(uint32_t currentMicros)
@@ -2241,11 +2245,14 @@ void actuatorTask(uint32_t currentMicros)
 
 void trimTask(uint32_t currentMicros)
 {
-  if(mode.autoTrim && elevPilotInputPersistCount > 3*CONTROL_HZ/2
-     && fabsf(rollAngle) < 15)
+  bool autoTrim = mode.autoTrim
+    && elevPilotInputPersistCount > 3*CONTROL_HZ/2
+    && fabsf(rollAngle) < 15;
+  
+  if(autoTrim || trimButton.state())
     neutralAlpha +=
       clamp((fminf(targetAlpha, thresholdAlpha) - neutralAlpha)/TRIM_HZ,
-	    -1.5/360/TRIM_HZ, 1.5/360/TRIM_HZ);
+	    -2.0/360/TRIM_HZ, 2.0/360/TRIM_HZ);
 }
 
 bool logInitialized = false;
