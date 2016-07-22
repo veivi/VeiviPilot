@@ -2245,13 +2245,12 @@ void actuatorTask(uint32_t currentMicros)
 
 void trimTask(uint32_t currentMicros)
 {
-  bool autoTrim = mode.autoTrim
-    && elevPilotInputPersistCount > 3*CONTROL_HZ/2
-    && fabsf(rollAngle) < 15;
+  bool autoTrimActive = 
+    elevPilotInputPersistCount > 3*CONTROL_HZ/2 && fabsf(rollAngle) < 15;
   
-  if(autoTrim || trimButton.state())
+  if(trimButton.state() || (mode.autoTrim && autoTrimActive))
     neutralAlpha +=
-      clamp((fminf(targetAlpha, thresholdAlpha) - neutralAlpha)/TRIM_HZ,
+      clamp((fminf(targetAlpha, thresholdAlpha) - neutralAlpha)*3/2/TRIM_HZ,
 	    -2.0/360/TRIM_HZ, 2.0/360/TRIM_HZ);
 }
 
