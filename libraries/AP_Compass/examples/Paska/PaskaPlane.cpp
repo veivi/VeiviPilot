@@ -1415,7 +1415,7 @@ void configurationTask(uint32_t currentMicros)
       mode.sensorFailSafe = false;
       consoleNoteLn_P(PSTR("Sensor failsafe DISABLED"));
             
-    } else if(!armed) {
+    } else if(!armed && aileStick < -0.90 && elevStick > 0.90) {
       consoleNoteLn_P(PSTR("We're now ARMED"));
       armed = true;
       
