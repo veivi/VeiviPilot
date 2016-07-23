@@ -13,12 +13,12 @@ Button :: Button(float aValue)
 void Button :: input(float inputValue)
 {
   bool inputState = fabs(inputValue - activeValue) < 0.05;
-
+  /*
   if(inertia != inputState) {
     inertia = inputState;
     return;
   }
-  
+  */  
   if(inputState != statePrev) {
     pulseStart = hal.scheduler->micros();
 
@@ -35,7 +35,7 @@ void Button :: input(float inputValue)
     }
     
     statePrev = inputState;
-  } else if(hal.scheduler->micros() - pulseStart > 1.0e6/2) {
+  } else if(hal.scheduler->micros() - pulseStart > 1.0e6/3) {
 
     if(stateLazy != inputState)
       stateActive = inputState;

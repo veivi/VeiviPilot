@@ -83,7 +83,7 @@ struct RxInputRecord *ppmInputs[] =
   { &aileInput, &elevInput, &throttleInput, &rudderInput, &switchInput, &tuningKnobInput, &gearInput, &flapInput };
 
 ButtonInputChannel buttonInput;
-Button upButton(-0.7), downButton(1.0), trimButton(-1.0), gearButton(0.16);
+Button upButton(0.26), downButton(-0.13), trimButton(0.66), gearButton(-0.60);
 
 int8_t flapSwitchValue;
 
@@ -2103,8 +2103,8 @@ void controlTask(uint32_t currentMicros)
 
   if(mode.rxFailSafe)
     maxBank = 15.0;
-  else if(mode.autoTrim)
-    maxBank /= 1 + 1.5*neutralAlpha / thresholdAlpha;
+  else if(mode.autoAlpha)
+    maxBank /= 1 + neutralAlpha / thresholdAlpha;
   
   float targetRollRate = maxRollRate*aileStick;
 

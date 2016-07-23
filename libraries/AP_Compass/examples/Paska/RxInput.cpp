@@ -150,13 +150,11 @@ void ButtonInputChannel :: input(float inputVal)
   stable = true;
   
   for(uint8_t i = 0; i < INERTIA; i++)
-    if(fabs(filter[i]) < 0.05 || fabsf(sum - filter[i]) > 0.03)
+    if(fabsf(sum - filter[i]) > 0.03)
       stable = false;
   
   if(stable)
     filterOutput = sum;
-  else
-    filterOutput = 0.0;
 }
 
 float ButtonInputChannel :: value()
