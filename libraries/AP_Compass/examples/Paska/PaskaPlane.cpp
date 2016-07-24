@@ -148,7 +148,6 @@ struct ModeRecord {
   bool stabilizePitch;
   bool pitchHold;
   bool alphaHold;
-  bool autoTrim;
   bool autoBall;
   bool takeOff;
   bool autoTest;
@@ -909,8 +908,6 @@ void airspeedTask(uint32_t currentMicros)
     pressureBuffer.input((float) raw);
 }
 
-int elevPilotInputPersistCount;
-
 void receiverTask(uint32_t currentMicros)
 {
   if(inputValid(&aileInput))
@@ -1548,7 +1545,7 @@ void configurationTask(uint32_t currentMicros)
       
   mode.stabilizeBank = true;
   mode.stabilizePitch = mode.alphaHold = (elevMode > 0);
-  mode.pitchHold = mode.autoBall = mode.autoTrim = false;
+  mode.pitchHold = mode.autoBall = false;
   
   // Receiver fail detection
 
@@ -2030,11 +2027,6 @@ void controlTask(uint32_t currentMicros)
   
   const float effStick = mode.rxFailSafe ? 0 : elevStick;
     
-  if(!elevPilotInput)
-    elevPilotInputPersistCount = 0;
-  else if(elevPilotInputPersistCount < CONTROL_HZ*3)
-    elevPilotInputPersistCount++;
-  
   const float fract_c = 1.0/3;
   const float stickStrength_c = fmaxf(effStick-(1-fract_c), 0)/fract_c;
   const float effMaxAlpha_c =
@@ -2242,10 +2234,7 @@ void actuatorTask(uint32_t currentMicros)
 
 void trimTask(uint32_t currentMicros)
 {
-  bool autoTrimActive = 
-    elevPilotInputPersistCount > 3*CONTROL_HZ/2 && fabsf(rollAngle) < 15;
-  
-  if(trimButton.state() || (mode.autoTrim && autoTrimActive)) {
+  if(trimButton.state()) {
     elevTrim +=
       clamp((elevStick - elevTrim)/TRIM_HZ, -0.15/TRIM_HZ, 0.15/TRIM_HZ);
     
