@@ -122,6 +122,7 @@ const struct PWMOutput pwmOutput[] = {
 //
 
 #define CONTROL_HZ 50
+#define CONFIG_HZ (CONTROL_HZ/2)
 #define ALPHA_HZ (CONTROL_HZ*10)
 #define AIRSPEED_HZ (CONTROL_HZ*5)
 #define TRIM_HZ 10
@@ -141,13 +142,14 @@ struct Task {
 struct ModeRecord {
   bool sensorFailSafe;
   bool rxFailSafe;
-  bool pitchHold;
-  bool autoAlpha;
-  bool autoTrim;
-  bool autoBall;
-  bool stabilizer;
+  bool stabilizeBank;
   bool wingLeveler;
   bool bankLimiter;
+  bool stabilizePitch;
+  bool pitchHold;
+  bool alphaHold;
+  bool autoTrim;
+  bool autoBall;
   bool takeOff;
   bool autoTest;
 };
@@ -177,7 +179,7 @@ float iAS, dynPressure, alpha, aileStick, elevStick, throttleStick, rudderStick;
 bool ailePilotInput, elevPilotInput, rudderPilotInput;
 uint32_t controlCycleEnded;
 bool armed = false;
-float neutralStick = 0.0, neutralAlpha, targetAlpha;
+float elevTrim, alphaTrim, targetAlpha, stickRange;
 float switchValue, tuningKnobValue, rpmOutput;
 Controller elevCtrl, aileCtrl, pushCtrl, rudderCtrl;
 float autoAlphaP, maxAlpha, shakerAlpha, thresholdAlpha, rudderMix;
@@ -355,11 +357,11 @@ void logConfig(void)
     + (mode.sensorFailSafe ? 16 : 0) 
     + (mode.wingLeveler ? 8 : 0) 
     + (mode.bankLimiter ? 4 : 0) 
-    + (mode.autoAlpha ? 1 : 0)); 
+    + (mode.alphaHold ? 1 : 0)); 
     
   logGeneric(lc_target, targetAlpha*360);
   logGeneric(lc_target_pr, targetPitchRate*360);
-  logGeneric(lc_trim, neutralAlpha*360);
+  logGeneric(lc_trim, alphaTrim*360);
 
   if(testMode) {
     logGeneric(lc_gain, testGain);
@@ -918,7 +920,8 @@ void receiverTask(uint32_t currentMicros)
     rudderStick = applyNullZone(inputValue(&rudderInput), &rudderPilotInput);
   
   if(inputValid(&elevInput))
-    elevStick = inputValue(&elevInput);
+    elevStick = applyNullZone(inputValue(&elevInput), &elevPilotInput);
+  //    elevStick = inputValue(&elevInput);
     
   if(inputValid(&tuningKnobInput))
     tuningKnobValue = inputValue(&tuningKnobInput);
@@ -1431,6 +1434,7 @@ void configurationTask(uint32_t currentMicros)
       } else if(!mode.takeOff && iAS < paramRecord.iasMin / 2) {
 	consoleNoteLn_P(PSTR("TakeOff mode ENABLED"));
 	mode.takeOff = true;
+	elevTrim = 0.2;
       }
     }
   }
@@ -1495,10 +1499,10 @@ void configurationTask(uint32_t currentMicros)
 
       autoTestCompleted = false;
 
-      neutralAlpha = (neutralAlpha - origoAlpha) * 1.0555555 + origoAlpha;
+      alphaTrim = (alphaTrim - origoAlpha) * 1.0555555 + origoAlpha;
       
-      if(neutralAlpha > shakerAlpha)
-	neutralAlpha -= shakerAlpha - minAlpha;
+      if(alphaTrim > shakerAlpha)
+	alphaTrim -= shakerAlpha - minAlpha;
     }
   } else if(testMode && parameter < 0) {
     testMode = mode.autoTest = false;
@@ -1542,9 +1546,9 @@ void configurationTask(uint32_t currentMicros)
 
   // Mode-to-feature mapping: first nominal values
       
-  mode.stabilizer = true;
-  mode.pitchHold = mode.autoAlpha = elevMode > 0;
-  mode.autoBall = mode.autoTrim = false; // true; // !switchStateLazy;
+  mode.stabilizeBank = true;
+  mode.stabilizePitch = mode.alphaHold = (elevMode > 0);
+  mode.pitchHold = mode.autoBall = mode.autoTrim = false;
   
   // Receiver fail detection
 
@@ -1562,8 +1566,7 @@ void configurationTask(uint32_t currentMicros)
   if(mode.rxFailSafe) {    
     // Receiver failsafe mode settings
     
-    mode.pitchHold = mode.autoAlpha = mode.autoTrim = mode.bankLimiter = true;
-    neutralStick = 0;
+    mode.stabilizePitch = mode.alphaHold = mode.bankLimiter = true;
   }
 
   // Safety scaling (test mode 0)
@@ -1600,7 +1603,7 @@ void configurationTask(uint32_t currentMicros)
     case 1:
       // Wing stabilizer gain
          
-      mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
+      mode.stabilizeBank = mode.bankLimiter = mode.wingLeveler = true;
       aileCtrl.setPID(testGain = testGainExpo(s_Ku_ref), 0, 0);
       break;
             
@@ -1608,7 +1611,7 @@ void configurationTask(uint32_t currentMicros)
       // Wing stabilizer gain autotest
 
       analyzerInputCh = ac_aile;
-      mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
+      mode.stabilizeBank = mode.bankLimiter = mode.wingLeveler = true;
 	
       if(!mode.autoTest) {
 	mode.autoTest = true;
@@ -1621,8 +1624,8 @@ void configurationTask(uint32_t currentMicros)
     case 2:
       // Elevator stabilizer gain, outer loop disabled
          
-      mode.pitchHold = true;
-      mode.autoTrim = mode.autoAlpha = false;
+      mode.stabilizePitch = true;
+      mode.alphaHold = false;
       elevCtrl.setPID(testGain = testGainExpo(i_Ku_ref), 0, 0);
       break;
          
@@ -1630,8 +1633,8 @@ void configurationTask(uint32_t currentMicros)
       // Elevator stabilizer gain, outer loop disabled
    
       analyzerInputCh = ac_elev;
-      mode.pitchHold = true;
-      mode.autoTrim = mode.autoAlpha = false;
+      mode.stabilizePitch = true;
+      mode.alphaHold = false;
 	
       if(!mode.autoTest) {
 	mode.autoTest = true;
@@ -1644,7 +1647,7 @@ void configurationTask(uint32_t currentMicros)
     case 3:
       // Elevator stabilizer gain, outer loop enabled
          
-      mode.pitchHold = mode.autoTrim = mode.autoAlpha = true;
+      mode.stabilizePitch = mode.alphaHold = true;
       elevCtrl.setPID(testGain = testGainExpo(i_Ku_ref), 0, 0);
       break;
          
@@ -1652,7 +1655,7 @@ void configurationTask(uint32_t currentMicros)
       // Elevator stabilizer gain, outer loop enabled
          
       analyzerInputCh = ac_elev;
-      mode.pitchHold = mode.autoTrim = mode.autoAlpha = true;
+      mode.stabilizePitch = mode.alphaHold = true;
 	
       if(!mode.autoTest) {
 	mode.autoTest = true;
@@ -1665,14 +1668,14 @@ void configurationTask(uint32_t currentMicros)
     case 4:
       // Auto alpha outer loop gain
          
-      mode.pitchHold = mode.autoTrim = mode.autoAlpha = true;
+      mode.stabilizePitch = mode.alphaHold = true;
       autoAlphaP = testGain = testGainExpo(paramRecord.o_P);
       break;
          
     case 5:
       // Auto ball gain
          
-      mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
+      mode.stabilizeBank = mode.bankLimiter = mode.wingLeveler = true;
       mode.autoBall = true;
       rudderMix = 0;
       rudderCtrl.setPID(testGain = testGainExpo(paramRecord.r_Ku), 0, 0);
@@ -1682,7 +1685,7 @@ void configurationTask(uint32_t currentMicros)
       // Aileron and rudder calibration, straight and level flight with
       // ball centered, reduced controller gain to increase stability
          
-      mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
+      mode.stabilizeBank = mode.bankLimiter = mode.wingLeveler = true;
       mode.autoBall = true;
       rudderMix = 0;
       aileCtrl.
@@ -1702,7 +1705,7 @@ void configurationTask(uint32_t currentMicros)
     case 9:
       // Max alpha
 
-      mode.stabilizer = mode.bankLimiter = mode.wingLeveler = true;
+      mode.stabilizeBank = mode.bankLimiter = mode.wingLeveler = true;
       maxAlpha = testGain = testGainLinear(20.0/360, 10.0/360);
       break;         
 
@@ -1732,13 +1735,11 @@ void configurationTask(uint32_t currentMicros)
 
   alphaFilter.input(alpha);
  
-  if(!mode.pitchHold)
-    neutralStick = elevStick;
-  
-  if(!mode.autoAlpha) {
-    neutralAlpha = clamp(alphaFilter.output(), -maxAlpha, maxAlpha);
-    trimRateLimiter.reset(neutralAlpha);
-  }
+  if(!mode.alphaHold) {
+    alphaTrim = clamp(alphaFilter.output(), -maxAlpha, maxAlpha);
+    trimRateLimiter.reset(alphaTrim);
+  } else
+    elevTrim = clamp(targetAlpha/stickRange, -1, 1);
 }
 
 void loopTask(uint32_t currentMicros)
@@ -1824,7 +1825,7 @@ void loopTask(uint32_t currentMicros)
     consolePrint(" target = ");
     consolePrint(targetAlpha*360);
     consolePrint(" trim = ");
-    consolePrint(neutralAlpha*360);
+    consolePrint(alphaTrim*360);
 
     /*    
     consolePrint(" param = ");
@@ -2022,14 +2023,12 @@ void controlTask(uint32_t currentMicros)
   // Elevator control
   //
   
-  elevOutput = elevStick;
+  elevOutput = elevStick + elevTrim;
 
   const float maxPitchRate
     = scaleByIAS(paramRecord.pitch_C, stabilityElevExp2_c);
   
-  const float effStick = mode.rxFailSafe ? 0 :
-    applyNullZone(elevStick - (mode.pitchHold ? neutralStick : 0),
-		  &elevPilotInput);
+  const float effStick = mode.rxFailSafe ? 0 : elevStick;
     
   if(!elevPilotInput)
     elevPilotInputPersistCount = 0;
@@ -2042,30 +2041,34 @@ void controlTask(uint32_t currentMicros)
     mixValue(stickStrength_c, shakerAlpha, maxAlpha);
     
   if(mode.rxFailSafe)
-    neutralAlpha = shakerAlpha;
+    alphaTrim = thresholdAlpha;
   
-  const float stickRange_c = (1 - paramRecord.ff_A)/(paramRecord.ff_B*360);
+  stickRange = (1 - paramRecord.ff_A)/(paramRecord.ff_B*360);
 
-  trimRateLimiter.input(neutralAlpha, controlCycle);
+  trimRateLimiter.input(alphaTrim, controlCycle);
     
-  targetAlpha = clamp(trimRateLimiter.output() + effStick*stickRange_c,
+  targetAlpha = clamp(trimRateLimiter.output() + effStick*stickRange,
 		      -paramRecord.alphaMax, effMaxAlpha_c);
-	
-  targetPitchRate = (5 + effStick*30 - pitchAngle)/90 * maxPitchRate;
 
-  if(mode.autoAlpha)
+  if(mode.alphaHold)
     targetPitchRate =
       levelTurnPitchRate(rollAngle, targetAlpha)
-      + (targetAlpha - alpha)*autoAlphaP*maxPitchRate;      
+      + (targetAlpha - alpha)*autoAlphaP*maxPitchRate;
   
+  else if(mode.pitchHold)
+    targetPitchRate = (5 + effStick*30 - pitchAngle)/90 * maxPitchRate;
+
+  else
+    targetPitchRate = effStick * maxPitchRate;
+
   elevOutputFeedForward = paramRecord.ff_A + targetAlpha*paramRecord.ff_B*360;
 
-  if(mode.pitchHold)
+  if(mode.stabilizePitch)
     elevCtrl.input(targetPitchRate - pitchRate, controlCycle);
   else
-    elevCtrl.reset(effStick - elevOutputFeedForward, 0.0);
+    elevCtrl.reset(elevOutput - elevOutputFeedForward, 0.0);
     
-  if(!mode.sensorFailSafe && !mode.takeOff && mode.pitchHold) {
+  if(!mode.sensorFailSafe && !mode.takeOff && mode.stabilizePitch) {
     elevOutput = elevCtrl.output();
 
     static float elevTestBias = 0;
@@ -2077,7 +2080,7 @@ void controlTask(uint32_t currentMicros)
     else
       elevTestBias = elevOutput;
       
-    if(mode.autoAlpha)
+    if(mode.alphaHold)
       elevOutput += elevOutputFeedForward;
   }
 
@@ -2103,12 +2106,12 @@ void controlTask(uint32_t currentMicros)
 
   if(mode.rxFailSafe)
     maxBank = 15.0;
-  else if(mode.autoAlpha)
-    maxBank /= 1 + neutralAlpha / thresholdAlpha;
+  else if(mode.alphaHold)
+    maxBank /= 1 + alphaTrim / thresholdAlpha;
   
   float targetRollRate = maxRollRate*aileStick;
 
-  if(mode.sensorFailSafe || !mode.stabilizer || mode.takeOff) {
+  if(mode.sensorFailSafe || !mode.stabilizeBank || mode.takeOff) {
 
     aileOutput = aileStick;
     
@@ -2242,10 +2245,14 @@ void trimTask(uint32_t currentMicros)
   bool autoTrimActive = 
     elevPilotInputPersistCount > 3*CONTROL_HZ/2 && fabsf(rollAngle) < 15;
   
-  if(trimButton.state() || (mode.autoTrim && autoTrimActive))
-    neutralAlpha +=
-      clamp((fminf(targetAlpha, thresholdAlpha) - neutralAlpha)*3/2/TRIM_HZ,
+  if(trimButton.state() || (mode.autoTrim && autoTrimActive)) {
+    elevTrim +=
+      clamp((elevStick - elevTrim)/TRIM_HZ, -0.15/TRIM_HZ, 0.15/TRIM_HZ);
+    
+    alphaTrim +=
+      clamp((fminf(targetAlpha, thresholdAlpha) - alphaTrim)/TRIM_HZ,
 	    -2.0/360/TRIM_HZ, 2.0/360/TRIM_HZ);
+  }
 }
 
 bool logInitialized = false;
@@ -2338,7 +2345,7 @@ struct Task taskList[] = {
   { trimTask,
     HZ_TO_PERIOD(TRIM_HZ) },
   { configurationTask,
-    HZ_TO_PERIOD(LOG_HZ_CONTROL) },
+    HZ_TO_PERIOD(CONFIG_HZ) },
   { rpmTask,
     HZ_TO_PERIOD(LOG_HZ_CONTROL) },
   { alphaLogTask,
@@ -2475,7 +2482,7 @@ void setup() {
 
   // Misc filters
   
-  alphaFilter.setWindowLen(-1);
+  alphaFilter.setWindowLen(CONFIG_HZ/5);
   ball.setTau(70);
   cycleTimeAcc.setTau(10);
   analLowpass.setTau(2);
