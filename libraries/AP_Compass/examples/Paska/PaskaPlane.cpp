@@ -178,7 +178,7 @@ float iAS, dynPressure, alpha, aileStick, elevStick, throttleStick, rudderStick;
 bool ailePilotInput, elevPilotInput, rudderPilotInput;
 uint32_t controlCycleEnded;
 bool armed = false;
-float elevTrim, alphaTrim, targetAlpha, stickRange;
+float elevTrim, targetAlpha, stickRange;
 float switchValue, tuningKnobValue, rpmOutput;
 Controller elevCtrl, aileCtrl, pushCtrl, rudderCtrl;
 float autoAlphaP, maxAlpha, shakerAlpha, thresholdAlpha, rudderMix;
@@ -360,7 +360,7 @@ void logConfig(void)
     
   logGeneric(lc_target, targetAlpha*360);
   logGeneric(lc_target_pr, targetPitchRate*360);
-  logGeneric(lc_trim, alphaTrim*360);
+  logGeneric(lc_trim, elevTrim*100);
 
   if(testMode) {
     logGeneric(lc_gain, testGain);
@@ -1395,6 +1395,16 @@ float testGainLinear(float start, float stop)
   return testGainLinear(start, stop, parameter);
 }
 
+float elevFromAlpha(float a)
+{
+  return paramRecord.ff_A + paramRecord.ff_B*a*360;
+}
+
+float alphaFromElev(float e)
+{
+  return (e - paramRecord.ff_A)/360/paramRecord.ff_B;
+}
+
 float s_Ku_ref, i_Ku_ref;
 
 const float minAlpha = (-2.0/360);
@@ -1496,10 +1506,10 @@ void configurationTask(uint32_t currentMicros)
 
       autoTestCompleted = false;
 
-      alphaTrim = (alphaTrim - origoAlpha) * 1.0555555 + origoAlpha;
+      //      alphaTrim = (alphaTrim - origoAlpha) * 1.0555555 + origoAlpha;
       
-      if(alphaTrim > shakerAlpha)
-	alphaTrim -= shakerAlpha - minAlpha;
+      //      if(alphaTrim > shakerAlpha)
+      //	alphaTrim -= shakerAlpha - minAlpha;
     }
   } else if(testMode && parameter < 0) {
     testMode = mode.autoTest = false;
@@ -1554,7 +1564,8 @@ void configurationTask(uint32_t currentMicros)
       consoleNoteLn_P(PSTR("Receiver failsafe mode ENABLED"));
       mode.rxFailSafe = true;
       mode.sensorFailSafe = mode.takeOff = false;
-    }
+      elevTrim = elevFromAlpha(thresholdAlpha);
+  }
   } else if(mode.rxFailSafe) {
     consoleNoteLn_P(PSTR("Receiver failsafe mode DISABLED"));
     mode.rxFailSafe = false;
@@ -1591,7 +1602,7 @@ void configurationTask(uint32_t currentMicros)
   
   aileRateLimiter.setRate(paramRecord.servoRate/(90.0/2)/paramRecord.aileDefl);
   flapRateLimiter.setRate(0.5);
-  trimRateLimiter.setRate(1.5/360);
+  trimRateLimiter.setRate(0.25);
   
   // Then apply test modes
   
@@ -1730,13 +1741,15 @@ void configurationTask(uint32_t currentMicros)
   // Take note of neutral stick/alpha
   //
 
+  /*
   alphaFilter.input(alpha);
- 
+
   if(!mode.alphaHold) {
     alphaTrim = clamp(alphaFilter.output(), -maxAlpha, maxAlpha);
-    trimRateLimiter.reset(alphaTrim);
+    trimRateLimiter.reset(elevTrim);
   } else
     elevTrim = clamp(targetAlpha/stickRange, -1, 1);
+  */
 }
 
 void loopTask(uint32_t currentMicros)
@@ -1755,10 +1768,10 @@ void loopTask(uint32_t currentMicros)
     */
     consolePrint(" IAS = ");
     consolePrint(iAS);
-
+    /*
     consolePrint(" swInput = ");
     consolePrint(switchValue);
-    
+    */
     /*    consolePrint(" IAS(rel) = ");
     consolePrint(scaleByIAS(0, 1));
     */
@@ -1821,8 +1834,8 @@ void loopTask(uint32_t currentMicros)
     */
     consolePrint(" target = ");
     consolePrint(targetAlpha*360);
-    consolePrint(" trim = ");
-    consolePrint(alphaTrim*360);
+    consolePrint(" trim% = ");
+    consolePrint(elevTrim*100);
 
     /*    
     consolePrint(" param = ");
@@ -2032,14 +2045,14 @@ void controlTask(uint32_t currentMicros)
   const float effMaxAlpha_c =
     mixValue(stickStrength_c, shakerAlpha, maxAlpha);
     
-  if(mode.rxFailSafe)
-    alphaTrim = thresholdAlpha;
+  //  if(mode.rxFailSafe)
+  //    alphaTrim = thresholdAlpha;
   
   stickRange = (1 - paramRecord.ff_A)/(paramRecord.ff_B*360);
 
-  trimRateLimiter.input(alphaTrim, controlCycle);
+  trimRateLimiter.input(elevTrim, controlCycle);
     
-  targetAlpha = clamp(trimRateLimiter.output() + effStick*stickRange,
+  targetAlpha = clamp(alphaFromElev(trimRateLimiter.output() + effStick),
 		      -paramRecord.alphaMax, effMaxAlpha_c);
 
   if(mode.alphaHold)
@@ -2099,7 +2112,8 @@ void controlTask(uint32_t currentMicros)
   if(mode.rxFailSafe)
     maxBank = 15.0;
   else if(mode.alphaHold)
-    maxBank /= 1 + alphaTrim / thresholdAlpha;
+    //    maxBank /= 1 + alphaTrim / thresholdAlpha;
+    maxBank /= 1 + elevTrim / elevFromAlpha(thresholdAlpha);
   
   float targetRollRate = maxRollRate*aileStick;
 
@@ -2236,11 +2250,15 @@ void trimTask(uint32_t currentMicros)
 {
   if(trimButton.state()) {
     elevTrim +=
-      clamp((elevStick - elevTrim)/TRIM_HZ, -0.15/TRIM_HZ, 0.15/TRIM_HZ);
+      clamp(elevStick/TRIM_HZ, -0.15/TRIM_HZ, 0.15/TRIM_HZ);
+
+    elevTrim = fminf(elevTrim, elevFromAlpha(thresholdAlpha));
     
+    /*    
     alphaTrim +=
       clamp((fminf(targetAlpha, thresholdAlpha) - alphaTrim)/TRIM_HZ,
 	    -2.0/360/TRIM_HZ, 2.0/360/TRIM_HZ);
+    */
   }
 }
 
