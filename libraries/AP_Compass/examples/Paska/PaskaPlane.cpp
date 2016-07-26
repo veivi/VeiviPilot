@@ -2004,7 +2004,7 @@ float levelTurnPitchRate(float bank, float aoa)
   const float zl_c = paramRecord.alphaZeroLift,
     ratio_c = (aoa - zl_c) / (paramRecord.alphaMax - zl_c);
   
-  return square(sin(bank/RAD))
+  return square(square(sin(bank/RAD)))
     *ratio_c*iAS*G/square(paramRecord.iasMin)*RAD/360;
 
   // return G*tan(fabsf(bank)/RAD)/iAS*RAD/360;
@@ -2107,7 +2107,6 @@ void controlTask(uint32_t currentMicros)
   if(mode.rxFailSafe)
     maxBank = 15.0;
   else if(mode.alphaHold)
-    //    maxBank /= 1 + alphaTrim / thresholdAlpha;
     maxBank /= 1 + elevTrim / elevFromAlpha(thresholdAlpha);
   
   float targetRollRate = maxRollRate*aileStick;
@@ -2245,7 +2244,7 @@ void trimTask(uint32_t currentMicros)
 {
   if(trimButton.state())
     elevTrim =
-      clamp(elevTrim + clamp(elevStick/TRIM_HZ, -0.15/TRIM_HZ, 0.15/TRIM_HZ),
+      clamp(elevTrim + clamp(elevStick/TRIM_HZ, -0.125/TRIM_HZ, 0.125/TRIM_HZ),
 	    -1, 1);
 }
 
