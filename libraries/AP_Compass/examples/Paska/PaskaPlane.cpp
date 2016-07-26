@@ -178,7 +178,7 @@ float iAS, dynPressure, alpha, aileStick, elevStick, throttleStick, rudderStick;
 bool ailePilotInput, elevPilotInput, rudderPilotInput;
 uint32_t controlCycleEnded;
 bool armed = false;
-float elevTrim, targetAlpha, stickRange;
+float elevTrim, effTrim, trimAdjust, targetAlpha;
 float switchValue, tuningKnobValue, rpmOutput;
 Controller elevCtrl, aileCtrl, pushCtrl, rudderCtrl;
 float autoAlphaP, maxAlpha, shakerAlpha, thresholdAlpha, rudderMix;
@@ -187,7 +187,6 @@ int cycleTimeCounter = 0;
 uint32_t prevMeasurement;
 float parameter;  
 NewI2C I2c = NewI2C();
-RunningAvgFilter alphaFilter;
 Accumulator ball, cycleTimeAcc;
 AlphaBuffer alphaBuffer, pressureBuffer;
 float controlCycle = 10.0e-3;
@@ -196,7 +195,7 @@ float idleAvg, logBandWidth, ppmFreq, simInputFreq;
 bool looping, consoleConnected = true, simulatorConnected = false;
 uint32_t simTimeStamp;
 RateLimiter aileRateLimiter, flapRateLimiter, trimRateLimiter;
-float elevOutput, elevOutputFeedForward, aileOutput = 0, flapOutput = 0, gearOutput = 0, brakeOutput = 0, rudderOutput = 0;
+float elevOutput, elevWithTrim, elevOutputFeedForward, aileOutput = 0, flapOutput = 0, gearOutput = 0, brakeOutput = 0, rudderOutput = 0;
 int8_t elevMode = 0;
 
 const int maxTests_c = 32;
@@ -1564,8 +1563,8 @@ void configurationTask(uint32_t currentMicros)
       consoleNoteLn_P(PSTR("Receiver failsafe mode ENABLED"));
       mode.rxFailSafe = true;
       mode.sensorFailSafe = mode.takeOff = false;
-      elevTrim = elevFromAlpha(thresholdAlpha);
-  }
+      elevTrim = 1.0;
+    }
   } else if(mode.rxFailSafe) {
     consoleNoteLn_P(PSTR("Receiver failsafe mode DISABLED"));
     mode.rxFailSafe = false;
@@ -1602,7 +1601,7 @@ void configurationTask(uint32_t currentMicros)
   
   aileRateLimiter.setRate(paramRecord.servoRate/(90.0/2)/paramRecord.aileDefl);
   flapRateLimiter.setRate(0.5);
-  trimRateLimiter.setRate(0.25);
+  trimRateLimiter.setRate(0.1);
   
   // Then apply test modes
   
@@ -1741,15 +1740,8 @@ void configurationTask(uint32_t currentMicros)
   // Take note of neutral stick/alpha
   //
 
-  /*
-  alphaFilter.input(alpha);
-
-  if(!mode.alphaHold) {
-    alphaTrim = clamp(alphaFilter.output(), -maxAlpha, maxAlpha);
-    trimRateLimiter.reset(elevTrim);
-  } else
-    elevTrim = clamp(targetAlpha/stickRange, -1, 1);
-  */
+  if(!mode.alphaHold)
+    trimAdjust = elevFromAlpha(alpha) - elevTrim;
 }
 
 void loopTask(uint32_t currentMicros)
@@ -1835,7 +1827,7 @@ void loopTask(uint32_t currentMicros)
     consolePrint(" target = ");
     consolePrint(targetAlpha*360);
     consolePrint(" trim% = ");
-    consolePrint(elevTrim*100);
+    consolePrint(effTrim*100);
 
     /*    
     consolePrint(" param = ");
@@ -2032,32 +2024,35 @@ void controlTask(uint32_t currentMicros)
   //
   // Elevator control
   //
-  
-  elevOutput = elevStick + elevTrim;
 
   const float maxPitchRate
     = scaleByIAS(paramRecord.pitch_C, stabilityElevExp2_c);
   
   const float effStick = mode.rxFailSafe ? 0 : elevStick;
     
+  if(mode.alphaHold)
+    elevTrim =
+      fminf(elevTrim + trimAdjust, elevFromAlpha(thresholdAlpha)) - trimAdjust;
+  
+  effTrim = mode.alphaHold ? (elevTrim+trimAdjust) : elevTrim;
+
+  if(mode.rxFailSafe)
+    trimRateLimiter.input(effTrim, controlCycle);
+  else
+    trimRateLimiter.reset(effTrim);
+
+  elevOutput = elevWithTrim = effStick + trimRateLimiter.output();
+  
   const float fract_c = 1.0/3;
   const float stickStrength_c = fmaxf(effStick-(1-fract_c), 0)/fract_c;
   const float effMaxAlpha_c =
     mixValue(stickStrength_c, shakerAlpha, maxAlpha);
     
-  //  if(mode.rxFailSafe)
-  //    alphaTrim = thresholdAlpha;
-  
-  stickRange = (1 - paramRecord.ff_A)/(paramRecord.ff_B*360);
-
-  trimRateLimiter.input(elevTrim, controlCycle);
-    
-  targetAlpha = clamp(alphaFromElev(trimRateLimiter.output() + effStick),
-		      -paramRecord.alphaMax, effMaxAlpha_c);
+  targetAlpha =
+    clamp(alphaFromElev(elevWithTrim), -paramRecord.alphaMax, effMaxAlpha_c);
 
   if(mode.alphaHold)
-    targetPitchRate =
-      levelTurnPitchRate(rollAngle, targetAlpha)
+    targetPitchRate = levelTurnPitchRate(rollAngle, targetAlpha)
       + (targetAlpha - alpha)*autoAlphaP*maxPitchRate;
   
   else if(mode.pitchHold)
@@ -2248,18 +2243,10 @@ void actuatorTask(uint32_t currentMicros)
 
 void trimTask(uint32_t currentMicros)
 {
-  if(trimButton.state()) {
-    elevTrim +=
-      clamp(elevStick/TRIM_HZ, -0.15/TRIM_HZ, 0.15/TRIM_HZ);
-
-    elevTrim = fminf(elevTrim, elevFromAlpha(thresholdAlpha));
-    
-    /*    
-    alphaTrim +=
-      clamp((fminf(targetAlpha, thresholdAlpha) - alphaTrim)/TRIM_HZ,
-	    -2.0/360/TRIM_HZ, 2.0/360/TRIM_HZ);
-    */
-  }
+  if(trimButton.state())
+    elevTrim =
+      clamp(elevTrim + clamp(elevStick/TRIM_HZ, -0.15/TRIM_HZ, 0.15/TRIM_HZ),
+	    -1, 1);
 }
 
 bool logInitialized = false;
@@ -2489,7 +2476,6 @@ void setup() {
 
   // Misc filters
   
-  alphaFilter.setWindowLen(CONFIG_HZ/5);
   ball.setTau(70);
   cycleTimeAcc.setTau(10);
   analLowpass.setTau(2);
