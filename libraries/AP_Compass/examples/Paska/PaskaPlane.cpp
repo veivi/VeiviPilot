@@ -1563,7 +1563,7 @@ void configurationTask(uint32_t currentMicros)
       consoleNoteLn_P(PSTR("Receiver failsafe mode ENABLED"));
       mode.rxFailSafe = true;
       mode.sensorFailSafe = mode.takeOff = false;
-      elevTrim = 1.0;
+      elevTrim = elevFromAlpha(thresholdAlpha) - trimAdjust;
     }
   } else if(mode.rxFailSafe) {
     consoleNoteLn_P(PSTR("Receiver failsafe mode DISABLED"));
@@ -1999,15 +1999,13 @@ float randomNum(float small, float large)
 
 const float G = 9.81, RAD = 360/2/PI;
 
-float levelTurnPitchRate(float bank, float aoa)
+float levelTurnPitchRate(float bank, float target)
 {
-  const float zl_c = paramRecord.alphaZeroLift,
-    ratio_c = (aoa - zl_c) / (paramRecord.alphaMax - zl_c);
+  const float alphaCL0 = paramRecord.alphaZeroLift,
+    ratio = (target - alphaCL0) / (paramRecord.alphaMax - alphaCL0);
   
   return square(square(sin(bank/RAD)))
-    *ratio_c*iAS*G/square(paramRecord.iasMin)*RAD/360;
-
-  // return G*tan(fabsf(bank)/RAD)/iAS*RAD/360;
+    *ratio*iAS*G/square(paramRecord.iasMin)*RAD/360;
 }
 
 void controlTask(uint32_t currentMicros)
@@ -2029,12 +2027,8 @@ void controlTask(uint32_t currentMicros)
     = scaleByIAS(paramRecord.pitch_C, stabilityElevExp2_c);
   
   const float effStick = mode.rxFailSafe ? 0 : elevStick;
-    
-  if(mode.alphaHold)
-    elevTrim =
-      fminf(elevTrim + trimAdjust, elevFromAlpha(thresholdAlpha)) - trimAdjust;
-  
-  effTrim = mode.alphaHold ? (elevTrim+trimAdjust) : elevTrim;
+
+  effTrim = mode.alphaHold ? elevTrim + trimAdjust : elevTrim;
 
   if(mode.rxFailSafe)
     trimRateLimiter.input(effTrim, controlCycle);
@@ -2043,13 +2037,12 @@ void controlTask(uint32_t currentMicros)
 
   elevOutput = elevWithTrim = effStick + trimRateLimiter.output();
   
-  const float fract_c = 1.0/3;
-  const float stickStrength_c = fmaxf(effStick-(1-fract_c), 0)/fract_c;
-  const float effMaxAlpha_c =
-    mixValue(stickStrength_c, shakerAlpha, maxAlpha);
+  const float fract = 1.0/3;
+  const float stickStrength = fmaxf(effStick-(1-fract), 0)/fract;
+  const float effMaxAlpha = mixValue(stickStrength, shakerAlpha, maxAlpha);
     
   targetAlpha =
-    clamp(alphaFromElev(elevWithTrim), -paramRecord.alphaMax, effMaxAlpha_c);
+    clamp(alphaFromElev(elevWithTrim), -paramRecord.alphaMax, effMaxAlpha);
 
   if(mode.alphaHold)
     targetPitchRate = levelTurnPitchRate(rollAngle, targetAlpha)
@@ -2061,7 +2054,7 @@ void controlTask(uint32_t currentMicros)
   else
     targetPitchRate = effStick * maxPitchRate;
 
-  elevOutputFeedForward = paramRecord.ff_A + targetAlpha*paramRecord.ff_B*360;
+  elevOutputFeedForward = elevFromAlpha(targetAlpha);
 
   if(mode.stabilizePitch)
     elevCtrl.input(targetPitchRate - pitchRate, controlCycle);
@@ -2087,8 +2080,8 @@ void controlTask(uint32_t currentMicros)
   // Pusher
 
   if(!mode.sensorFailSafe && !mode.takeOff && !alphaFailed) {
-    pushCtrl.input(levelTurnPitchRate(rollAngle, effMaxAlpha_c)
-		   + (effMaxAlpha_c - alpha)*autoAlphaP*maxPitchRate
+    pushCtrl.input(levelTurnPitchRate(rollAngle, effMaxAlpha)
+		   + (effMaxAlpha - alpha)*autoAlphaP*maxPitchRate
 		   - pitchRate,
 		   controlCycle);
 
@@ -2246,6 +2239,10 @@ void trimTask(uint32_t currentMicros)
     elevTrim =
       clamp(elevTrim + clamp(elevStick/TRIM_HZ, -0.125/TRIM_HZ, 0.125/TRIM_HZ),
 	    -1, 1);
+  
+  if(mode.alphaHold)
+    elevTrim = fminf(elevTrim + trimAdjust, elevFromAlpha(thresholdAlpha))
+      - trimAdjust;  
 }
 
 bool logInitialized = false;
