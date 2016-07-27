@@ -23,7 +23,7 @@ struct LogChannel logChannels[] = {
    { lc_rudder, "RUDR", -1, 1 },
    { lc_mode, "MODE", 0, 255 },
    { lc_target, "TARG", -180, 180 },
-   { lc_target, "TPRT", -180, 180 },
+   { lc_target_pr, "TPRT", -180, 180 },
    { lc_trim, "TRIM", -180, 180 },
    { lc_gain, "GAIN", 0, 50},
    { lc_test, "TEST", 0, 255},
