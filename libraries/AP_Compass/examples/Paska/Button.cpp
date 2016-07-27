@@ -10,6 +10,13 @@ Button :: Button(float aValue)
   activeValue = aValue;
 }
 
+void Button :: reset()
+{
+  count = 0;
+  pulseSingle = pulseDouble = pulseArmed = 0;
+  pulseStart = 0;
+}
+
 void Button :: input(float inputValue)
 {
   bool inputState = fabs(inputValue - activeValue) < 0.05;
@@ -27,6 +34,7 @@ void Button :: input(float inputValue)
     else if(pulseArmed) {
       if(count > 0) {
 	pulseDouble = true;
+	pulseSingle = false;
 	count = 0;
       } else
 	count = 1;
@@ -55,7 +63,7 @@ bool Button::state(void)
   return stateLazy;
 }  
 
-bool Button::active(void)
+bool Button::depressed(void)
 {
   bool value = stateActive;
   stateActive = false;

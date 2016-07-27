@@ -27,10 +27,10 @@ struct ParamRecord {
   float r_Mix, r_Ku, r_Tu;
   float ff_A, ff_B;
   float wl_Limit;
-  bool c_PID;
   float iasMin;
   float roll_C, pitch_C;
   float servoRate;
+  float takeoffTrim;
   };
 
 struct NVStateRecord {

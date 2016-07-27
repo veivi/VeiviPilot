@@ -6,11 +6,12 @@
 class Button {
 public:
   Button(float activeValue);
+  void reset();
   void input(float);
   bool singlePulse();
   bool doublePulse();
+  bool depressed();
   bool state();
-  bool active();
 
 private:
   float activeValue;

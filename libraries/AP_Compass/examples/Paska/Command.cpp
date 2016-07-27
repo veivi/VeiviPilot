@@ -19,6 +19,7 @@ const struct Command commands[] PROGMEM = {
   { "rmix", c_rmix, e_float, &paramRecord.r_Mix },
   { "edefl", c_edefl, e_angle90, &paramRecord.elevDefl },
   { "eneutral", c_eneutral, e_angle90, &paramRecord.elevNeutral },
+  { "takeoff", c_takeoff, e_percent, &paramRecord.takeoffTrim },
   { "eservo", c_eservo, e_int8, &paramRecord.servoElev },
   { "adefl", c_adefl, e_angle90, &paramRecord.aileDefl },
   { "aneutral", c_aneutral, e_angle90, &paramRecord.aileNeutral },

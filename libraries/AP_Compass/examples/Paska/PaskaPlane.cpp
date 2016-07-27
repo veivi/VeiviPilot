@@ -606,6 +606,10 @@ void executeCommand(const char *buf)
 	*((float*) command.var[i]) = param[i];
 	break;
 
+      case e_percent:
+	*((float*) command.var[i]) = param[i]/100;
+	break;
+
       case e_angle90:
 	*((float*) command.var[i]) = param[i]/90;
 	break;
@@ -1410,7 +1414,30 @@ const float minAlpha = (-2.0/360);
 const float origoAlpha = (-5.0/360);
 
 void configurationTask(uint32_t currentMicros)
-{   
+{
+  //
+  // Are we armed yet or being armed now?
+  //
+  
+  if(!armed) {
+    if(upButton.doublePulse() && aileStick < -0.90 && elevStick > 0.90) {
+      consoleNoteLn_P(PSTR("We're now ARMED"));
+      armed = true;
+      
+      if(!consoleConnected)
+	talk = false;
+
+      downButton.reset();
+      gearButton.reset();
+      trimButton.reset();
+    } else
+      return;
+  }
+  
+  //
+  // We're armed
+  //
+  
   if(gearButton.doublePulse()) {
     if(!mode.sensorFailSafe) {
       consoleNoteLn_P(PSTR("Failsafe ENABLED"));
@@ -1424,23 +1451,16 @@ void configurationTask(uint32_t currentMicros)
       mode.sensorFailSafe = false;
       consoleNoteLn_P(PSTR("Sensor failsafe DISABLED"));
             
-    } else if(!armed && aileStick < -0.90 && elevStick > 0.90) {
-      consoleNoteLn_P(PSTR("We're now ARMED"));
-      armed = true;
-      
-      if(!consoleConnected)
-	talk = false;
-          
     } else {
       if(elevMode > 0) {
 	elevMode--;
 	consoleNote_P(PSTR("Elevator mode DECREMENTED to "));
 	consolePrintLn(elevMode);
 	    
-      } else if(!mode.takeOff && iAS < paramRecord.iasMin / 2) {
+      } else if(!mode.takeOff && iAS < paramRecord.iasMin*2/3) {
 	consoleNoteLn_P(PSTR("TakeOff mode ENABLED"));
 	mode.takeOff = true;
-	elevTrim = 0.2;
+	elevTrim = paramRecord.takeoffTrim;
       }
     }
   }
@@ -1461,8 +1481,8 @@ void configurationTask(uint32_t currentMicros)
     }
   }
 
-  if(upButton.active()) {
-    if(armed && !logEnabled && !consoleConnected)
+  if(upButton.depressed()) {
+    if(!logEnabled && !consoleConnected)
       logEnable();
 
     if(!mode.bankLimiter) {
@@ -1476,8 +1496,8 @@ void configurationTask(uint32_t currentMicros)
     } 
   }
   
-  if(downButton.active()) {
-    if(armed && logEnabled)
+  if(downButton.depressed()) {
+    if(logEnabled)
       logMark();
 
     if(mode.bankLimiter) {
@@ -1545,7 +1565,7 @@ void configurationTask(uint32_t currentMicros)
 
   // TakeOff mode disabled when airspeed detected (or fails)
 
-  if(mode.takeOff && (iasFailed || iAS > paramRecord.iasMin / 2)) {
+  if(mode.takeOff && (iasFailed || iAS > paramRecord.iasMin*2/3)) {
     consoleNoteLn_P(PSTR("TakeOff mode DISABLED"));
     mode.takeOff = false;
   }
@@ -2081,8 +2101,7 @@ void controlTask(uint32_t currentMicros)
 
   if(!mode.sensorFailSafe && !mode.takeOff && !alphaFailed) {
     pushCtrl.input(levelTurnPitchRate(rollAngle, effMaxAlpha)
-		   + (effMaxAlpha - alpha)*autoAlphaP*maxPitchRate
-		   - pitchRate,
+		   + (effMaxAlpha - alpha)*autoAlphaP*maxPitchRate - pitchRate,
 		   controlCycle);
 
     elevOutput = fminf(elevOutput, pushCtrl.output());
@@ -2093,8 +2112,7 @@ void controlTask(uint32_t currentMicros)
   
   // Aileron
 
-  const float maxRollRate
-    = scaleByIAS(paramRecord.roll_C, stabilityAileExp2_c);
+  const float maxRollRate = scaleByIAS(paramRecord.roll_C, stabilityAileExp2_c);
   float maxBank = 45.0;
 
   if(mode.rxFailSafe)
@@ -2109,7 +2127,7 @@ void controlTask(uint32_t currentMicros)
     aileOutput = aileStick;
     
     if(!mode.sensorFailSafe && mode.wingLeveler)
-      aileOutput -= rollAngle/90;
+      aileOutput -= rollAngle/60;
     
     aileCtrl.reset(aileOutput, 0);
     

@@ -35,11 +35,11 @@ const struct ParamRecord paramDefaults = {
   .r_Mix = 0.1, .r_Ku = 0.1, .r_Tu = 0.25,
   .ff_A = 0.0, .ff_B = 0.0,
   .wl_Limit = 0.0,
-  .c_PID = true,
   .iasMin = 12,
   .roll_C = 0.1,
   .pitch_C = 0.1,
-  .servoRate = 60/0.09
+  .servoRate = 60/0.09,
+  .takeoffTrim = 0.25
 };
 
 const struct NVStateRecord stateDefaults = { 0, 128, 1024, 400, 0, false, 0 };
@@ -164,8 +164,8 @@ void printParams()
   consoleNote_P(PSTR("  Alpha (max) = "));
   consolePrint(paramRecord.alphaMax*360);
   consolePrint_P(PSTR(" (CL0) = "));
-  consolePrintLn(paramRecord.alphaZeroLift*360);
-  consoleNote_P(PSTR("  Stall IAS = "));
+  consolePrint(paramRecord.alphaZeroLift*360);
+  consolePrint_P(PSTR(" IAS(alphaMax) = "));
   consolePrintLn(paramRecord.iasMin);
   consoleNote_P(PSTR("  Roll rate K = "));
   consolePrintLn(paramRecord.roll_C);
@@ -175,7 +175,9 @@ void printParams()
   consoleNote_P(PSTR("    deflection = "));
   consolePrint(paramRecord.elevDefl*90);
   consolePrint_P(PSTR(" neutral = "));
-  consolePrintLn(paramRecord.elevNeutral*90);
+  consolePrint(paramRecord.elevNeutral*90);
+  consolePrint_P(PSTR(" trim%(takeoff) = "));
+  consolePrintLn(paramRecord.takeoffTrim*100);
   consoleNoteLn_P(PSTR("  Aileron"));
   consoleNote_P(PSTR("    deflection = "));
   consolePrint(paramRecord.aileDefl*90);
@@ -236,6 +238,10 @@ static void dumpParamEntry(const Command *e)
       
     case e_float:
       consolePrint(*((float*) e->var[i]), 3);
+      break;
+
+    case e_percent:
+      consolePrint(*((float*) e->var[i])*100);
       break;
 
     case e_angle90:
