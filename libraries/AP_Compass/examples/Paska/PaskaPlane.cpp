@@ -195,7 +195,7 @@ float idleAvg, logBandWidth, ppmFreq, simInputFreq;
 bool looping, consoleConnected = true, simulatorConnected = false;
 uint32_t simTimeStamp;
 RateLimiter aileRateLimiter, flapRateLimiter, trimRateLimiter;
-float elevOutput, elevWithTrim, elevOutputFeedForward, aileOutput = 0, flapOutput = 0, gearOutput = 0, brakeOutput = 0, rudderOutput = 0;
+float elevOutput, elevOutputFeedForward, aileOutput = 0, flapOutput = 0, gearOutput = 0, brakeOutput = 0, rudderOutput = 0;
 int8_t elevMode = 0;
 
 const int maxTests_c = 32;
@@ -976,7 +976,7 @@ void sensorTaskFast(uint32_t currentMicros)
   
   // Alpha input
   
-  alpha = alphaBuffer.output();
+  alpha = clamp(alphaBuffer.output(), -1.0/8, 1.0/8);
   
   // Airspeed
   
@@ -1398,14 +1398,14 @@ float testGainLinear(float start, float stop)
   return testGainLinear(start, stop, parameter);
 }
 
-float elevFromAlpha(float a)
+float elevFromAlpha(float x)
 {
-  return paramRecord.ff_A + paramRecord.ff_B*a*360;
+  return paramRecord.ff_A + paramRecord.ff_B*x*360;
 }
 
-float alphaFromElev(float e)
+float alphaFromElev(float x)
 {
-  return (e - paramRecord.ff_A)/360/paramRecord.ff_B;
+  return (x - paramRecord.ff_A)/360/paramRecord.ff_B;
 }
 
 float s_Ku_ref, i_Ku_ref;
@@ -1442,6 +1442,8 @@ void configurationTask(uint32_t currentMicros)
     if(!mode.sensorFailSafe) {
       consoleNoteLn_P(PSTR("Failsafe ENABLED"));
       mode.sensorFailSafe = true;
+      mode.takeOff = false;
+      elevTrim = 0;
     } else
       logDisable();
   }
@@ -1465,7 +1467,7 @@ void configurationTask(uint32_t currentMicros)
     }
   }
   
-  if(downButton.singlePulse() && elevMode < 1) {
+  if(downButton.singlePulse() && !mode.takeOff && elevMode < 1) {
     elevMode++;
     consoleNote_P(PSTR("Elevator mode INCREMENTED to "));
     consolePrintLn(elevMode);
@@ -1589,12 +1591,17 @@ void configurationTask(uint32_t currentMicros)
     consoleNoteLn_P(PSTR("Receiver failsafe mode DISABLED"));
     mode.rxFailSafe = false;
   }
+
+  //
+  // Failsafe configuration
+  //
   
-  if(mode.rxFailSafe) {    
-    // Receiver failsafe mode settings
-    
+  if(mode.rxFailSafe)
     mode.stabilizePitch = mode.alphaHold = mode.bankLimiter = true;
-  }
+  
+  else if(mode.sensorFailSafe)
+    mode.stabilizePitch = mode.stabilizeBank
+      = mode.pitchHold = mode.alphaHold = mode.bankLimiter = false;
 
   // Safety scaling (test mode 0)
   
@@ -1761,7 +1768,9 @@ void configurationTask(uint32_t currentMicros)
   //
 
   if(!mode.alphaHold)
-    trimAdjust = elevFromAlpha(alpha) - elevTrim;
+    trimAdjust =
+      elevFromAlpha(clamp(alpha, paramRecord.alphaZeroLift, maxAlpha))
+      - elevTrim;
 }
 
 void loopTask(uint32_t currentMicros)
@@ -2048,21 +2057,21 @@ void controlTask(uint32_t currentMicros)
   
   const float effStick = mode.rxFailSafe ? 0 : elevStick;
 
-  effTrim = mode.alphaHold ? elevTrim + trimAdjust : elevTrim;
-
   if(mode.rxFailSafe)
-    trimRateLimiter.input(effTrim, controlCycle);
+    trimRateLimiter.input(elevTrim, controlCycle);
   else
-    trimRateLimiter.reset(effTrim);
+    trimRateLimiter.reset(elevTrim);
 
-  elevOutput = elevWithTrim = effStick + trimRateLimiter.output();
+  effTrim = trimRateLimiter.output() + (mode.alphaHold ? trimAdjust : 0);
+
+  elevOutput = effStick + effTrim;
   
   const float fract = 1.0/3;
   const float stickStrength = fmaxf(effStick-(1-fract), 0)/fract;
   const float effMaxAlpha = mixValue(stickStrength, shakerAlpha, maxAlpha);
     
   targetAlpha =
-    clamp(alphaFromElev(elevWithTrim), -paramRecord.alphaMax, effMaxAlpha);
+    clamp(alphaFromElev(elevOutput), -paramRecord.alphaMax, effMaxAlpha);
 
   if(mode.alphaHold)
     targetPitchRate = levelTurnPitchRate(rollAngle, targetAlpha)
@@ -2254,13 +2263,17 @@ void actuatorTask(uint32_t currentMicros)
 void trimTask(uint32_t currentMicros)
 {
   if(trimButton.state())
-    elevTrim =
-      clamp(elevTrim + clamp(elevStick/TRIM_HZ, -0.125/TRIM_HZ, 0.125/TRIM_HZ),
-	    -1, 1);
+    elevTrim += clamp(elevStick/TRIM_HZ, -0.125/TRIM_HZ, 0.125/TRIM_HZ);
+
+  const float trimMin = -0.20, trimMax = 0.80;
   
-  if(mode.alphaHold)
-    elevTrim = fminf(elevTrim + trimAdjust, elevFromAlpha(thresholdAlpha))
-      - trimAdjust;  
+  if(!mode.alphaHold)
+    elevTrim = clamp(elevTrim, trimMin, trimMax);
+  
+  else
+    elevTrim = clamp(elevTrim,
+		     trimMin - trimAdjust,
+		     elevFromAlpha(thresholdAlpha) - trimAdjust);
 }
 
 bool logInitialized = false;
