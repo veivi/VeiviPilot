@@ -1,4 +1,3 @@
-
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -6,6 +5,7 @@
 #include <math.h>
 #include <avr/interrupt.h>
 #include <avr/io.h>
+#include "Status.h"
 #include "Filter.h"
 #include "Console.h"
 #include "Controller.h"
@@ -33,6 +33,8 @@ const float stabilityElevExp1_c = -1.5;
 const float stabilityElevExp2_c = 0.0;
 const float stabilityAileExp1_c = -1.5;
 const float stabilityAileExp2_c = 0.5;
+
+const float G = 9.81, RAD = 360/2/PI;
 
 const AP_HAL::HAL& hal = AP_HAL_BOARD_DRIVER;
 AP_HAL::BetterStream* cliSerial;
@@ -109,13 +111,13 @@ const struct PWMOutput pwmOutput[] = {
 // Function to servo output mapping
 //
 
-#define aileHandle     (paramRecord.servoAile < 0 ? NULL : (&pwmOutput[paramRecord.servoAile]))
-#define elevatorHandle (paramRecord.servoElev < 0 ? NULL : (&pwmOutput[paramRecord.servoElev]))
-#define flapHandle     (paramRecord.servoFlap < 0 ? NULL : (&pwmOutput[paramRecord.servoFlap]))
-#define flap2Handle    (paramRecord.servoFlap2 < 0 ? NULL : (&pwmOutput[paramRecord.servoFlap2]))
-#define gearHandle     (paramRecord.servoGear < 0 ? NULL : (&pwmOutput[paramRecord.servoGear]))
-#define brakeHandle    (paramRecord.servoBrake < 0 ? NULL : (&pwmOutput[paramRecord.servoBrake]))
-#define rudderHandle   (paramRecord.servoRudder < 0 ? NULL : (&pwmOutput[paramRecord.servoRudder]))
+#define aileHandle     (vpParam.servoAile < 0 ? NULL : (&pwmOutput[vpParam.servoAile]))
+#define elevatorHandle (vpParam.servoElev < 0 ? NULL : (&pwmOutput[vpParam.servoElev]))
+#define flapHandle     (vpParam.servoFlap < 0 ? NULL : (&pwmOutput[vpParam.servoFlap]))
+#define flap2Handle    (vpParam.servoFlap2 < 0 ? NULL : (&pwmOutput[vpParam.servoFlap2]))
+#define gearHandle     (vpParam.servoGear < 0 ? NULL : (&pwmOutput[vpParam.servoGear]))
+#define brakeHandle    (vpParam.servoBrake < 0 ? NULL : (&pwmOutput[vpParam.servoBrake]))
+#define rudderHandle   (vpParam.servoRudder < 0 ? NULL : (&pwmOutput[vpParam.servoRudder]))
 
 //
 // Periodic task stuff
@@ -140,6 +142,10 @@ struct Task {
 #define HZ_TO_PERIOD(f) ((uint32_t) (1.0e6/(f)))
 
 struct ModeRecord {
+  bool test;
+  bool rattle;
+  bool loop;
+  bool alphaFailSafe;
   bool sensorFailSafe;
   bool rxFailSafe;
   bool stabilizeBank;
@@ -151,9 +157,8 @@ struct ModeRecord {
   bool autoBall;
   bool takeOff;
   bool autoTest;
+  bool alwaysLog;
 };
-
-struct ModeRecord mode;
 
 struct GPSFix {
   float altitude;
@@ -163,12 +168,11 @@ struct GPSFix {
   float speed;
 };
 
+struct ModeRecord vpMode;
+struct StatusRecord vpStatus;
 struct GPSFix gpsFix;
 
-bool testMode = false;
-bool rattling = false;
 float testGain = 0;
-bool iasFailed = false, iasWarn = false, alphaFailed = false, alphaWarn = false;
 const int cycleTimeWindow = 31;
 float cycleTimeStore[cycleTimeWindow];
 int cycleTimePtr = 0;
@@ -177,7 +181,6 @@ float cycleMin = -1.0, cycleMax = -1.0, cycleMean = -1.0;
 float iAS, dynPressure, alpha, aileStick, elevStick, throttleStick, rudderStick;
 bool ailePilotInput, elevPilotInput, rudderPilotInput;
 uint32_t controlCycleEnded;
-bool armed = false;
 float elevTrim, effTrim, trimAdjust, targetAlpha;
 float switchValue, tuningKnobValue, rpmOutput;
 Controller elevCtrl, aileCtrl, pushCtrl, rudderCtrl;
@@ -187,16 +190,14 @@ int cycleTimeCounter = 0;
 uint32_t prevMeasurement;
 float parameter;  
 NewI2C I2c = NewI2C();
-Accumulator ball, cycleTimeAcc;
+Accumulator ball, cycleTimeAcc, iasFilterSlow, iasFilter, accFilter;
 AlphaBuffer alphaBuffer, pressureBuffer;
 float controlCycle = 10.0e-3;
 uint32_t idleMicros;
 float idleAvg, logBandWidth, ppmFreq, simInputFreq;
-bool looping, consoleConnected = true, simulatorConnected = false;
 uint32_t simTimeStamp;
 RateLimiter aileRateLimiter, flapRateLimiter, trimRateLimiter;
 float elevOutput, elevOutputFeedForward, aileOutput = 0, flapOutput = 0, gearOutput = 0, brakeOutput = 0, rudderOutput = 0;
-int8_t elevMode = 0;
 
 const int maxTests_c = 32;
 float autoTestIAS[maxTests_c], autoTestK[maxTests_c], autoTestT[maxTests_c], autoTestKxIAS[maxTests_c];
@@ -228,13 +229,13 @@ float testPertub()
 
 bool testPertubActive()
 {
-  return testMode && mode.autoTest
+  return vpMode.test && vpMode.autoTest
     && (testState == pert0_c || testState == pert1_c);
 }
 
 bool testActive()
 {
-  return testMode && mode.autoTest
+  return vpMode.test && vpMode.autoTest
     && testState != idle_c && testState != start_c && testState != trim_c;
 }
 
@@ -261,15 +262,15 @@ void executeCommand(const char *buf);
 
 struct SimLinkSensor sensorData;
 uint16_t simFrames;
-  int linkDownCount = 0, heartBeatCount = 0;
+int linkDownCount = 0, heartBeatCount = 0;
   
 void datagramInterpreter(uint8_t t, const uint8_t *data, int size)
 {  
   switch(t) {
   case DG_HEARTBEAT:
-    if(!consoleConnected) {
+    if(!vpStatus.consoleLink) {
       consoleNoteLn_P(PSTR("Console CONNECTED"));
-      consoleConnected = true;
+      vpStatus.consoleLink = true;
     }
     heartBeatCount++;
     linkDownCount = 0;
@@ -280,10 +281,10 @@ void datagramInterpreter(uint8_t t, const uint8_t *data, int size)
     break;
 
   case DG_SIMLINK:
-    if(consoleConnected && size == sizeof(sensorData)) {
-      if(!simulatorConnected) {
+    if(vpStatus.consoleLink && size == sizeof(sensorData)) {
+      if(!vpStatus.simulatorLink) {
 	consoleNoteLn_P(PSTR("Simulator CONNECTED"));
-	simulatorConnected = true;
+	vpStatus.simulatorLink = true;
       }
 
       memcpy(&sensorData, data, sizeof(sensorData));
@@ -351,19 +352,19 @@ void logAlpha(void)
 void logConfig(void)
 {
   logGeneric(lc_mode, 
-    (mode.rxFailSafe ? 32 : 0) 
-    + (mode.sensorFailSafe ? 16 : 0) 
-    + (mode.wingLeveler ? 8 : 0) 
-    + (mode.bankLimiter ? 4 : 0) 
-    + (mode.alphaHold ? 1 : 0)); 
+    (vpMode.rxFailSafe ? 32 : 0) 
+    + (vpMode.sensorFailSafe ? 16 : 0) 
+    + (vpMode.wingLeveler ? 8 : 0) 
+    + (vpMode.bankLimiter ? 4 : 0) 
+    + (vpMode.alphaHold ? 1 : 0)); 
     
   logGeneric(lc_target, targetAlpha*360);
   logGeneric(lc_target_pr, targetPitchRate*360);
   logGeneric(lc_trim, elevTrim*100);
 
-  if(testMode) {
+  if(vpMode.test) {
     logGeneric(lc_gain, testGain);
-    logGeneric(lc_test, stateRecord.testChannel);
+    logGeneric(lc_test, nvState.testChannel);
   } else {
     logGeneric(lc_gain, 0);
     logGeneric(lc_test, 0);
@@ -448,7 +449,7 @@ void rpmMeasure(bool on)
 bool readAlpha_5048B(int16_t *result) {
   uint16_t raw = 0;
   
-  if(alphaFailed)
+  if(vpStatus.alphaFailed)
     // Stop trying
     
     return false;
@@ -460,7 +461,7 @@ bool readAlpha_5048B(int16_t *result) {
   // The value is good, use it
 
   if(result)
-    *result = (int16_t) (raw - paramRecord.alphaRef);
+    *result = (int16_t) (raw - vpParam.alphaRef);
   
   return true;
 }
@@ -470,9 +471,9 @@ bool readPressure(int16_t *result)
   static uint32_t acc;
   static int accCount;
   static bool done = false;
-  const int log2CalibWindow = 9;
+  const int log2CalibWindow = 8;
   
-  if(iasFailed)
+  if(vpStatus.iasFailed)
     // Stop trying
     return false;
   
@@ -491,7 +492,7 @@ bool readPressure(int16_t *result)
     done = true;
     
     if(result)
-      *result = (raw - (acc>>log2CalibWindow))<<2;
+      *result = (raw<<2) - (acc>>(log2CalibWindow - 2));
   }
   
   return true;
@@ -523,8 +524,8 @@ void executeCommand(const char *buf)
   consolePrintLn("");
 
   if(bufLen < 1) {
-    looping = false;
-    calibStop(stateRecord.rxMin, stateRecord.rxCenter, stateRecord.rxMax);
+    vpMode.loop = false;
+    calibStop(nvState.rxMin, nvState.rxCenter, nvState.rxMax);
     return;
   }
   
@@ -626,45 +627,45 @@ void executeCommand(const char *buf)
     
     switch(command.token) {
     case c_atrim:
-      paramRecord.aileNeutral += paramRecord.aileDefl*param[0];
+      vpParam.aileNeutral += vpParam.aileDefl*param[0];
       break;
       
     case c_etrim:
-      paramRecord.elevNeutral += paramRecord.elevDefl*param[0];
+      vpParam.elevNeutral += vpParam.elevDefl*param[0];
       break;
       
     case c_rtrim:
-      paramRecord.rudderNeutral += paramRecord.rudderDefl*param[0];
+      vpParam.rudderNeutral += vpParam.rudderDefl*param[0];
       break;
       
     case c_arm:
-      rattling = false;
-      armed = true;
+      vpMode.rattle = false;
+      vpStatus.armed = true;
       break;
     
     case c_rattle:
-      rattling = true;
-      armed = false;
+      vpMode.rattle = true;
+      vpStatus.armed = false;
       break;
     
     case c_disarm:
-      armed = false;
+      vpStatus.armed = false;
       consoleNoteLn_P(PSTR("We're DISARMED"));
       break;
     
     case c_talk:
-      talk = true;
+      vpStatus.silent = false;
       consoleNoteLn_P(PSTR("Hello world"));
       break;
     
     case c_test:
       if(numParams > 0) {
-	stateRecord.testChannel = param[0];
+	nvState.testChannel = param[0];
 	storeNVState();
       }
 
       consoleNote_P(PSTR("Current test channel = "));
-      consolePrintLn(stateRecord.testChannel);
+      consolePrintLn(nvState.testChannel);
       break;
 
     case c_calibrate:
@@ -674,39 +675,39 @@ void executeCommand(const char *buf)
 
     case c_rollrate:
       if(numParams > 0) {
-	paramRecord.roll_C
-	  = param[0]/360/powf(paramRecord.iasMin, stabilityAileExp2_c);
+	vpParam.roll_C
+	  = param[0]/360/powf(vpParam.iasMin, stabilityAileExp2_c);
 	consoleNote_P(PSTR("Roll rate K = "));
-	consolePrintLn(paramRecord.roll_C);
+	consolePrintLn(vpParam.roll_C);
 	storeNVState();
       }
       break;
           
     case c_pitchrate:
       if(numParams > 0) {
-	paramRecord.pitch_C
-	  = param[0]/360/powf(paramRecord.iasMin, stabilityElevExp2_c);
+	vpParam.pitch_C
+	  = param[0]/360/powf(vpParam.iasMin, stabilityElevExp2_c);
 	consoleNote_P(PSTR("Pitch rate K = "));
-	consolePrintLn(paramRecord.pitch_C);
+	consolePrintLn(vpParam.pitch_C);
 	storeNVState();
       }
       break;
           
     case c_zero:
-      paramRecord.alphaRef += (int16_t) ((1L<<16) * alpha);
+      vpParam.alphaRef += (int16_t) ((1L<<16) * alpha);
       consoleNoteLn_P(PSTR("Alpha zero set"));
       break;
 
     case c_alpha:
       if(numParams > 0) {
-	paramRecord.alphaRef +=
+	vpParam.alphaRef +=
 	  (int16_t) ((1L<<16) * (alpha - (float) param[0] / 360));
 	consoleNoteLn_P(PSTR("Alpha calibrated"));
       }
       break;
 
     case c_loop:
-      looping = true;
+      vpMode.loop = true;
       rpmMeasure(true);
       break;
     
@@ -722,14 +723,7 @@ void executeCommand(const char *buf)
       storeNVState();
       break;
 
-      
     case c_dump:
-      if(numParams > 0)
-	logDump(param[0]);
-      else
-	logDump(-1);
-      break;
-    
     case c_dumpz:
       logDumpBinary();
       break;
@@ -740,11 +734,11 @@ void executeCommand(const char *buf)
 
     case c_stamp:
       if(numParams > 0) {
-	stateRecord.logStamp = param[0];
+	nvState.logStamp = param[0];
 	storeNVState();
       }
       consoleNote_P(PSTR("Current log stamp is "));
-      consolePrintLn(stateRecord.logStamp);  
+      consolePrintLn(nvState.logStamp);  
       break;
 
     case c_model:
@@ -755,13 +749,13 @@ void executeCommand(const char *buf)
 	storeNVState();
       } else { 
 	consoleNote_P(PSTR("Current model is "));
-	consolePrintLn(stateRecord.model); 
+	consolePrintLn(nvState.model); 
       }
       break;
     
    case c_params:
      consoleNote_P(PSTR("SETTINGS (MODEL "));
-      consolePrint(stateRecord.model);
+      consolePrint(nvState.model);
       consolePrintLn(")");
       printParams();
       break;
@@ -781,6 +775,10 @@ void executeCommand(const char *buf)
       logEnable();
       break;
 
+    case c_log:
+      vpMode.alwaysLog = true;
+      break;
+      
     case c_cycle:
       cycleTimeCounter = 0;
       break;
@@ -794,7 +792,7 @@ void executeCommand(const char *buf)
       consolePrintLn(simInputFreq);
       consoleNote_P(PSTR("Alpha = "));
       consolePrint(360*alpha);
-      if(alphaFailed)
+      if(vpStatus.alphaFailed)
 	consolePrintLn_P(PSTR(" FAIL"));
       else
 	consolePrintLn_P(PSTR(" OK"));
@@ -813,7 +811,7 @@ void executeCommand(const char *buf)
       consoleNote_P(PSTR("Warning flags :"));
       if(pciWarn)
 	consolePrint_P(PSTR(" SPURIOUS_PCINT"));
-      if(alphaWarn)
+      if(vpStatus.alphaWarn)
 	consolePrint_P(PSTR(" ALPHA_SENSOR"));
       if(ppmWarnShort)
 	consolePrint_P(PSTR(" PPM_SHORT"));
@@ -823,9 +821,9 @@ void executeCommand(const char *buf)
 	consolePrint_P(PSTR(" EEPROM"));
       if(eepromFailed)
 	consolePrint_P(PSTR(" EEPROM_FAILED"));
-      if(iasWarn)
+      if(vpStatus.iasWarn)
 	consolePrint_P(PSTR(" IAS_WARN"));
-      if(iasFailed)
+      if(vpStatus.iasFailed)
 	consolePrint_P(PSTR(" IAS_FAILED"));
       if(alphaBuffer.warn)
 	consolePrint_P(PSTR(" ALPHA_BUFFER"));
@@ -844,17 +842,17 @@ void executeCommand(const char *buf)
       break;
 
     case c_reset:
-      pciWarn = alphaWarn = alphaFailed = pushCtrl.warn = elevCtrl.warn
+      pciWarn = vpStatus.alphaWarn = vpStatus.alphaFailed = pushCtrl.warn = elevCtrl.warn
 	= alphaBuffer.warn = eepromWarn = eepromFailed = ppmWarnShort
 	= ppmWarnSlow = aileCtrl.warn = false;
       consoleNoteLn_P(PSTR("Warning flags reset"));
       break;
     
     case c_rpm:
-      stateRecord.logRPM = param[0] > 0.5 ? true : false;
+      nvState.logRPM = param[0] > 0.5 ? true : false;
       consoleNote_P(PSTR("RPM logging "));
-      consolePrintLn(stateRecord.logRPM ? "ENABLED" : "DISABLED");
-      rpmMeasure(stateRecord.logRPM);
+      consolePrintLn(nvState.logRPM ? "ENABLED" : "DISABLED");
+      rpmMeasure(nvState.logRPM);
       storeNVState();
       break;
       
@@ -869,7 +867,7 @@ void executeCommand(const char *buf)
 
 float scaleByIAS(float k, float p)
 {
-  return k * powf(fmax(iAS, paramRecord.iasMin), p);
+  return k * powf(fmax(iasFilter.output(), vpParam.iasMin), p);
 }
 
 void cacheTask(uint32_t currentMicros)
@@ -898,7 +896,7 @@ void alphaTask(uint32_t currentMicros)
   int16_t raw = 0;
   static int failCount = 0;
   
-  if(!handleFailure("alpha", !readAlpha_5048B(&raw), &alphaWarn, &alphaFailed, &failCount))
+  if(!handleFailure("alpha", !readAlpha_5048B(&raw), &vpStatus.alphaWarn, &vpStatus.alphaFailed, &failCount))
     alphaBuffer.input((float) raw / (1L<<(8*sizeof(raw))));
 }
 
@@ -907,7 +905,7 @@ void airspeedTask(uint32_t currentMicros)
   int16_t raw = 0;
   static int failCount = 0;
   
-  if(!handleFailure("airspeed", !readPressure(&raw), &iasWarn, &iasFailed, &failCount))
+  if(!handleFailure("airspeed", !readPressure(&raw), &vpStatus.iasWarn, &vpStatus.iasFailed, &failCount))
     pressureBuffer.input((float) raw);
 }
 
@@ -957,7 +955,7 @@ void receiverTask(uint32_t currentMicros)
 
 void sensorTaskFast(uint32_t currentMicros)
 {
-  if(simulatorConnected) {
+  if(vpStatus.simulatorLink) {
     // We take sensor inputs from the simulator (sensorData record)
 
     alpha = sensorData.alpha/360;
@@ -968,8 +966,14 @@ void sensorTaskFast(uint32_t currentMicros)
     rollAngle = sensorData.roll;
     pitchAngle = sensorData.pitch;
     heading = sensorData.heading;
-    
+    accX = sensorData.accx*12*0.0254;
+    accY = sensorData.accy*12*0.0254;
+    accZ = sensorData.accz*12*0.0254;
+
     dynPressure = square(iAS)/2;
+
+    iasFilter.input(iAS);
+    iasFilterSlow.input(iAS);
     
     return;
   }
@@ -986,10 +990,13 @@ void sensorTaskFast(uint32_t currentMicros)
   dynPressure = pressureBuffer.output() * factor_c;
   
   if(dynPressure > 0)
-    iAS = sqrt(2*dynPressure);
+    iAS = sqrtf(2*dynPressure);
   else
     iAS = 0;
   
+  iasFilter.input(iAS);
+  iasFilterSlow.input(iAS);
+    
   // Attitude
 
   ins.wait_for_sample();
@@ -1024,10 +1031,28 @@ void sensorTaskSlow(uint32_t currentMicros)
 {
   // Altitude
 
-  if(simulatorConnected)
+  if(vpStatus.simulatorLink)
     altitude = 12*25.4*sensorData.alt / 1000;
   else
     altitude = (float) barometer.get_altitude();
+}
+
+void sensorMonitorTask(uint32_t currentMicros)
+{
+  static uint32_t iasLastAlive;
+
+  if(fabsf(iAS - iasFilterSlow.output()) > 0.5) {
+    if(vpStatus.pitotBlocked) {
+      consoleNoteLn_P(PSTR("IAS sensor block CLEARED"));
+      vpStatus.pitotBlocked = false;
+    }
+    
+    iasLastAlive = currentMicros;
+  } else if(!vpStatus.simulatorLink
+	    && currentMicros - iasLastAlive > 10.0e6 && !vpStatus.pitotBlocked) {
+    consoleNoteLn_P(PSTR("IAS sensor appears BLOCKED"));
+    vpStatus.pitotBlocked = true;
+  }
 }
 
 void rpmTask(uint32_t currentMicros)
@@ -1163,7 +1188,7 @@ void testStateMachine(uint32_t currentMicros)
 {
   static uint32_t nextTransition;
 
-  if(!testMode || !mode.autoTest) {
+  if(!vpMode.test || !vpMode.autoTest) {
     nextTransition = 0;
     testState = idle_c;
     return;
@@ -1242,7 +1267,7 @@ void testStateMachine(uint32_t currentMicros)
       consolePrintLn(finalKxIAS);
 
       testState = idle_c;
-      testMode = mode.autoTest = false;
+      vpMode.test = vpMode.autoTest = false;
       autoTestCompleted = true;
     }
     break;
@@ -1257,7 +1282,7 @@ float upSwing, downSwing, prevUpSwing, prevDownSwing;
 
 void analyzerTask(uint32_t currentMicros)
 {
-  if(!testMode || !mode.autoTest)
+  if(!vpMode.test || !vpMode.autoTest)
     return;
   
   switch(analyzerInputCh) {
@@ -1398,16 +1423,6 @@ float testGainLinear(float start, float stop)
   return testGainLinear(start, stop, parameter);
 }
 
-float elevFromAlpha(float x)
-{
-  return paramRecord.ff_A + paramRecord.ff_B*x*360;
-}
-
-float alphaFromElev(float x)
-{
-  return (x - paramRecord.ff_A)/360/paramRecord.ff_B;
-}
-
 float s_Ku_ref, i_Ku_ref;
 
 const float minAlpha = (-2.0/360);
@@ -1419,13 +1434,13 @@ void configurationTask(uint32_t currentMicros)
   // Are we armed yet or being armed now?
   //
   
-  if(!armed) {
+  if(!vpStatus.armed) {
     if(upButton.doublePulse() && aileStick < -0.90 && elevStick > 0.90) {
       consoleNoteLn_P(PSTR("We're now ARMED"));
-      armed = true;
+      vpStatus.armed = true;
       
-      if(!consoleConnected)
-	talk = false;
+      if(!vpStatus.consoleLink)
+	vpStatus.silent = true;
 
       downButton.reset();
       gearButton.reset();
@@ -1435,42 +1450,121 @@ void configurationTask(uint32_t currentMicros)
   }
   
   //
-  // We're armed
+  // Flight detection
+  //
+
+  static uint32_t lastNegativeIAS;
+
+  if(vpStatus.pitotBlocked || iasFilter.output() < vpParam.iasMin/2) {
+    if(vpStatus.positiveIAS) {
+      consoleNoteLn_P(PSTR("Positive airspeed LOST"));
+      vpStatus.positiveIAS = false;
+    }
+    
+    lastNegativeIAS = currentMicros;
+
+  } else if(currentMicros - lastNegativeIAS > 1e6 && !vpStatus.positiveIAS) {
+    consoleNoteLn_P(PSTR("We have POSITIVE AIRSPEED"));
+    vpStatus.positiveIAS = true;
+  }
+  
+  float turnRate = fabsf(rollRate) + fabsf(pitchRate) + fabsf(yawRate);
+  float acceleration = sqrtf(square(accX) + square(accY) + square(accZ));
+
+  accFilter.input(acceleration);
+  
+  bool motionDetected = vpStatus.positiveIAS || turnRate > 3.0/360
+    || fabsf(acceleration - accFilter.output()) > 0.3;
+  
+  static uint32_t lastMotion;
+
+  if(motionDetected) {
+    if(vpStatus.fullStop) {
+      consoleNoteLn_P(PSTR("We appear to be MOVING"));
+      vpStatus.fullStop = false;
+    }
+    
+    lastMotion = currentMicros;
+
+  } else if(currentMicros - lastMotion > 10.0e6 && !vpStatus.fullStop) {
+    consoleNoteLn_P(PSTR("We have FULLY STOPPED"));
+    vpStatus.fullStop = true;
+  }
+
+  //
+  // Logging control
+  //
+
+  if(!vpStatus.fullStop && vpStatus.positiveIAS
+     && (!vpStatus.consoleLink || vpMode.alwaysLog))
+    logEnable();
+  
+  else if(vpStatus.fullStop)
+    logDisable();
+    
+  //
+  // Configuration control
   //
   
   if(gearButton.doublePulse()) {
-    if(!mode.sensorFailSafe) {
-      consoleNoteLn_P(PSTR("Failsafe ENABLED"));
-      mode.sensorFailSafe = true;
-      mode.takeOff = false;
+    if(!vpMode.alphaFailSafe) {
+      consoleNoteLn_P(PSTR("Alpha FAILSAFE"));
+      vpMode.alphaFailSafe = true;
+      logMark();
+      
+    } else if(!vpMode.sensorFailSafe) {
+      consoleNoteLn_P(PSTR("Total sensor FAILSAFE"));
+      vpMode.sensorFailSafe = true;
       elevTrim = 0;
-    } else
+      logMark();
+      
+    } else if(!vpStatus.positiveIAS)
       logDisable();
   }
   
   if(upButton.singlePulse()) {
-    if(mode.sensorFailSafe) {
-      mode.sensorFailSafe = false;
-      consoleNoteLn_P(PSTR("Sensor failsafe DISABLED"));
+    if(vpMode.alphaFailSafe || vpMode.sensorFailSafe) {
+      vpMode.alphaFailSafe = vpMode.sensorFailSafe = false;
+      consoleNoteLn_P(PSTR("Alpha/Sensor failsafe DISABLED"));
             
     } else {
-      if(elevMode > 0) {
-	elevMode--;
-	consoleNote_P(PSTR("Elevator mode DECREMENTED to "));
-	consolePrintLn(elevMode);
-	    
-      } else if(!mode.takeOff && iAS < paramRecord.iasMin*2/3) {
+      if(vpMode.alphaHold) {
+	vpMode.alphaHold = false;
+	consoleNoteLn_P(PSTR("Alpha hold DISABLED"));
+	
+      } else if(!vpMode.takeOff && iasFilter.output() < vpParam.iasMin*2/3) {
 	consoleNoteLn_P(PSTR("TakeOff mode ENABLED"));
-	mode.takeOff = true;
-	elevTrim = paramRecord.takeoffTrim;
+	vpMode.takeOff = true;
+	elevTrim = vpParam.takeoffTrim;
       }
+    }
+
+    logMark();
+  }
+  
+  if(downButton.singlePulse()) {
+    if(vpMode.bankLimiter) {
+      consoleNoteLn_P(PSTR("Bank limiter DISABLED"));
+      vpMode.wingLeveler = vpMode.bankLimiter = false;
     }
   }
   
-  if(downButton.singlePulse() && !mode.takeOff && elevMode < 1) {
-    elevMode++;
-    consoleNote_P(PSTR("Elevator mode INCREMENTED to "));
-    consolePrintLn(elevMode);
+  if(upButton.depressed()) {
+    if(!vpMode.bankLimiter) {
+      consoleNoteLn_P(PSTR("Bank limiter ENABLED"));
+      vpMode.bankLimiter = true;
+    }
+	
+    if(!vpMode.wingLeveler) {
+      consoleNoteLn_P(PSTR("Wing leveler ENABLED"));
+      vpMode.wingLeveler = true;
+    } 
+  }
+  
+  if(downButton.depressed() && !vpMode.takeOff && !vpMode.alphaHold) {
+    consoleNoteLn_P(PSTR("Alpha hold ENABLED"));
+    vpMode.alphaHold = true;
+    logMark();
   }
 
   if(gearButton.singlePulse()) {
@@ -1483,37 +1577,12 @@ void configurationTask(uint32_t currentMicros)
     }
   }
 
-  if(upButton.depressed()) {
-    if(!logEnabled && !consoleConnected)
-      logEnable();
-
-    if(!mode.bankLimiter) {
-      consoleNoteLn_P(PSTR("Bank limiter ENABLED"));
-      mode.bankLimiter = true;
-    }
-	
-    if(!mode.wingLeveler) {
-      consoleNoteLn_P(PSTR("Wing leveler ENABLED"));
-      mode.wingLeveler = true;
-    } 
-  }
-  
-  if(downButton.depressed()) {
-    if(logEnabled)
-      logMark();
-
-    if(mode.bankLimiter) {
-      consoleNoteLn_P(PSTR("Bank limiter DISABLED"));
-      mode.wingLeveler = mode.bankLimiter = false;
-    }
-  }
-  
   // Test parameter
 
   parameter = readParameter();
 
-  if(!testMode && parameter > 0.5) {
-    testMode = true;
+  if(!vpMode.test && parameter > 0.5) {
+    vpMode.test = true;
     consoleNoteLn_P(PSTR("Test mode ENABLED"));
 
     if(autoTestCompleted) {
@@ -1532,8 +1601,8 @@ void configurationTask(uint32_t currentMicros)
       //      if(alphaTrim > shakerAlpha)
       //	alphaTrim -= shakerAlpha - minAlpha;
     }
-  } else if(testMode && parameter < 0) {
-    testMode = mode.autoTest = false;
+  } else if(vpMode.test && parameter < 0) {
+    vpMode.test = vpMode.autoTest = false;
     consoleNoteLn_P(PSTR("Test mode DISABLED"));
 
     if(autoTestCount > 0) {
@@ -1560,84 +1629,90 @@ void configurationTask(uint32_t currentMicros)
 
   // Wing leveler disable when stick input detected
   
-  if(mode.wingLeveler && ailePilotInput) {
+  if(vpMode.wingLeveler && ailePilotInput) {
     consoleNoteLn_P(PSTR("Wing leveler DISABLED"));
-    mode.wingLeveler = false;
+    vpMode.wingLeveler = false;
   }
 
   // TakeOff mode disabled when airspeed detected (or fails)
 
-  if(mode.takeOff && (iasFailed || iAS > paramRecord.iasMin*2/3)) {
+  if(vpMode.takeOff && (vpStatus.iasFailed
+			|| iasFilter.output() > vpParam.iasMin*2/3)) {
     consoleNoteLn_P(PSTR("TakeOff mode DISABLED"));
-    mode.takeOff = false;
+    vpMode.takeOff = false;
   }
 
   // Mode-to-feature mapping: first nominal values
       
-  mode.stabilizeBank = true;
-  mode.stabilizePitch = mode.alphaHold = (elevMode > 0);
-  mode.pitchHold = mode.autoBall = false;
+  vpMode.stabilizeBank = true;
+  vpMode.stabilizePitch = vpMode.alphaHold;
+  vpMode.pitchHold = vpMode.autoBall = false;
   
   // Receiver fail detection
 
   if(switchValue > 0.90 && aileStick < -0.90 && elevStick > 0.90) {
-    if(!mode.rxFailSafe) {
+    if(!vpMode.rxFailSafe) {
       consoleNoteLn_P(PSTR("Receiver failsafe mode ENABLED"));
-      mode.rxFailSafe = true;
-      mode.sensorFailSafe = mode.takeOff = false;
+      vpMode.rxFailSafe = true;
+      vpMode.alphaFailSafe = vpMode.sensorFailSafe = vpMode.takeOff = false;
       elevTrim = elevFromAlpha(thresholdAlpha) - trimAdjust;
     }
-  } else if(mode.rxFailSafe) {
+  } else if(vpMode.rxFailSafe) {
     consoleNoteLn_P(PSTR("Receiver failsafe mode DISABLED"));
-    mode.rxFailSafe = false;
+    vpMode.rxFailSafe = false;
   }
 
   //
   // Failsafe configuration
   //
   
-  if(mode.rxFailSafe)
-    mode.stabilizePitch = mode.alphaHold = mode.bankLimiter = true;
-  
-  else if(mode.sensorFailSafe)
-    mode.stabilizePitch = mode.stabilizeBank
-      = mode.pitchHold = mode.alphaHold = mode.bankLimiter = false;
+  if(vpMode.rxFailSafe)
+    vpMode.stabilizePitch = vpMode.alphaHold = vpMode.bankLimiter = true;
 
+  else if(vpMode.sensorFailSafe)
+    vpMode.stabilizePitch = vpMode.stabilizeBank
+      = vpMode.pitchHold = vpMode.alphaHold = vpMode.bankLimiter
+      = vpMode.takeOff = false;
+
+  else if(vpMode.alphaFailSafe)
+    vpMode.stabilizePitch = vpMode.pitchHold = vpMode.alphaHold
+      = vpMode.takeOff = false;
+  
   // Safety scaling (test mode 0)
   
   float scale = 1.0;
   
-  if(testMode && stateRecord.testChannel == 0)
+  if(vpMode.test && nvState.testChannel == 0)
     scale = testGainLinear(1.0/3, 1.0);
   
   // Default controller settings
 
-  float s_Ku = scaleByIAS(paramRecord.s_Ku_C, stabilityAileExp1_c);
-  float i_Ku = scaleByIAS(paramRecord.i_Ku_C, stabilityElevExp1_c);
+  float s_Ku = scaleByIAS(vpParam.s_Ku_C, stabilityAileExp1_c);
+  float i_Ku = scaleByIAS(vpParam.i_Ku_C, stabilityElevExp1_c);
   
-  aileCtrl.setZieglerNicholsPID(s_Ku*scale, paramRecord.s_Tu);
-  elevCtrl.setZieglerNicholsPID(i_Ku*scale, paramRecord.i_Tu);
-  pushCtrl.setZieglerNicholsPID(i_Ku*scale, paramRecord.i_Tu);
+  aileCtrl.setZieglerNicholsPID(s_Ku*scale, vpParam.s_Tu);
+  elevCtrl.setZieglerNicholsPID(i_Ku*scale, vpParam.i_Tu);
+  pushCtrl.setZieglerNicholsPID(i_Ku*scale, vpParam.i_Tu);
   
-  rudderCtrl.setZieglerNicholsPI(paramRecord.r_Ku*scale, paramRecord.r_Tu);
+  rudderCtrl.setZieglerNicholsPI(vpParam.r_Ku*scale, vpParam.r_Tu);
 
-  autoAlphaP = paramRecord.o_P;
-  maxAlpha = paramRecord.alphaMax;
-  rudderMix = paramRecord.r_Mix;
+  autoAlphaP = vpParam.o_P;
+  maxAlpha = vpParam.alphaMax;
+  rudderMix = vpParam.r_Mix;
   levelBank = 0;
   
-  aileRateLimiter.setRate(paramRecord.servoRate/(90.0/2)/paramRecord.aileDefl);
+  aileRateLimiter.setRate(vpParam.servoRate/(90.0/2)/vpParam.aileDefl);
   flapRateLimiter.setRate(0.5);
   trimRateLimiter.setRate(0.1);
   
   // Then apply test modes
   
-  if(testMode) {
-    switch(stateRecord.testChannel) {
+  if(vpMode.test) {
+    switch(nvState.testChannel) {
     case 1:
       // Wing stabilizer gain
          
-      mode.stabilizeBank = mode.bankLimiter = mode.wingLeveler = true;
+      vpMode.stabilizeBank = vpMode.bankLimiter = vpMode.wingLeveler = true;
       aileCtrl.setPID(testGain = testGainExpo(s_Ku_ref), 0, 0);
       break;
             
@@ -1645,10 +1720,10 @@ void configurationTask(uint32_t currentMicros)
       // Wing stabilizer gain autotest
 
       analyzerInputCh = ac_aile;
-      mode.stabilizeBank = mode.bankLimiter = mode.wingLeveler = true;
+      vpMode.stabilizeBank = vpMode.bankLimiter = vpMode.wingLeveler = true;
 	
-      if(!mode.autoTest) {
-	mode.autoTest = true;
+      if(!vpMode.autoTest) {
+	vpMode.autoTest = true;
 	testGain = 1.3*s_Ku;
 	testState = start_c;
       } else if(testActive())
@@ -1658,8 +1733,8 @@ void configurationTask(uint32_t currentMicros)
     case 2:
       // Elevator stabilizer gain, outer loop disabled
          
-      mode.stabilizePitch = true;
-      mode.alphaHold = false;
+      vpMode.stabilizePitch = true;
+      vpMode.alphaHold = false;
       elevCtrl.setPID(testGain = testGainExpo(i_Ku_ref), 0, 0);
       break;
          
@@ -1667,11 +1742,11 @@ void configurationTask(uint32_t currentMicros)
       // Elevator stabilizer gain, outer loop disabled
    
       analyzerInputCh = ac_elev;
-      mode.stabilizePitch = true;
-      mode.alphaHold = false;
+      vpMode.stabilizePitch = true;
+      vpMode.alphaHold = false;
 	
-      if(!mode.autoTest) {
-	mode.autoTest = true;
+      if(!vpMode.autoTest) {
+	vpMode.autoTest = true;
 	testGain = 1.3*i_Ku;
 	testState = start_c;
       } else if(testActive())
@@ -1681,7 +1756,7 @@ void configurationTask(uint32_t currentMicros)
     case 3:
       // Elevator stabilizer gain, outer loop enabled
          
-      mode.stabilizePitch = mode.alphaHold = true;
+      vpMode.stabilizePitch = vpMode.alphaHold = true;
       elevCtrl.setPID(testGain = testGainExpo(i_Ku_ref), 0, 0);
       break;
          
@@ -1689,10 +1764,10 @@ void configurationTask(uint32_t currentMicros)
       // Elevator stabilizer gain, outer loop enabled
          
       analyzerInputCh = ac_elev;
-      mode.stabilizePitch = mode.alphaHold = true;
+      vpMode.stabilizePitch = vpMode.alphaHold = true;
 	
-      if(!mode.autoTest) {
-	mode.autoTest = true;
+      if(!vpMode.autoTest) {
+	vpMode.autoTest = true;
 	testGain = 1.3*i_Ku;
 	testState = start_c;
       } else if(testActive())
@@ -1702,44 +1777,44 @@ void configurationTask(uint32_t currentMicros)
     case 4:
       // Auto alpha outer loop gain
          
-      mode.stabilizePitch = mode.alphaHold = true;
-      autoAlphaP = testGain = testGainExpo(paramRecord.o_P);
+      vpMode.stabilizePitch = vpMode.alphaHold = true;
+      autoAlphaP = testGain = testGainExpo(vpParam.o_P);
       break;
          
     case 5:
       // Auto ball gain
          
-      mode.stabilizeBank = mode.bankLimiter = mode.wingLeveler = true;
-      mode.autoBall = true;
+      vpMode.stabilizeBank = vpMode.bankLimiter = vpMode.wingLeveler = true;
+      vpMode.autoBall = true;
       rudderMix = 0;
-      rudderCtrl.setPID(testGain = testGainExpo(paramRecord.r_Ku), 0, 0);
+      rudderCtrl.setPID(testGain = testGainExpo(vpParam.r_Ku), 0, 0);
       break;
             
     case 6:
       // Aileron and rudder calibration, straight and level flight with
       // ball centered, reduced controller gain to increase stability
          
-      mode.stabilizeBank = mode.bankLimiter = mode.wingLeveler = true;
-      mode.autoBall = true;
+      vpMode.stabilizeBank = vpMode.bankLimiter = vpMode.wingLeveler = true;
+      vpMode.autoBall = true;
       rudderMix = 0;
       aileCtrl.
-	setZieglerNicholsPID(s_Ku*testGain, paramRecord.s_Tu);
+	setZieglerNicholsPID(s_Ku*testGain, vpParam.s_Tu);
       rudderCtrl.
-	setZieglerNicholsPI(paramRecord.r_Ku*testGain, paramRecord.r_Tu);
+	setZieglerNicholsPI(vpParam.r_Ku*testGain, vpParam.r_Tu);
       break;
 
     case 7:
       // Auto ball empirical gain, PI
        
-      mode.autoBall = true;
-      rudderCtrl.setZieglerNicholsPI(testGain = testGainExpo(paramRecord.r_Ku),
-				     paramRecord.r_Tu);
+      vpMode.autoBall = true;
+      rudderCtrl.setZieglerNicholsPI(testGain = testGainExpo(vpParam.r_Ku),
+				     vpParam.r_Tu);
       break;
        
     case 9:
       // Max alpha
 
-      mode.stabilizeBank = mode.bankLimiter = mode.wingLeveler = true;
+      vpMode.stabilizeBank = vpMode.bankLimiter = vpMode.wingLeveler = true;
       maxAlpha = testGain = testGainLinear(20.0/360, 10.0/360);
       break;         
 
@@ -1767,15 +1842,15 @@ void configurationTask(uint32_t currentMicros)
   // Take note of neutral stick/alpha
   //
 
-  if(!mode.alphaHold)
+  if(!vpMode.alphaHold)
     trimAdjust =
-      elevFromAlpha(clamp(alpha, paramRecord.alphaZeroLift, maxAlpha))
+      elevFromAlpha(clamp(alpha, vpParam.alphaZeroLift, maxAlpha))
       - elevTrim;
 }
 
 void loopTask(uint32_t currentMicros)
 {
-  if(looping) {
+  if(vpMode.loop) {
     consolePrint("alpha = ");
     consolePrint(alpha*360);
 
@@ -1790,12 +1865,15 @@ void loopTask(uint32_t currentMicros)
     consolePrint(" IAS = ");
     consolePrint(iAS);
     /*
-    consolePrint(" swInput = ");
-    consolePrint(switchValue);
+    consolePrint(" IAS(filt) = ");
+    consolePrint(iasFilter.output());
+    consolePrint(" IAS(slow) = ");
+    consolePrint(iasFilterSlow.output());
     */
-    /*    consolePrint(" IAS(rel) = ");
-    consolePrint(scaleByIAS(0, 1));
-    */
+    
+    consolePrint(" avg G = ");
+    consolePrint(accFilter.output());
+
     /*    consolePrint(" ppmFreq = ");
     consolePrint(ppmFreq);
     consolePrint(" aileStick = ");
@@ -1852,6 +1930,10 @@ void loopTask(uint32_t currentMicros)
     /* 
     consolePrint(" targetPR = ");
     consolePrint(targetPitchRate*360);
+    */
+    /*
+    consolePrint(" elevOutput% = ");
+    consolePrint(elevOutput*100);
     */
     consolePrint(" target = ");
     consolePrint(targetAlpha*360);
@@ -2026,15 +2108,13 @@ float randomNum(float small, float large)
   return small + (large-small)*(float) (rand() % 1000) / 1000;
 }
 
-const float G = 9.81, RAD = 360/2/PI;
-
 float levelTurnPitchRate(float bank, float target)
 {
-  const float alphaCL0 = paramRecord.alphaZeroLift,
-    ratio = (target - alphaCL0) / (paramRecord.alphaMax - alphaCL0);
+  const float alphaCL0 = vpParam.alphaZeroLift,
+    ratio = (target - alphaCL0) / (vpParam.alphaMax - alphaCL0);
   
   return square(square(sin(bank/RAD)))
-    *ratio*iAS*G/square(paramRecord.iasMin)*RAD/360;
+    *ratio*iasFilter.output()*G/square(vpParam.iasMin)*RAD/360;
 }
 
 void controlTask(uint32_t currentMicros)
@@ -2053,16 +2133,16 @@ void controlTask(uint32_t currentMicros)
   //
 
   const float maxPitchRate
-    = scaleByIAS(paramRecord.pitch_C, stabilityElevExp2_c);
+    = scaleByIAS(vpParam.pitch_C, stabilityElevExp2_c);
   
-  const float effStick = mode.rxFailSafe ? 0 : elevStick;
+  const float effStick = vpMode.rxFailSafe ? 0 : elevStick;
 
-  if(mode.rxFailSafe)
+  if(vpMode.rxFailSafe)
     trimRateLimiter.input(elevTrim, controlCycle);
   else
     trimRateLimiter.reset(elevTrim);
 
-  effTrim = trimRateLimiter.output() + (mode.alphaHold ? trimAdjust : 0);
+  effTrim = trimRateLimiter.output() + (vpMode.alphaHold ? trimAdjust : 0);
 
   elevOutput = effStick + effTrim;
   
@@ -2071,13 +2151,13 @@ void controlTask(uint32_t currentMicros)
   const float effMaxAlpha = mixValue(stickStrength, shakerAlpha, maxAlpha);
     
   targetAlpha =
-    clamp(alphaFromElev(elevOutput), -paramRecord.alphaMax, effMaxAlpha);
+    clamp(alphaFromElev(elevOutput), -vpParam.alphaMax, effMaxAlpha);
 
-  if(mode.alphaHold)
+  if(vpMode.alphaHold)
     targetPitchRate = levelTurnPitchRate(rollAngle, targetAlpha)
       + (targetAlpha - alpha)*autoAlphaP*maxPitchRate;
   
-  else if(mode.pitchHold)
+  else if(vpMode.pitchHold)
     targetPitchRate = (5 + effStick*30 - pitchAngle)/90 * maxPitchRate;
 
   else
@@ -2085,30 +2165,30 @@ void controlTask(uint32_t currentMicros)
 
   elevOutputFeedForward = elevFromAlpha(targetAlpha);
 
-  if(mode.stabilizePitch)
+  if(vpMode.stabilizePitch)
     elevCtrl.input(targetPitchRate - pitchRate, controlCycle);
   else
     elevCtrl.reset(elevOutput - elevOutputFeedForward, 0.0);
     
-  if(!mode.sensorFailSafe && !mode.takeOff && mode.stabilizePitch) {
+  if(!vpMode.alphaFailSafe && !vpMode.takeOff && vpMode.stabilizePitch) {
     elevOutput = elevCtrl.output();
 
     static float elevTestBias = 0;
 
-    if((testMode && (stateRecord.testChannel == 2
-		       || stateRecord.testChannel == 3))
+    if((vpMode.test && (nvState.testChannel == 2
+		       || nvState.testChannel == 3))
     || (testActive() && analyzerInputCh == ac_elev))
       elevOutput += elevTestBias;
     else
       elevTestBias = elevOutput;
       
-    if(mode.alphaHold)
+    if(vpMode.alphaHold)
       elevOutput += elevOutputFeedForward;
   }
 
   // Pusher
 
-  if(!mode.sensorFailSafe && !mode.takeOff && !alphaFailed) {
+  if(!vpMode.alphaFailSafe && !vpMode.takeOff && !vpStatus.alphaFailed) {
     pushCtrl.input(levelTurnPitchRate(rollAngle, effMaxAlpha)
 		   + (effMaxAlpha - alpha)*autoAlphaP*maxPitchRate - pitchRate,
 		   controlCycle);
@@ -2121,21 +2201,21 @@ void controlTask(uint32_t currentMicros)
   
   // Aileron
 
-  const float maxRollRate = scaleByIAS(paramRecord.roll_C, stabilityAileExp2_c);
+  const float maxRollRate = scaleByIAS(vpParam.roll_C, stabilityAileExp2_c);
   float maxBank = 45.0;
 
-  if(mode.rxFailSafe)
+  if(vpMode.rxFailSafe)
     maxBank = 15.0;
-  else if(mode.alphaHold)
+  else if(vpMode.alphaHold)
     maxBank /= 1 + elevTrim / elevFromAlpha(thresholdAlpha);
   
   float targetRollRate = maxRollRate*aileStick;
 
-  if(mode.sensorFailSafe || !mode.stabilizeBank || mode.takeOff) {
+  if(vpMode.sensorFailSafe || !vpMode.stabilizeBank || vpMode.takeOff) {
 
     aileOutput = aileStick;
     
-    if(!mode.sensorFailSafe && mode.wingLeveler)
+    if(!vpMode.sensorFailSafe && vpMode.wingLeveler)
       aileOutput -= rollAngle/60;
     
     aileCtrl.reset(aileOutput, 0);
@@ -2144,17 +2224,17 @@ void controlTask(uint32_t currentMicros)
     
     const float factor_c = maxRollRate/60;
 
-    if(mode.wingLeveler)
+    if(vpMode.wingLeveler)
       // Strong leveler enabled
         
       targetRollRate =
 	clamp((levelBank + aileStick*maxBank - rollAngle)*factor_c, -maxRollRate, maxRollRate);
 
-    else if(mode.bankLimiter) {
+    else if(vpMode.bankLimiter) {
       // Bank limiter + weak leveling
 
       targetRollRate -=
-	factor_c*clamp(rollAngle, -paramRecord.wl_Limit, paramRecord.wl_Limit);
+	factor_c*clamp(rollAngle, -vpParam.wl_Limit, vpParam.wl_Limit);
       
       targetRollRate =
 	clamp(targetRollRate,
@@ -2171,7 +2251,7 @@ void controlTask(uint32_t currentMicros)
     
   rudderOutput = rudderStick;
     
-  if(mode.sensorFailSafe || !mode.autoBall || mode.takeOff) {
+  if(vpMode.sensorFailSafe || !vpMode.autoBall || vpMode.takeOff) {
 
     // Failsafe mode or auto ball disabled or taking off
     
@@ -2191,7 +2271,7 @@ void controlTask(uint32_t currentMicros)
 
   // Aileron/rudder mix
   
-  if(!mode.sensorFailSafe)
+  if(!vpMode.sensorFailSafe)
     rudderOutput += aileRateLimiter.output()*rudderMix;
 
   rudderOutput = clamp(rudderOutput, -1, 1);
@@ -2204,7 +2284,7 @@ void controlTask(uint32_t currentMicros)
     
   // Brake
     
-  if(!mode.sensorFailSafe && gearOutput == 1)
+  if(!vpMode.sensorFailSafe && gearOutput == 1)
     brakeOutput = 0;
   else
     brakeOutput = fmaxf(-elevStick, 0);
@@ -2212,52 +2292,32 @@ void controlTask(uint32_t currentMicros)
 
 void actuatorTask(uint32_t currentMicros)
 {
-  // Actuators
+  if(!vpStatus.armed)
+    return;
+  
+  pwmOutputWrite(aileHandle, NEUTRAL
+		 + RANGE*clamp(vpParam.aileDefl*aileRateLimiter.output()
+			       + vpParam.aileNeutral, -1, 1));
 
-  if(rattling) {
-    pwmOutputWrite(aileHandle, NEUTRAL
-		   + RANGE*clamp(paramRecord.aileDefl*randomNum(-1, 1) 
-				 + paramRecord.aileNeutral, -1, 1));
+  pwmOutputWrite(elevatorHandle, NEUTRAL
+		 + RANGE*clamp(vpParam.elevDefl*elevOutput 
+			       + vpParam.elevNeutral, -1, 1));
 
-    pwmOutputWrite(elevatorHandle, NEUTRAL
-		   + RANGE*clamp(paramRecord.elevDefl*randomNum(-1, 1) 
-				 + paramRecord.elevNeutral, -1, 1));
+  pwmOutputWrite(rudderHandle, NEUTRAL
+		 + RANGE*clamp(vpParam.rudderNeutral + 
+			       vpParam.rudderDefl*rudderOutput, -1, 1));                        
+  pwmOutputWrite(flapHandle, NEUTRAL
+		 + RANGE*clamp(vpParam.flapNeutral 
+			       + vpParam.flapStep*flapRateLimiter.output(), -1, 1));                              
+  pwmOutputWrite(flap2Handle, NEUTRAL
+		 + RANGE*clamp(vpParam.flap2Neutral 
+			       - vpParam.flapStep*flapRateLimiter.output(), -1, 1));                              
 
-    pwmOutputWrite(rudderHandle, NEUTRAL
-		   + RANGE*clamp(paramRecord.rudderDefl*randomNum(-1, 1) 
-				 + paramRecord.rudderNeutral, -1, 1));
-                                                            
-    pwmOutputWrite(flapHandle, NEUTRAL
-		   + RANGE*clamp(paramRecord.flapNeutral 
-				 + randomNum(0, 3)*paramRecord.flapStep, -1, 1));                              
-    pwmOutputWrite(flap2Handle, NEUTRAL
-		   + RANGE*clamp(paramRecord.flap2Neutral 
-				 - randomNum(0, 3)*paramRecord.flapStep, -1, 1));    
-  } else if(armed) {
-    pwmOutputWrite(aileHandle, NEUTRAL
-		   + RANGE*clamp(paramRecord.aileDefl*aileRateLimiter.output()
-				 + paramRecord.aileNeutral, -1, 1));
+  pwmOutputWrite(gearHandle, NEUTRAL + RANGE*(gearOutput*2-1));
 
-    pwmOutputWrite(elevatorHandle, NEUTRAL
-		   + RANGE*clamp(paramRecord.elevDefl*elevOutput 
-				 + paramRecord.elevNeutral, -1, 1));
-
-    pwmOutputWrite(rudderHandle, NEUTRAL
-		   + RANGE*clamp(paramRecord.rudderNeutral + 
-				 paramRecord.rudderDefl*rudderOutput, -1, 1));                        
-    pwmOutputWrite(flapHandle, NEUTRAL
-		   + RANGE*clamp(paramRecord.flapNeutral 
-				 + paramRecord.flapStep*flapRateLimiter.output(), -1, 1));                              
-    pwmOutputWrite(flap2Handle, NEUTRAL
-		   + RANGE*clamp(paramRecord.flap2Neutral 
-				 - paramRecord.flapStep*flapRateLimiter.output(), -1, 1));                              
-
-    pwmOutputWrite(gearHandle, NEUTRAL + RANGE*(gearOutput*2-1));
-
-    pwmOutputWrite(brakeHandle, NEUTRAL
-		   + RANGE*clamp(paramRecord.brakeDefl*brakeOutput 
-				 + paramRecord.brakeNeutral, -1, 1));
-  } 
+  pwmOutputWrite(brakeHandle, NEUTRAL
+		 + RANGE*clamp(vpParam.brakeDefl*brakeOutput 
+			       + vpParam.brakeNeutral, -1, 1));
 }
 
 void trimTask(uint32_t currentMicros)
@@ -2267,7 +2327,7 @@ void trimTask(uint32_t currentMicros)
 
   const float trimMin = -0.20, trimMax = 0.80;
   
-  if(!mode.alphaHold)
+  if(!vpMode.alphaHold)
     elevTrim = clamp(elevTrim, trimMin, trimMax);
   
   else
@@ -2293,16 +2353,16 @@ void backgroundTask(uint32_t durationMicros)
 void heartBeatTask(uint32_t currentMicros)
 {
   if(!heartBeatCount && linkDownCount++ > 2)
-    consoleConnected = simulatorConnected = false;
+    vpStatus.consoleLink = vpStatus.simulatorLink = false;
 
-  if(simulatorConnected && currentMicros - simTimeStamp > 1e6) {
+  if(vpStatus.simulatorLink && currentMicros - simTimeStamp > 1.0e6) {
     consoleNoteLn_P(PSTR("Simulator link LOST"));
-    simulatorConnected = false;
+    vpStatus.simulatorLink = false;
   }    
   
   heartBeatCount = 0;
   
-  if(consoleConnected) {
+  if(vpStatus.consoleLink) {
     static uint32_t count = 0;
 
     datagramTxStart(DG_HEARTBEAT);
@@ -2315,7 +2375,7 @@ void heartBeatTask(uint32_t currentMicros)
 
 void blinkTask(uint32_t currentMicros)
 {
-  float ledRatio = testMode ? 0.0 : !logInitialized ? 1.0 : (mode.sensorFailSafe || !armed) ? 0.5 : alpha > 0.0 ? 0.90 : 0.10;
+  float ledRatio = vpMode.test ? 0.0 : !logInitialized ? 1.0 : (vpMode.sensorFailSafe || !vpStatus.armed) ? 0.5 : alpha > 0.0 ? 0.90 : 0.10;
   static int tick = 0;
   
   tick = (tick + 1) % (LED_TICK/LED_HZ);
@@ -2325,7 +2385,7 @@ void blinkTask(uint32_t currentMicros)
 
 void simulatorLinkTask(uint32_t currentMicros)
 {
-  if(simulatorConnected) {
+  if(vpStatus.simulatorLink && vpStatus.armed) {
     struct SimLinkControl control = { .aileron = aileRateLimiter.output(),
 				      .elevator = -elevOutput,
 				      .throttle = throttleStick,
@@ -2365,6 +2425,8 @@ struct Task taskList[] = {
     HZ_TO_PERIOD(CONTROL_HZ/5) },
   { trimTask,
     HZ_TO_PERIOD(TRIM_HZ) },
+  { sensorMonitorTask,
+    HZ_TO_PERIOD(CONFIG_HZ) },
   { configurationTask,
     HZ_TO_PERIOD(CONFIG_HZ) },
   { rpmTask,
@@ -2420,6 +2482,8 @@ void setup() {
   // serial_manager.init_console();
 
   cliSerial = hal.console;
+
+  vpStatus.consoleLink = true;
   
   consoleNoteLn_P(PSTR("Project | Alpha"));   
   consoleNote_P(PSTR("Init Free RAM: "));
@@ -2441,15 +2505,15 @@ void setup() {
   readNVState();
     
   consoleNote_P(PSTR("Current model is "));
-  consolePrintLn(stateRecord.model);
+  consolePrintLn(nvState.model);
   
   // Param record
   
-  setModel(stateRecord.model);
+  setModel(nvState.model);
 
   // Set I2C speed
   
-  TWBR = paramRecord.i2c_clkDiv;
+  TWBR = vpParam.i2c_clkDiv;
                 
   // RC input
   
@@ -2458,13 +2522,13 @@ void setup() {
   configureInput(&ppmInputPin, true);
   
   ppmInputInit(ppmInputs, sizeof(ppmInputs)/sizeof(struct RxInputRecord*),
-	       stateRecord.rxMin, stateRecord.rxCenter, stateRecord.rxMax);
+	       nvState.rxMin, nvState.rxCenter, nvState.rxMax);
 
   // RPM sensor int control
 
 #ifdef rpmPin
   pinMode(rpmPin, INPUT_PULLUP);  
-  rpmMeasure(stateRecord.logRPM);
+  rpmMeasure(nvState.logRPM);
 #endif
 
   // Servos
@@ -2507,6 +2571,10 @@ void setup() {
   cycleTimeAcc.setTau(10);
   analLowpass.setTau(2);
   analAvg.setTau(10);
+  iasFilter.setTau(2);
+  iasFilterSlow.setTau(100);
+  accFilter.setTau(100);
+  accFilter.reset(G);
   
   // Done
   

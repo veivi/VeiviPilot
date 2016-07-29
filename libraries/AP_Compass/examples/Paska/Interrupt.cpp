@@ -4,15 +4,12 @@
 #include <stdlib.h>
 
 uint8_t nestCount = 0;
-extern bool armed;
 
 extern "C" ISR(BADISR_vect)
 {
    sei();
    consoleNoteLn("PASKA KESKEYTYS.");
-
-   if(!armed)
-     abort();
+   abort();
 }
 
 

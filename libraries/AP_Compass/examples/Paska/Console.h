@@ -2,8 +2,6 @@
 #include <stdarg.h>
 #include <AP_ProgMem/AP_ProgMem.h>
 
-extern bool talk;
-
 void consoleFlush();
 void consolePrint(const char c);
 void consoleNote_P(const prog_char_t *s);

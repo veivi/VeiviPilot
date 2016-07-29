@@ -54,6 +54,11 @@ void Accumulator::input(float v)
   avg = mixValue(tau, avg, v);
 }
 
+void Accumulator::reset(float v)
+{
+  avg = v;
+}
+
 float Accumulator::output(void)
 {
   return avg;
@@ -61,7 +66,7 @@ float Accumulator::output(void)
 
 void Accumulator::setTau(float tauValue)
 {
-  tau = 1/tauValue;
+  tau = 1.0/(1+tauValue);
 }
 
 void Derivator::input(float v, float dt)

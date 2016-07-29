@@ -19,7 +19,7 @@ uint16_t logEndStamp;
 bool logEnabled = false;
 long logBytesCum;
 
-#define logOffset stateRecord.logPartition
+#define logOffset nvState.logPartition
 
 bool logReady(bool verbose)
 {
@@ -114,7 +114,7 @@ void logClear(void)
   if(logLen > 0) {
     logEnter(ENTRY_TOKEN(t_start));
     logLen = 0;
-    stateRecord.logStamp++;
+    nvState.logStamp++;
     storeNVState();
 
     consoleNoteLn_P(PSTR("Log being CLEARED"));
@@ -167,6 +167,9 @@ void logGeneric(int ch, float value)
 
 void logMark(void)
 {
+  if(!logEnabled)
+    return;
+  
   logEnter(ENTRY_TOKEN(t_mark));
 }
 
@@ -190,7 +193,9 @@ void logDisable()
   if(!logEnabled)
     return;
     
-  logMark();
+  for(int i = 0; i < 2; i++)
+    logMark();
+  
   logEnabled = false;
   
   consoleNoteLn_P(PSTR("Logging DISABLED"));
@@ -201,8 +206,8 @@ void logDumpBinary(void)
   if(!logReady())
     return;
   
-  struct LogInfo info = { stateRecord.logStamp };
-  strncpy(info.name, paramRecord.name, NAME_LEN);
+  struct LogInfo info = { nvState.logStamp };
+  strncpy(info.name, vpParam.name, NAME_LEN);
 
   datagramTxStart(DG_LOGINFO);    
   datagramTxOut((const uint8_t*) &info, sizeof(info));
@@ -213,7 +218,7 @@ void logDumpBinary(void)
   
   consolePrintLn("");
   consoleNote_P(PSTR("TEST CH = "));
-  consolePrintLn(stateRecord.testChannel);
+  consolePrintLn(nvState.testChannel);
   consolePrintLn("");
 
   int32_t total = 0, block = 0;

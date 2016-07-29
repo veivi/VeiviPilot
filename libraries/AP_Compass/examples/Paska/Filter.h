@@ -29,6 +29,7 @@ class RunningAvgFilter {
 
 class Accumulator {
   public:
+  void reset(float v);
     void setTau(float tau);
     void input(float v);
     float output();

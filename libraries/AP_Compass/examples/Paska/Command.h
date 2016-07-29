@@ -28,6 +28,7 @@ typedef enum {
   c_read,
   c_write,
   c_start,
+  c_log,
   c_params,
   c_reset,
   c_loop,

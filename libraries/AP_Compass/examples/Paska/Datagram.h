@@ -25,6 +25,7 @@ struct SimLinkSensor {
   float alpha, alt, ias;
   float roll, pitch, heading;
   float rrate, prate, yrate;
+  float accx, accy, accz;
 };
 
 struct SimLinkControl {

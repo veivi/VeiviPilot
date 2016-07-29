@@ -9,7 +9,6 @@ extern "C" {
 #include "Log.h"
 }
 
-extern bool logEnabled;
 extern long logBytesCum;
 extern int32_t logPtr, logLen, logSize;
 
@@ -20,7 +19,6 @@ bool logReady(void);
 bool logInit(uint32_t);
 uint16_t logRead(int32_t index);
 void logClear(void);
-void logDump(int ch);
 void logDumpBinary(void);
 
 void logGeneric(int ch, float value);

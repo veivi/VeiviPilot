@@ -43,8 +43,8 @@ struct NVStateRecord {
   int32_t rxCenter[MAX_CH], rxMin[MAX_CH], rxMax[MAX_CH];
 };
 
-extern struct ParamRecord paramRecord;
-extern struct NVStateRecord stateRecord;
+extern struct ParamRecord vpParam;
+extern struct NVStateRecord nvState;
 
 void defaultParams(void);
 void setModel(int model);
@@ -53,5 +53,8 @@ void readNVState(void);
 void storeNVState(void);
 void printParams(void);
 void dumpParams(void);
+
+float elevFromAlpha(float x);
+float alphaFromElev(float x);
 
 #endif

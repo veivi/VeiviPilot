@@ -1,6 +1,7 @@
 #include <AP_HAL/AP_HAL.h>
 #define CONSOLE_PRIVATE_H
 #include "Console.h"
+#include "Status.h"
 #include <stdarg.h>
 #include <math.h>
 
@@ -11,8 +12,6 @@ extern "C" {
 extern const AP_HAL::HAL& hal;
 
 static void newline(void);
-bool talk = true;
-extern bool consoleConnected;
 
 #define BUF_SIZE (1<<6)
 
@@ -32,7 +31,7 @@ void consoleFlush()
 
 void consoleOut(const uint8_t c)
 {
-  if(!consoleConnected || !talk)
+  if(!vpStatus.consoleLink || vpStatus.silent)
     return;
   
   if(bufPtr > BUF_SIZE-1)

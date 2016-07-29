@@ -11,11 +11,11 @@ extern "C" {
 
 // NV store layout
 
-struct NVStateRecord stateRecord;
-struct ParamRecord paramRecord;
+struct NVStateRecord nvState;
+struct ParamRecord vpParam;
 
 #define stateOffset 0U
-#define paramOffset stateRecord.paramPartition
+#define paramOffset nvState.paramPartition
 
 const struct ParamRecord paramDefaults = {
   .crc = 0,
@@ -61,32 +61,32 @@ static uint16_t stateRecordCrc(struct NVStateRecord *record)
 
 void defaultParams(void)
 {
-  paramRecord = paramDefaults;
+  vpParam = paramDefaults;
 }
 
 void setModel(int model)
 {
   const int maxModels_c =
-    (stateRecord.logPartition - stateRecord.paramPartition)
-    / sizeof(paramRecord);
+    (nvState.logPartition - nvState.paramPartition)
+    / sizeof(vpParam);
   
   if(model < 0)
     model = 0;
   else if(model > maxModels_c - 1)
     model = maxModels_c - 1;
   
-  stateRecord.model = model;
-  cacheRead(paramOffset + sizeof(paramRecord)*model,
-	    (uint8_t*) &paramRecord, sizeof(paramRecord));
+  nvState.model = model;
+  cacheRead(paramOffset + sizeof(vpParam)*model,
+	    (uint8_t*) &vpParam, sizeof(vpParam));
 
   consoleNote_P(PSTR("MODEL "));
   consolePrintLn(model);
   consoleNote_P(PSTR("  Model record CRC = "));
-  consolePrint(paramRecord.crc);
+  consolePrint(vpParam.crc);
     
-  if(paramRecordCrc(&paramRecord) != paramRecord.crc) {
+  if(paramRecordCrc(&vpParam) != vpParam.crc) {
     consolePrintLn_P(PSTR(" CORRUPT, using defaults")); 
-    paramRecord = paramDefaults;
+    vpParam = paramDefaults;
   } else
     consolePrintLn_P(PSTR(" OK"));
 
@@ -95,23 +95,23 @@ void setModel(int model)
   
 void storeParams(void)
 {
-  paramRecord.crc = paramRecordCrc(&paramRecord);
+  vpParam.crc = paramRecordCrc(&vpParam);
   consoleNote_P(PSTR("Model record CRC = "));
-  consolePrintLn(paramRecord.crc);
-  cacheWrite(paramOffset + sizeof(paramRecord)*stateRecord.model,
-  	     (const uint8_t*) &paramRecord, sizeof(paramRecord));
+  consolePrintLn(vpParam.crc);
+  cacheWrite(paramOffset + sizeof(vpParam)*nvState.model,
+  	     (const uint8_t*) &vpParam, sizeof(vpParam));
   cacheFlush();
   consoleNoteLn_P(PSTR("  Stored"));
 }
 
 void readNVState(void)
 {
-  cacheRead(stateOffset, (uint8_t*) &stateRecord, sizeof(stateRecord));
+  cacheRead(stateOffset, (uint8_t*) &nvState, sizeof(nvState));
   
   consoleNote_P(PSTR("  State record CRC = "));
-  consolePrint(stateRecord.crc);
+  consolePrint(nvState.crc);
     
-  if(stateRecord.crc != stateRecordCrc(&stateRecord)) {
+  if(nvState.crc != stateRecordCrc(&nvState)) {
     consolePrintLn_P(PSTR(" CORRUPT, using defaults")); 
     defaultParams();
   } else
@@ -120,9 +120,9 @@ void readNVState(void)
 
 void storeNVState(void)
 {
-  if(sizeof(stateRecord) < paramOffset - stateOffset) {
-    stateRecord.crc = stateRecordCrc(&stateRecord);
-    cacheWrite(stateOffset, (const uint8_t*) &stateRecord, sizeof(stateRecord));
+  if(sizeof(nvState) < paramOffset - stateOffset) {
+    nvState.crc = stateRecordCrc(&nvState);
+    cacheWrite(stateOffset, (const uint8_t*) &nvState, sizeof(nvState));
     cacheFlush();
   } else
     consoleNoteLn_P(PSTR("PANIC : State record exceeds partition size"));
@@ -131,90 +131,94 @@ void storeNVState(void)
 void printParams()
 {
   consoleNote_P(PSTR("  NAME \""));
-  consolePrint(paramRecord.name);
+  consolePrint(vpParam.name);
   consolePrintLn_P(PSTR("\""));
   
   consoleNote_P(PSTR("  AS5048B ref = "));
-  consolePrintLn(paramRecord.alphaRef);
+  consolePrintLn(vpParam.alphaRef);
   consoleNoteLn_P(PSTR("  Autostick/pusher"));
   consoleNote_P(PSTR("    Inner Ku*IAS^1.5 = "));
-  consolePrint(paramRecord.i_Ku_C, 4);
+  consolePrint(vpParam.i_Ku_C, 4);
   consolePrint_P(PSTR(" Tu = "));
-  consolePrint(paramRecord.i_Tu, 4);
+  consolePrint(vpParam.i_Tu, 4);
   consolePrint_P(PSTR(" Outer P = "));
-  consolePrintLn(paramRecord.o_P, 4);
-  consoleNoteLn_P(PSTR("  AutoAlpha feedforward A+Bx"));
+  consolePrintLn(vpParam.o_P, 4);
+  consoleNoteLn_P(PSTR("  Alpha feedforward A+Bx"));
   consoleNote_P(PSTR("    "));
-  consolePrint(paramRecord.ff_A, 5);
+  consolePrint(vpParam.ff_A, 5);
   consolePrint_P(PSTR(" + "));
-  consolePrint(paramRecord.ff_B, 5);
-  consolePrintLn_P(PSTR(" x"));
+  consolePrint(vpParam.ff_B, 5);
+  consolePrint_P(PSTR(" x  (alpha range = "));
+  consolePrint(alphaFromElev(-1.0)*360);
+  consolePrint_P(PSTR("..."));
+  consolePrint(alphaFromElev(1.0)*360);
+  consolePrintLn_P(PSTR(")"));
   consoleNoteLn_P(PSTR("  Stabilizer"));
   consoleNote_P(PSTR("    Ku*IAS^1.5 = "));
-  consolePrint(paramRecord.s_Ku_C, 4);
+  consolePrint(vpParam.s_Ku_C, 4);
   consolePrint_P(PSTR(" Tu = "));
-  consolePrintLn(paramRecord.s_Tu, 4);
+  consolePrintLn(vpParam.s_Tu, 4);
   consoleNote_P(PSTR("    Weak leveling limit angle = "));
-  consolePrintLn(paramRecord.wl_Limit, 4);
+  consolePrintLn(vpParam.wl_Limit, 4);
   consoleNoteLn_P(PSTR("  Auto rudder"));
   consoleNote_P(PSTR("    Ku = "));
-  consolePrint(paramRecord.r_Ku, 4);
+  consolePrint(vpParam.r_Ku, 4);
   consolePrint_P(PSTR(" Tu = "));
-  consolePrintLn(paramRecord.r_Tu, 4);
+  consolePrintLn(vpParam.r_Tu, 4);
   consoleNote_P(PSTR("  Alpha (max) = "));
-  consolePrint(paramRecord.alphaMax*360);
+  consolePrint(vpParam.alphaMax*360);
   consolePrint_P(PSTR(" (CL0) = "));
-  consolePrint(paramRecord.alphaZeroLift*360);
+  consolePrint(vpParam.alphaZeroLift*360);
   consolePrint_P(PSTR(" IAS(alphaMax) = "));
-  consolePrintLn(paramRecord.iasMin);
+  consolePrintLn(vpParam.iasMin);
   consoleNote_P(PSTR("  Roll rate K = "));
-  consolePrintLn(paramRecord.roll_C);
+  consolePrintLn(vpParam.roll_C);
   consoleNote_P(PSTR("  Pitch rate K = "));
-  consolePrintLn(paramRecord.pitch_C);
+  consolePrintLn(vpParam.pitch_C);
   consoleNoteLn_P(PSTR("  Elevator"));
   consoleNote_P(PSTR("    deflection = "));
-  consolePrint(paramRecord.elevDefl*90);
+  consolePrint(vpParam.elevDefl*90);
   consolePrint_P(PSTR(" neutral = "));
-  consolePrint(paramRecord.elevNeutral*90);
+  consolePrint(vpParam.elevNeutral*90);
   consolePrint_P(PSTR(" trim%(takeoff) = "));
-  consolePrintLn(paramRecord.takeoffTrim*100);
+  consolePrintLn(vpParam.takeoffTrim*100);
   consoleNoteLn_P(PSTR("  Aileron"));
   consoleNote_P(PSTR("    deflection = "));
-  consolePrint(paramRecord.aileDefl*90);
+  consolePrint(vpParam.aileDefl*90);
   consolePrint_P(PSTR(" neutral = "));
-  consolePrintLn(paramRecord.aileNeutral*90);
+  consolePrintLn(vpParam.aileNeutral*90);
   consoleNoteLn_P(PSTR("  Rudder"));
   consoleNote_P(PSTR("    deflection = "));
-  consolePrint(paramRecord.rudderDefl*90);
+  consolePrint(vpParam.rudderDefl*90);
   consolePrint_P(PSTR(" neutral = "));
-  consolePrint(paramRecord.rudderNeutral*90);
+  consolePrint(vpParam.rudderNeutral*90);
   consolePrint_P(PSTR(" aile mix = "));
-  consolePrintLn(paramRecord.r_Mix);
+  consolePrintLn(vpParam.r_Mix);
   consoleNoteLn_P(PSTR("  Flap"));
   consoleNote_P(PSTR("    step = "));
-  consolePrint(paramRecord.flapStep*90);
+  consolePrint(vpParam.flapStep*90);
   consolePrint_P(PSTR(" neutral = "));
-  consolePrint(paramRecord.flapNeutral*90);
+  consolePrint(vpParam.flapNeutral*90);
   consolePrint_P(PSTR(" ("));
-  consolePrint(paramRecord.flap2Neutral*90);
+  consolePrint(vpParam.flap2Neutral*90);
   consolePrintLn_P(PSTR(")"));
   consoleNoteLn_P(PSTR("  Servo channels"));
   consoleNote_P(PSTR("    A = "));
-  consolePrint(paramRecord.servoAile);
+  consolePrint(vpParam.servoAile);
   consolePrint_P(PSTR("  E = "));
-  consolePrint(paramRecord.servoElev);
+  consolePrint(vpParam.servoElev);
   consolePrint_P(PSTR("  R = "));
-  consolePrint(paramRecord.servoRudder);
+  consolePrint(vpParam.servoRudder);
   consolePrint_P(PSTR("  F = ("));
-  consolePrint(paramRecord.servoFlap);
+  consolePrint(vpParam.servoFlap);
   consolePrint_P(PSTR(", "));
-  consolePrint(paramRecord.servoFlap2);
+  consolePrint(vpParam.servoFlap2);
   consolePrint_P(PSTR(")  G = "));
-  consolePrint(paramRecord.servoGear);
+  consolePrint(vpParam.servoGear);
   consolePrint_P(PSTR("  B = "));
-  consolePrintLn(paramRecord.servoBrake);
+  consolePrintLn(vpParam.servoBrake);
   consoleNote_P(PSTR("  Servo rate = "));
-  consolePrintLn(paramRecord.servoRate);
+  consolePrintLn(vpParam.servoRate);
 }
 
 static void dumpParamEntry(const Command *e)
@@ -260,20 +264,20 @@ static void dumpParamEntry(const Command *e)
 void dumpParams()
 {
   datagramTxStart(DG_PARAMS);
-  datagramTxOut((const uint8_t*) paramRecord.name, strlen(paramRecord.name));
+  datagramTxOut((const uint8_t*) vpParam.name, strlen(vpParam.name));
   datagramTxEnd();
   
   consoleNoteLn_P(PSTR("Param backup"));
   consoleNoteLn("");
   consoleNote_P(PSTR("MODEL "));
-  consolePrint(stateRecord.model);
+  consolePrint(nvState.model);
   consolePrint_P(PSTR(" "));
-  consolePrintLn(paramRecord.name);
+  consolePrintLn(vpParam.name);
   consoleNoteLn("");
   consolePrintLn("");
 
   consolePrint("model ");
-  consolePrintLn(stateRecord.model);
+  consolePrintLn(nvState.model);
 
   int i = 0;
   
@@ -290,4 +294,14 @@ void dumpParams()
 
   datagramTxStart(DG_PARAMS);
   datagramTxEnd();  
+}
+
+float elevFromAlpha(float x)
+{
+  return vpParam.ff_A + vpParam.ff_B*x*360;
+}
+
+float alphaFromElev(float x)
+{
+  return (x - vpParam.ff_A)/360/vpParam.ff_B;
 }
