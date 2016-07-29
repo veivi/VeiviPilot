@@ -249,7 +249,7 @@ struct RxInputRecord rpmInput = { rpmPin };
 
 #include "Serial.h"
 
-#define MAX_DG_SIZE  (1<<6)
+#define MAX_DG_SIZE  (1<<7)
 
 extern "C" {
 
@@ -523,7 +523,7 @@ void executeCommand(const char *buf)
   consolePrint(buf, bufLen);
   consolePrintLn("");
 
-  if(bufLen < 1) {
+  if(bufLen < 1 || buf[0] == '/') {
     vpMode.loop = false;
     calibStop(nvState.rxMin, nvState.rxCenter, nvState.rxMax);
     return;
@@ -966,10 +966,12 @@ void sensorTaskFast(uint32_t currentMicros)
     rollAngle = sensorData.roll;
     pitchAngle = sensorData.pitch;
     heading = sensorData.heading;
-    accX = sensorData.accx*12*0.0254;
-    accY = sensorData.accy*12*0.0254;
-    accZ = sensorData.accz*12*0.0254;
-
+    
+    // accX = sensorData.accx*12*0.0254;
+    // accY = sensorData.accy*12*0.0254;
+    // accZ = sensorData.accz*12*0.0254;
+    accX = accY = accZ = 0;
+    
     dynPressure = square(iAS)/2;
 
     iasFilter.input(iAS);
@@ -1505,8 +1507,14 @@ void configurationTask(uint32_t currentMicros)
   //
   // Configuration control
   //
+
+  // GEAR BUTTON
   
   if(gearButton.doublePulse()) {
+    //
+    // DOUBLE PULSE: FAILSAFE MODE SELECT
+    //
+    
     if(!vpMode.alphaFailSafe) {
       consoleNoteLn_P(PSTR("Alpha FAILSAFE"));
       vpMode.alphaFailSafe = true;
@@ -1520,7 +1528,22 @@ void configurationTask(uint32_t currentMicros)
       
     } else if(!vpStatus.positiveIAS)
       logDisable();
+    
+  } else if(gearButton.singlePulse()) {
+    //
+    // SINGLE PULSE: GEAR TOGGLE
+    //
+    
+    if(gearOutput > 0) {
+      consoleNoteLn_P(PSTR("Gear DOWN"));
+      gearOutput = 0;
+    } else {
+      consoleNoteLn_P(PSTR("Gear UP"));
+      gearOutput = 1;
+    }
   }
+
+  // LEFT UP, PULSE
   
   if(upButton.singlePulse()) {
     if(vpMode.alphaFailSafe || vpMode.sensorFailSafe) {
@@ -1541,13 +1564,8 @@ void configurationTask(uint32_t currentMicros)
 
     logMark();
   }
-  
-  if(downButton.singlePulse()) {
-    if(vpMode.bankLimiter) {
-      consoleNoteLn_P(PSTR("Bank limiter DISABLED"));
-      vpMode.wingLeveler = vpMode.bankLimiter = false;
-    }
-  }
+
+  // LEFT UP, CONTINUOUS
   
   if(upButton.depressed()) {
     if(!vpMode.bankLimiter) {
@@ -1560,21 +1578,22 @@ void configurationTask(uint32_t currentMicros)
       vpMode.wingLeveler = true;
     } 
   }
+
+  // LEFT DOWN, PULSE
+  
+  if(downButton.singlePulse()) {
+    if(vpMode.bankLimiter) {
+      consoleNoteLn_P(PSTR("Bank limiter DISABLED"));
+      vpMode.wingLeveler = vpMode.bankLimiter = false;
+    }
+  }
+
+  // LEFT DOWN, CONTINUOUS
   
   if(downButton.depressed() && !vpMode.takeOff && !vpMode.alphaHold) {
     consoleNoteLn_P(PSTR("Alpha hold ENABLED"));
     vpMode.alphaHold = true;
     logMark();
-  }
-
-  if(gearButton.singlePulse()) {
-    if(gearOutput > 0) {
-      consoleNoteLn_P(PSTR("Gear DOWN"));
-      gearOutput = 0;
-    } else {
-      consoleNoteLn_P(PSTR("Gear UP"));
-      gearOutput = 1;
-    }
   }
 
   // Test parameter
