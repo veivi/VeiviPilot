@@ -36,6 +36,8 @@ const float stabilityAileExp2_c = 0.5;
 
 const float G = 9.81, RAD = 360/2/PI;
 
+const float alphaWindow_c = 1.0/20;
+
 const AP_HAL::HAL& hal = AP_HAL_BOARD_DRIVER;
 AP_HAL::BetterStream* cliSerial;
 
@@ -191,7 +193,8 @@ uint32_t prevMeasurement;
 float parameter;  
 NewI2C I2c = NewI2C();
 Accumulator ball, cycleTimeAcc, iasFilterSlow, iasFilter, accFilter;
-AlphaBuffer alphaBuffer, pressureBuffer;
+AlphaBuffer pressureBuffer;
+RunningAvgFilter alphaFilter;
 float controlCycle = 10.0e-3;
 uint32_t idleMicros;
 float idleAvg, logBandWidth, ppmFreq, simInputFreq;
@@ -825,8 +828,8 @@ void executeCommand(const char *buf)
 	consolePrint_P(PSTR(" IAS_WARN"));
       if(vpStatus.iasFailed)
 	consolePrint_P(PSTR(" IAS_FAILED"));
-      if(alphaBuffer.warn)
-	consolePrint_P(PSTR(" ALPHA_BUFFER"));
+      //      if(alphaBuffer.warn)
+      //	consolePrint_P(PSTR(" ALPHA_BUFFER"));
       if(pushCtrl.warn)
 	consolePrint_P(PSTR(" PUSHER"));
       if(elevCtrl.warn)
@@ -843,7 +846,7 @@ void executeCommand(const char *buf)
 
     case c_reset:
       pciWarn = vpStatus.alphaWarn = vpStatus.alphaFailed = pushCtrl.warn = elevCtrl.warn
-	= alphaBuffer.warn = eepromWarn = eepromFailed = ppmWarnShort
+	= eepromWarn = eepromFailed = ppmWarnShort
 	= ppmWarnSlow = aileCtrl.warn = false;
       consoleNoteLn_P(PSTR("Warning flags reset"));
       break;
@@ -897,7 +900,7 @@ void alphaTask(uint32_t currentMicros)
   static int failCount = 0;
   
   if(!handleFailure("alpha", !readAlpha_5048B(&raw), &vpStatus.alphaWarn, &vpStatus.alphaFailed, &failCount))
-    alphaBuffer.input((float) raw / (1L<<(8*sizeof(raw))));
+    alphaFilter.input((float) raw / (1L<<(8*sizeof(raw))));
 }
 
 void airspeedTask(uint32_t currentMicros)
@@ -982,7 +985,7 @@ void sensorTaskFast(uint32_t currentMicros)
   
   // Alpha input
   
-  alpha = clamp(alphaBuffer.output(), -1.0/8, 1.0/8);
+  alpha = clamp(alphaFilter.output(), -1.0/8, 1.0/8);
   
   // Airspeed
   
@@ -2584,8 +2587,12 @@ void setup() {
   setPinState(&GREEN_LED, 1);
   setPinState(&BLUE_LED, 1);
 
-  // Misc filters
+  // Alpha filter (sliding average over alphaWindow_c/seconds)
   
+  alphaFilter.setWindow(alphaWindow_c*ALPHA_HZ);
+
+  // Misc filters
+
   ball.setTau(70);
   cycleTimeAcc.setTau(10);
   analLowpass.setTau(2);

@@ -101,7 +101,7 @@ float RateLimiter::output(void)
   return state;
 }
 
-void RunningAvgFilter::setWindowLen(int a) 
+void RunningAvgFilter::setWindow(int a) 
 {
   if(a < 1 || a > windowLenMax)
      a = windowLenMax;

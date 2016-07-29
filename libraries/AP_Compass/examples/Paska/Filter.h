@@ -9,7 +9,7 @@
 // #define min(a,b) ((a) < (b) ? (a) : (b))
 // #define abs(a) ((a) < 0 ? -(a) : (a))
 
-const int windowLenMax = 8;
+const int windowLenMax = 1<<5;
 
 float sign(float x);
 float clamp(float value, float a, float b);
@@ -17,7 +17,7 @@ float mixValue(float mixRatio, float a, float b);
 
 class RunningAvgFilter {
   public:
-    void setWindowLen(int l);
+    void setWindow(int l);
     float input(float v);
     float output();
     
