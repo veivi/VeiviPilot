@@ -199,7 +199,7 @@ float controlCycle = 10.0e-3;
 uint32_t idleMicros;
 float idleAvg, logBandWidth, ppmFreq, simInputFreq;
 uint32_t simTimeStamp;
-RateLimiter aileRateLimiter, flapRateLimiter, trimRateLimiter;
+RateLimiter aileRateLimiter, flapRateLimiter, alphaRateLimiter;
 float elevOutput, elevOutputFeedForward, aileOutput = 0, flapOutput = 0, gearOutput = 0, brakeOutput = 0, rudderOutput = 0;
 
 const int maxTests_c = 32;
@@ -912,6 +912,8 @@ void airspeedTask(uint32_t currentMicros)
     pressureBuffer.input((float) raw);
 }
 
+DelayLine elevatorDelay;
+
 void receiverTask(uint32_t currentMicros)
 {
   if(inputValid(&aileInput))
@@ -939,6 +941,23 @@ void receiverTask(uint32_t currentMicros)
   downButton.input(switchValue);
   trimButton.input(switchValue);
   gearButton.input(switchValue);
+  
+  // Receiver fail detection
+
+  if(switchValue > 0.90 && aileStick < -0.90 && elevStick > 0.90) {
+    if(!vpMode.rxFailSafe) {
+      consoleNoteLn_P(PSTR("Receiver failsafe mode ENABLED"));
+      vpMode.rxFailSafe = true;
+      vpMode.alphaFailSafe = vpMode.sensorFailSafe = vpMode.takeOff = false;
+      vpMode.stabilizePitch = vpMode.alphaHold = vpMode.bankLimiter = true;
+      elevTrim = elevFromAlpha(thresholdAlpha) - trimAdjust;
+    }
+  } else if(vpMode.rxFailSafe) {
+    consoleNoteLn_P(PSTR("Receiver failsafe mode DISABLED"));
+    vpMode.rxFailSafe = false;
+  }
+
+  elevStick = elevatorDelay.input(elevStick);
   
   //
   //
@@ -1676,28 +1695,11 @@ void configurationTask(uint32_t currentMicros)
   vpMode.stabilizePitch = vpMode.alphaHold;
   vpMode.pitchHold = vpMode.autoBall = false;
   
-  // Receiver fail detection
-
-  if(switchValue > 0.90 && aileStick < -0.90 && elevStick > 0.90) {
-    if(!vpMode.rxFailSafe) {
-      consoleNoteLn_P(PSTR("Receiver failsafe mode ENABLED"));
-      vpMode.rxFailSafe = true;
-      vpMode.alphaFailSafe = vpMode.sensorFailSafe = vpMode.takeOff = false;
-      elevTrim = elevFromAlpha(thresholdAlpha) - trimAdjust;
-    }
-  } else if(vpMode.rxFailSafe) {
-    consoleNoteLn_P(PSTR("Receiver failsafe mode DISABLED"));
-    vpMode.rxFailSafe = false;
-  }
-
   //
   // Failsafe configuration
   //
   
-  if(vpMode.rxFailSafe)
-    vpMode.stabilizePitch = vpMode.alphaHold = vpMode.bankLimiter = true;
-
-  else if(vpMode.sensorFailSafe)
+  if(vpMode.sensorFailSafe)
     vpMode.stabilizePitch = vpMode.stabilizeBank
       = vpMode.pitchHold = vpMode.alphaHold = vpMode.bankLimiter
       = vpMode.takeOff = false;
@@ -1731,7 +1733,7 @@ void configurationTask(uint32_t currentMicros)
   
   aileRateLimiter.setRate(vpParam.servoRate/(90.0/2)/vpParam.aileDefl);
   flapRateLimiter.setRate(0.5);
-  trimRateLimiter.setRate(0.1);
+  alphaRateLimiter.setRate(1.5/360);
   
   // Then apply test modes
   
@@ -2166,12 +2168,7 @@ void controlTask(uint32_t currentMicros)
   const float effStick = vpMode.rxFailSafe ? shakerLimit : elevStick;
   const float stickStrength = fmaxf(effStick-shakerLimit, 0)/(1-shakerLimit);
 
-  if(vpMode.rxFailSafe)
-    trimRateLimiter.input(elevTrim, controlCycle);
-  else
-    trimRateLimiter.reset(elevTrim);
-
-  effTrim = trimRateLimiter.output() + (vpMode.alphaHold ? trimAdjust : 0);
+  effTrim = elevTrim + (vpMode.alphaHold ? trimAdjust : 0);
 
   elevOutput = effStick + effTrim;
   
@@ -2179,6 +2176,11 @@ void controlTask(uint32_t currentMicros)
     
   targetAlpha =
     clamp(alphaFromElev(elevOutput), -vpParam.alphaMax, effMaxAlpha);
+
+  if(vpMode.rxFailSafe)
+    targetAlpha = alphaRateLimiter.input(targetAlpha, controlCycle);
+  else
+    alphaRateLimiter.reset(targetAlpha);
 
   if(vpMode.alphaHold)
     targetPitchRate = levelTurnPitchRate(rollAngle, targetAlpha)
@@ -2350,7 +2352,7 @@ void actuatorTask(uint32_t currentMicros)
 void trimTask(uint32_t currentMicros)
 {
   if(trimButton.state())
-    elevTrim += clamp(elevStick/TRIM_HZ, -0.125/TRIM_HZ, 0.125/TRIM_HZ);
+    elevTrim += clamp(elevStick*2/TRIM_HZ, -0.125/TRIM_HZ, 0.125/TRIM_HZ);
 
   const float trimMin = -0.20, trimMax = 0.80;
   
@@ -2596,6 +2598,10 @@ void setup() {
   
   alphaFilter.setWindow(alphaWindow_c*ALPHA_HZ);
 
+  // Elevator delay
+
+  elevatorDelay.setDelay(2);
+  
   // Misc filters
 
   ball.setTau(70);

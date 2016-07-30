@@ -27,6 +27,18 @@ class RunningAvgFilter {
     int ptr;
 };
 
+class DelayLine {
+  public:
+    void setDelay(int l);
+    float input(float v);
+    float output();
+    
+  private:
+    float memory[windowLenMax];
+    int delay;
+    int ptr;
+};
+
 class Accumulator {
   public:
   void reset(float v);
@@ -49,7 +61,7 @@ class Derivator {
 
 class RateLimiter {
   public:
-  void input(float v, float dt);
+  float input(float v, float dt);
   float output();
   void setRate(float v);
   void reset(float v);

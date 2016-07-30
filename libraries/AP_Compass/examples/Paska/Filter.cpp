@@ -91,9 +91,10 @@ void RateLimiter::reset(float v)
   state = v;
 }  
 
-void RateLimiter::input(float v, float dt)
+float RateLimiter::input(float v, float dt)
 {
   state += clamp(v - state, -maxRate*dt, maxRate*dt);
+  return output();
 }
 
 float RateLimiter::output(void)
@@ -126,6 +127,30 @@ float RunningAvgFilter::input(float v)
     sum += memory[ptr] = v;
     
     return output();
+}
+  
+void DelayLine::setDelay(int a) 
+{
+  if(a < 1 || a > windowLenMax)
+     a = windowLenMax;
+
+   delay = a;
+
+   for(int i = 0; i < windowLenMax; i++)
+     memory[i] = 0.0;
+}
+
+float DelayLine::output() 
+{ 
+  return memory[(ptr+windowLenMax-delay)%windowLenMax];
+}
+
+float DelayLine::input(float v) 
+{
+  ptr = (ptr + 1) % windowLenMax;
+  memory[ptr] = v;
+    
+  return output();
 }
   
 float AlphaBuffer::output(void) { 
