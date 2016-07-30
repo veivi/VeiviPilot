@@ -184,12 +184,11 @@ float iAS, dynPressure, alpha, aileStick, elevStick, throttleStick, rudderStick;
 bool ailePilotInput, elevPilotInput, rudderPilotInput;
 uint32_t controlCycleEnded;
 float elevTrim, effTrim, trimAdjust, targetAlpha;
-float switchValue, tuningKnobValue, rpmOutput;
+float switchValue, tuningKnobValue;
 Controller elevCtrl, aileCtrl, pushCtrl, rudderCtrl;
 float autoAlphaP, maxAlpha, shakerAlpha, thresholdAlpha, rudderMix;
 float accX, accY, accZ, altitude,  heading, rollAngle, pitchAngle, rollRate, pitchRate, targetPitchRate, yawRate, levelBank;
 int cycleTimeCounter = 0;
-uint32_t prevMeasurement;
 float parameter;  
 NewI2C I2c = NewI2C();
 Accumulator ball, cycleTimeAcc, iasFilterSlow, iasFilter, accFilter;
@@ -241,10 +240,6 @@ bool testActive()
   return vpMode.test && vpMode.autoTest
     && testState != idle_c && testState != start_c && testState != trim_c;
 }
-
-#ifdef rpmPin
-struct RxInputRecord rpmInput = { rpmPin };
-#endif
 
 //
 // Datagram protocol integration
@@ -397,11 +392,6 @@ void logActuator(void)
   logGeneric(lc_rudder, rudderOutput);
 }
 
-void logRPM(void)
-{
-  logGeneric(lc_rpm, rpmOutput);
-}
-
 void logAttitude(void)
 {
   logGeneric(lc_dynpressure, dynPressure);
@@ -419,21 +409,6 @@ void logAttitude(void)
 float readParameter()
 {
   return tuningKnobValue/0.95 - (1/0.95 - 1);
-}
-
-float readRPM()
-{
-  return rpmOutput;
-}
-
-void rpmMeasure(bool on)
-{
-#if defined(rpmPin)
-  if(on)
-    PCMSK2 |= 1<<rpmInput.index;
-  else
-    PCMSK2 &= ~(1<<rpmInput.index);
-#endif
 }
 
 #define AS5048_ADDRESS 0x40 
@@ -711,7 +686,6 @@ void executeCommand(const char *buf)
 
     case c_loop:
       vpMode.loop = true;
-      rpmMeasure(true);
       break;
     
     case c_store:
@@ -851,14 +825,6 @@ void executeCommand(const char *buf)
       consoleNoteLn_P(PSTR("Warning flags reset"));
       break;
     
-    case c_rpm:
-      nvState.logRPM = param[0] > 0.5 ? true : false;
-      consoleNote_P(PSTR("RPM logging "));
-      consolePrintLn(nvState.logRPM ? "ENABLED" : "DISABLED");
-      rpmMeasure(nvState.logRPM);
-      storeNVState();
-      break;
-      
     default:
       consolePrint_P(PSTR("Sorry, command not implemented: \""));
       consolePrint(buf, tokenLen);
@@ -886,7 +852,6 @@ void logStartCallback()
   logActuator();
   logConfig();
   logPosition();
-  logRPM();
 }
 
 void logSaveTask(uint32_t currentMicros)
@@ -1084,29 +1049,6 @@ void sensorMonitorTask(uint32_t currentMicros)
   }
 }
 
-void rpmTask(uint32_t currentMicros)
-{
-#if defined(rpmPin)
-  static uint32_t prev;
-
-  FORBID;
-  
-  uint32_t count = rpmInput.pulseCount;
-  rpmInput.pulseCount = 0;
-  
-  PERMIT;
-  
-  uint32_t delta = currentMicros - prev;
-  
-  prev = currentMicros;
-  
-  const int numPoles = 4;
-
-  if(prev > 0)
-    rpmOutput = 1.0e6*2.0*60*count/numPoles/delta;
-#endif
-}
-
 void alphaLogTask(uint32_t currentMicros)
 {
   logAlpha();  
@@ -1118,7 +1060,6 @@ void controlLogTask(uint32_t currentMicros)
   logInput();
   logActuator();
   logConfig();
-  logRPM();
 }
 
 void positionLogTask(uint32_t currentMicros)
@@ -1158,6 +1099,8 @@ int compareFloat(const void *a, const void *b)
 
 void measurementTask(uint32_t currentMicros)
 {
+  static uint32_t prevMeasurement;
+ 
   // Idle measurement
   
   idleAvg = 7*idleAvg/8 + (float) idleMicros/1e6/8;
@@ -1947,10 +1890,6 @@ void loopTask(uint32_t currentMicros)
     consolePrint(pitchRate*360, 1);
     consolePrint(")");
     */
-    /*    
-    consolePrint(" rpm = ");
-    consolePrint(readRPM());
-    */
 /*    consolePrint(" heading = ");
     consolePrint(heading);
 */
@@ -2466,8 +2405,6 @@ struct Task taskList[] = {
     HZ_TO_PERIOD(CONFIG_HZ) },
   { configurationTask,
     HZ_TO_PERIOD(CONFIG_HZ) },
-  { rpmTask,
-    HZ_TO_PERIOD(LOG_HZ_CONTROL) },
   { alphaLogTask,
     HZ_TO_PERIOD(LOG_HZ_ALPHA) },
   { controlLogTask,
@@ -2560,13 +2497,6 @@ void setup() {
   
   ppmInputInit(ppmInputs, sizeof(ppmInputs)/sizeof(struct RxInputRecord*),
 	       nvState.rxMin, nvState.rxCenter, nvState.rxMax);
-
-  // RPM sensor int control
-
-#ifdef rpmPin
-  pinMode(rpmPin, INPUT_PULLUP);  
-  rpmMeasure(nvState.logRPM);
-#endif
 
   // Servos
 
