@@ -941,9 +941,11 @@ void receiverTask(uint32_t currentMicros)
   downButton.input(switchValue);
   trimButton.input(switchValue);
   gearButton.input(switchValue);
-  
-  // Receiver fail detection
 
+  //
+  // Receiver fail detection
+  //
+  
   if(switchValue > 0.90 && aileStick < -0.90 && elevStick > 0.90) {
     if(!vpMode.rxFailSafe) {
       consoleNoteLn_P(PSTR("Receiver failsafe mode ENABLED"));
@@ -957,6 +959,9 @@ void receiverTask(uint32_t currentMicros)
     vpMode.rxFailSafe = false;
   }
 
+  // Delay the elevator so we always detect the failsafe mode before
+  // doing anything with the raw elevator
+  
   elevStick = elevatorDelay.input(elevStick);
   
   //
@@ -1875,7 +1880,7 @@ void configurationTask(uint32_t currentMicros)
   if(!vpMode.alphaHold)
     trimAdjust =
       elevFromAlpha(clamp(alpha, vpParam.alphaZeroLift, maxAlpha))
-      - elevTrim;
+      - elevStick - elevTrim;
 }
 
 void loopTask(uint32_t currentMicros)
