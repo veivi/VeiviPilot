@@ -1546,29 +1546,9 @@ void configurationTask(uint32_t currentMicros)
     }
   }
 
-  // LEFT UP, PULSE
-  
-  if(upButton.singlePulse()) {
-    if(vpMode.alphaFailSafe || vpMode.sensorFailSafe) {
-      vpMode.alphaFailSafe = vpMode.sensorFailSafe = false;
-      consoleNoteLn_P(PSTR("Alpha/Sensor failsafe DISABLED"));
-            
-    } else {
-      if(vpMode.alphaHold) {
-	vpMode.alphaHold = false;
-	consoleNoteLn_P(PSTR("Alpha hold DISABLED"));
-	
-      } else if(!vpMode.takeOff && iasFilter.output() < vpParam.iasMin*2/3) {
-	consoleNoteLn_P(PSTR("TakeOff mode ENABLED"));
-	vpMode.takeOff = true;
-	elevTrim = vpParam.takeoffTrim;
-      }
-    }
-
-    logMark();
-  }
-
-  // LEFT UP, CONTINUOUS
+  //
+  // LEFT UP CONTINUOUS : WING LEVEL
+  //
   
   if(upButton.depressed()) {
     if(!vpMode.bankLimiter) {
@@ -1582,21 +1562,47 @@ void configurationTask(uint32_t currentMicros)
     } 
   }
 
-  // LEFT DOWN, PULSE
-  
-  if(downButton.singlePulse()) {
-    if(vpMode.bankLimiter) {
-      consoleNoteLn_P(PSTR("Bank limiter DISABLED"));
-      vpMode.wingLeveler = vpMode.bankLimiter = false;
-    }
-  }
-
-  // LEFT DOWN, CONTINUOUS
+  //
+  // LEFT DOWN CONTINUOUS : ENABLE ALPHA HOLD / SLOW FLIGHT
+  //
   
   if(downButton.depressed() && !vpMode.takeOff && !vpMode.alphaHold) {
     consoleNoteLn_P(PSTR("Alpha hold ENABLED"));
     vpMode.alphaHold = true;
     logMark();
+  }
+
+  //
+  // LEFT UP PULSE : DISABLE BANK LIMITER
+  //
+  
+  if(upButton.singlePulse()) {
+    if(vpMode.alphaFailSafe || vpMode.sensorFailSafe) {
+      vpMode.alphaFailSafe = vpMode.sensorFailSafe = false;
+      consoleNoteLn_P(PSTR("Alpha/Sensor failsafe DISABLED"));
+            
+    } else {
+      if(vpMode.bankLimiter) {
+	consoleNoteLn_P(PSTR("Bank limiter DISABLED"));
+	vpMode.wingLeveler = vpMode.bankLimiter = false;
+	
+      } else if(!vpMode.takeOff && iasFilter.output() < vpParam.iasMin*2/3) {
+	consoleNoteLn_P(PSTR("TakeOff mode ENABLED"));
+	vpMode.takeOff = true;
+	elevTrim = vpParam.takeoffTrim;
+      }
+    }
+
+    logMark();
+  }
+
+  //
+  // LEFT DOWN PULSE : DISABLE ALPHA HOLD
+  //
+  
+  if(downButton.singlePulse() && vpMode.alphaHold) {
+    vpMode.alphaHold = false;
+    consoleNoteLn_P(PSTR("Alpha hold DISABLED"));
   }
 
   // Test parameter
@@ -2155,9 +2161,10 @@ void controlTask(uint32_t currentMicros)
   //
 
   const float maxPitchRate
-    = scaleByIAS(vpParam.pitch_C, stabilityElevExp2_c);
-  
-  const float effStick = vpMode.rxFailSafe ? 0 : elevStick;
+    = scaleByIAS(vpParam.pitch_C, stabilityElevExp2_c);  
+  const float shakerLimit = (float) 2/3;
+  const float effStick = vpMode.rxFailSafe ? shakerLimit : elevStick;
+  const float stickStrength = fmaxf(effStick-shakerLimit, 0)/(1-shakerLimit);
 
   if(vpMode.rxFailSafe)
     trimRateLimiter.input(elevTrim, controlCycle);
@@ -2168,8 +2175,6 @@ void controlTask(uint32_t currentMicros)
 
   elevOutput = effStick + effTrim;
   
-  const float fract = 1.0/3;
-  const float stickStrength = fmaxf(effStick-(1-fract), 0)/fract;
   const float effMaxAlpha = mixValue(stickStrength, shakerAlpha, maxAlpha);
     
   targetAlpha =
@@ -2227,9 +2232,9 @@ void controlTask(uint32_t currentMicros)
   float maxBank = 45.0;
 
   if(vpMode.rxFailSafe)
-    maxBank = 15.0;
+    maxBank = 10.0;
   else if(vpMode.alphaHold)
-    maxBank /= 1 + elevTrim / elevFromAlpha(thresholdAlpha);
+    maxBank /= 1 + fmaxf(effTrim / elevFromAlpha(thresholdAlpha), 1.0);
   
   float targetRollRate = maxRollRate*aileStick;
 
