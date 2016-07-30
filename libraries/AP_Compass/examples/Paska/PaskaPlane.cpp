@@ -1556,18 +1556,21 @@ void configurationTask(uint32_t currentMicros)
     } else if(!vpStatus.positiveIAS)
       logDisable();
     
-  } else if(gearButton.singlePulse()) {
+  } else if(gearButton.singlePulse() && !gearOutput) {
     //
-    // SINGLE PULSE: GEAR TOGGLE
+    // SINGLE PULSE: GEAR UP
     //
     
-    if(gearOutput > 0) {
-      consoleNoteLn_P(PSTR("Gear DOWN"));
-      gearOutput = 0;
-    } else {
-      consoleNoteLn_P(PSTR("Gear UP"));
-      gearOutput = 1;
-    }
+    consoleNoteLn_P(PSTR("Gear UP"));
+    gearOutput = 1;
+
+  } else if(gearButton.depressed() && gearOutput) {
+    //
+    // CONTINUOUS: GEAR DOWN
+    //
+    
+    consoleNoteLn_P(PSTR("Gear DOWN"));
+    gearOutput = 0;
   }
 
   //
