@@ -2192,7 +2192,7 @@ void controlTask(uint32_t currentMicros)
   if(vpMode.sensorFailSafe || !vpMode.stabilizeBank || vpMode.takeOff) {
 
     if(!vpMode.sensorFailSafe && vpMode.wingLeveler)
-      aileOutput = clamp(aileOutput - rollAngle/45, -1, 1);
+      aileOutput = clamp(aileOutput - rollAngle/60, -1, 1);
     
     aileCtrl.reset(aileOutput, 0);
     
@@ -2204,7 +2204,8 @@ void controlTask(uint32_t currentMicros)
       // Strong leveler enabled
         
       targetRollRate =
-	clamp((levelBank + aileStick*maxBank - rollAngle)*factor_c, -maxRollRate, maxRollRate);
+	clamp((levelBank + aileStick*maxBank - rollAngle)*factor_c,
+	      -maxRollRate, maxRollRate);
 
     else if(vpMode.bankLimiter) {
       // Bank limiter + weak leveling
