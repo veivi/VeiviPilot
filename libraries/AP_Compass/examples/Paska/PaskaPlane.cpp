@@ -2177,22 +2177,22 @@ void controlTask(uint32_t currentMicros)
   
   // Aileron
 
+  aileOutput = aileStick;
+    
   const float maxRollRate = scaleByIAS(vpParam.roll_C, stabilityAileExp2_c);
   float maxBank = 45.0;
 
   if(vpMode.rxFailSafe)
     maxBank = 10.0;
   else if(vpMode.alphaHold)
-    maxBank /= 1 + fmaxf(effTrim / elevFromAlpha(thresholdAlpha), 1.0);
+    maxBank /= 1 + alphaFromElev(effTrim) / thresholdAlpha / 2;
   
   float targetRollRate = maxRollRate*aileStick;
 
   if(vpMode.sensorFailSafe || !vpMode.stabilizeBank || vpMode.takeOff) {
 
-    aileOutput = aileStick;
-    
     if(!vpMode.sensorFailSafe && vpMode.wingLeveler)
-      aileOutput -= rollAngle/60;
+      aileOutput = clamp(aileOutput - rollAngle/45, -1, 1);
     
     aileCtrl.reset(aileOutput, 0);
     
