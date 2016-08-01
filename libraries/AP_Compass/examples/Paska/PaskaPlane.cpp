@@ -183,7 +183,7 @@ float cycleMin = -1.0, cycleMax = -1.0, cycleMean = -1.0;
 float iAS, dynPressure, alpha, aileStick, elevStick, throttleStick, rudderStick;
 bool ailePilotInput, elevPilotInput, rudderPilotInput;
 uint32_t controlCycleEnded;
-float elevTrim, effTrim, trimAdjust, targetAlpha;
+float elevTrim, effTrim, elevTrimSub, targetAlpha;
 float switchValue, tuningKnobValue;
 Controller elevCtrl, aileCtrl, pushCtrl, rudderCtrl;
 float autoAlphaP, maxAlpha, shakerAlpha, thresholdAlpha, rudderMix;
@@ -917,7 +917,7 @@ void receiverTask(uint32_t currentMicros)
       vpMode.rxFailSafe = true;
       vpMode.alphaFailSafe = vpMode.sensorFailSafe = vpMode.takeOff = false;
       vpMode.stabilizePitch = vpMode.alphaHold = vpMode.bankLimiter = true;
-      elevTrim = elevFromAlpha(thresholdAlpha) - trimAdjust;
+      elevTrim = elevFromAlpha(thresholdAlpha) - elevTrimSub;
     }
   } else if(vpMode.rxFailSafe) {
     consoleNoteLn_P(PSTR("Receiver failsafe mode DISABLED"));
@@ -1824,7 +1824,7 @@ void configurationTask(uint32_t currentMicros)
   //
 
   if(!vpMode.alphaHold)
-    trimAdjust =
+    elevTrimSub =
       elevFromAlpha(clamp(alpha, vpParam.alphaZeroLift, maxAlpha))
       - elevStick - elevTrim;
 }
@@ -2115,7 +2115,7 @@ void controlTask(uint32_t currentMicros)
   const float effStick = vpMode.rxFailSafe ? shakerLimit : elevStick;
   const float stickStrength = fmaxf(effStick-shakerLimit, 0)/(1-shakerLimit);
 
-  effTrim = elevTrim + (vpMode.alphaHold ? trimAdjust : 0);
+  effTrim = vpMode.alphaHold ? elevTrim + elevTrimSub : elevTrim;
 
   elevOutput = effStick + effTrim;
   
@@ -2300,7 +2300,7 @@ void actuatorTask(uint32_t currentMicros)
 void trimTask(uint32_t currentMicros)
 {
   if(trimButton.state())
-    elevTrim += clamp(elevStick*2/TRIM_HZ, -0.125/TRIM_HZ, 0.125/TRIM_HZ);
+    elevTrim += clamp(elevStick/TRIM_HZ, -0.125/TRIM_HZ, 0.125/TRIM_HZ);
 
   const float trimMin = -0.20, trimMax = 0.80;
   
@@ -2309,8 +2309,8 @@ void trimTask(uint32_t currentMicros)
   
   else
     elevTrim = clamp(elevTrim,
-		     trimMin - trimAdjust,
-		     elevFromAlpha(thresholdAlpha) - trimAdjust);
+		     trimMin - elevTrimSub,
+		     elevFromAlpha(thresholdAlpha) - elevTrimSub);
 }
 
 bool logInitialized = false;
