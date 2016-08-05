@@ -1813,14 +1813,14 @@ void configurationTask(uint32_t currentMicros)
   }
 
   //
-  // Compute effective alpha limits
+  // Effective alpha limits
   //
   
   thresholdAlpha = maxAlpha/square(1 + thresholdMargin_c);
   shakerAlpha = maxAlpha/square(1 + thresholdMargin_c/2);
 
   //
-  // Take note of neutral stick/alpha
+  // Trim adjustment by mode
   //
 
   if(!vpMode.alphaHold)
