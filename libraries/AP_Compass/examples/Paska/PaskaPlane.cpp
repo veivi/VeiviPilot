@@ -82,9 +82,9 @@ const struct PinDescriptor led[] = {{ PortA, 3 }, { PortA, 4 }, { PortA, 5 }};
 
 struct PinDescriptor ppmInputPin = { PortL, 1 }; 
 struct RxInputRecord aileInput, elevInput, throttleInput, rudderInput,
-  switchInput, tuningKnobInput, gearInput, flapInput;
+  modeSwitchInput, tuningKnobInput, gearInput, flapInput;
 struct RxInputRecord *ppmInputs[] = 
-  { &aileInput, &elevInput, &throttleInput, &rudderInput, &switchInput, &tuningKnobInput, &gearInput, &flapInput };
+  { &aileInput, &elevInput, &throttleInput, &rudderInput, &modeSwitchInput, &tuningKnobInput, &gearInput, &flapInput };
 
 ButtonInputChannel buttonInput;
 Button upButton(0.26), downButton(-0.13), trimButton(0.66), gearButton(-0.60);
@@ -184,7 +184,7 @@ float iAS, dynPressure, alpha, aileStick, elevStick, throttleStick, rudderStick;
 bool ailePilotInput, elevPilotInput, rudderPilotInput;
 uint32_t controlCycleEnded;
 float elevTrim, effTrim, elevTrimSub, targetAlpha;
-float switchValue, tuningKnobValue;
+float tuningKnobValue;
 Controller elevCtrl, aileCtrl, pushCtrl, rudderCtrl;
 float autoAlphaP, maxAlpha, shakerAlpha, thresholdAlpha, rudderMix;
 float accX, accY, accZ, altitude,  heading, rollAngle, pitchAngle, rollRate, pitchRate, targetPitchRate, yawRate, levelBank;
@@ -358,7 +358,7 @@ void logConfig(void)
     
   logGeneric(lc_target, targetAlpha*360);
   logGeneric(lc_target_pr, targetPitchRate*360);
-  logGeneric(lc_trim, elevTrim*100);
+  logGeneric(lc_trim, effTrim*100);
 
   if(vpMode.test) {
     logGeneric(lc_gain, testGain);
@@ -899,19 +899,18 @@ void receiverTask(uint32_t currentMicros)
 
   flapSwitchValue = inputValue(&flapInput);
   
-  buttonInput.input(inputValue(&switchInput));  
-  switchValue = buttonInput.value();
+  buttonInput.input(inputValue(&modeSwitchInput));  
 
-  upButton.input(switchValue);
-  downButton.input(switchValue);
-  trimButton.input(switchValue);
-  gearButton.input(switchValue);
+  upButton.input(buttonInput.value());
+  downButton.input(buttonInput.value());
+  trimButton.input(buttonInput.value());
+  gearButton.input(buttonInput.value());
 
   //
   // Receiver fail detection
   //
   
-  if(switchValue > 0.90 && aileStick < -0.90 && elevStick > 0.90) {
+  if(buttonInput.value() > 0.90 && aileStick < -0.90 && elevStick > 0.90) {
     if(!vpMode.rxFailSafe) {
       consoleNoteLn_P(PSTR("Receiver failsafe mode ENABLED"));
       vpMode.rxFailSafe = true;
