@@ -36,7 +36,7 @@ const float stabilityAileExp2_c = 0.5;
 
 const float G = 9.81, RAD = 360/2/PI;
 
-const float alphaWindow_c = 1.0/20;
+const float alphaWindow_c = 1.0/30;
 
 const AP_HAL::HAL& hal = AP_HAL_BOARD_DRIVER;
 AP_HAL::BetterStream* cliSerial;
@@ -113,13 +113,20 @@ const struct PWMOutput pwmOutput[] = {
 // Function to servo output mapping
 //
 
-#define aileHandle     (vpParam.servoAile < 0 ? NULL : (&pwmOutput[vpParam.servoAile]))
-#define elevatorHandle (vpParam.servoElev < 0 ? NULL : (&pwmOutput[vpParam.servoElev]))
-#define flapHandle     (vpParam.servoFlap < 0 ? NULL : (&pwmOutput[vpParam.servoFlap]))
-#define flap2Handle    (vpParam.servoFlap2 < 0 ? NULL : (&pwmOutput[vpParam.servoFlap2]))
-#define gearHandle     (vpParam.servoGear < 0 ? NULL : (&pwmOutput[vpParam.servoGear]))
-#define brakeHandle    (vpParam.servoBrake < 0 ? NULL : (&pwmOutput[vpParam.servoBrake]))
-#define rudderHandle   (vpParam.servoRudder < 0 ? NULL : (&pwmOutput[vpParam.servoRudder]))
+#define aileHandle \
+  (vpParam.servoAile < 0 ? NULL : &pwmOutput[vpParam.servoAile])
+#define elevatorHandle \
+  (vpParam.servoElev < 0 ? NULL : &pwmOutput[vpParam.servoElev])
+#define flapHandle \
+  (vpParam.servoFlap < 0 ? NULL : &pwmOutput[vpParam.servoFlap])
+#define flap2Handle \
+  (vpParam.servoFlap2 < 0 ? NULL : &pwmOutput[vpParam.servoFlap2])
+#define gearHandle \
+  (vpParam.servoGear < 0 ? NULL : &pwmOutput[vpParam.servoGear])
+#define brakeHandle \
+  (vpParam.servoBrake < 0 ? NULL : &pwmOutput[vpParam.servoBrake])
+#define rudderHandle \
+  (vpParam.servoRudder < 0 ? NULL : &pwmOutput[vpParam.servoRudder])
 
 //
 // Periodic task stuff
