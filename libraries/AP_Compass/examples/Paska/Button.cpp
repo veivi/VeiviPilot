@@ -13,24 +13,28 @@ Button :: Button(float aValue)
 void Button :: reset()
 {
   count = 0;
-  pulseSingle = pulseDouble = pulseArmed = 0;
-  pulseStart = 0;
+  pulseSingle = pulseDouble = buttonPress = pulseArmed = false;
+  transition = 0;
 }
 
 void Button :: input(float inputValue)
 {
-  bool inputState = fabs(inputValue - activeValue) < 0.05;
+  bool inputState = fabsf(inputValue - activeValue) < 0.075;
 
-  if(inertia != inputState) {
-    inertia = inputState;
-    return;
+  if(!inputState)
+    inertiaState = false;
+
+  else if(!inertiaState) {
+    inertiaState = true;
+    inputState = false;
   }
-
+  
   if(inputState != statePrev) {
-    pulseStart = hal.scheduler->micros();
+    transition = hal.scheduler->micros();
 
     if(inputState)
       pulseArmed = true;
+      
     else if(pulseArmed) {
       if(count > 0) {
 	pulseDouble = true;
@@ -43,10 +47,10 @@ void Button :: input(float inputValue)
     }
     
     statePrev = inputState;
-  } else if(hal.scheduler->micros() - pulseStart > 1.0e6/3) {
+  } else if(hal.scheduler->micros() - transition > 2.0e6/3) {
 
     if(stateLazy != inputState)
-      stateActive = inputState;
+      buttonPress = inputState;
     
     stateLazy = inputState;
     
@@ -65,8 +69,8 @@ bool Button::state(void)
 
 bool Button::depressed(void)
 {
-  bool value = stateActive;
-  stateActive = false;
+  bool value = buttonPress;
+  buttonPress = false;
   return value;
 }  
 

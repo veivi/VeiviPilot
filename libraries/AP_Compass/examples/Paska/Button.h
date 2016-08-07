@@ -15,11 +15,11 @@ public:
 
 private:
   float activeValue;
-  bool inertia, filterOutput, statePrev, stateLazy, stateActive;
-  uint32_t pulseStart;
-  bool pulseArmed;
+  bool filterOutput, statePrev, stateLazy;
+  uint32_t transition;
+  bool pulseArmed, inertiaState;
   uint8_t count;
-  bool pulseDouble, pulseSingle;
+  bool pulseDouble, pulseSingle, buttonPress;
 };
 
 #endif

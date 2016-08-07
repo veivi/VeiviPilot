@@ -150,16 +150,21 @@ struct ModeRecord {
   bool alphaFailSafe;
   bool sensorFailSafe;
   bool rxFailSafe;
-  bool stabilizeBank;
   bool wingLeveler;
   bool bankLimiter;
+  bool takeOff;
+  bool slowFlight;
+  bool autoTest;
+  bool alwaysLog;
+};
+
+struct FeatureRecord {
+  bool stabilizeBank;
   bool stabilizePitch;
   bool pitchHold;
   bool alphaHold;
+  bool pusher;
   bool autoBall;
-  bool takeOff;
-  bool autoTest;
-  bool alwaysLog;
 };
 
 struct GPSFix {
@@ -171,6 +176,7 @@ struct GPSFix {
 };
 
 struct ModeRecord vpMode;
+struct FeatureRecord vpFeature;
 struct StatusRecord vpStatus;
 struct GPSFix gpsFix;
 
@@ -354,7 +360,7 @@ void logConfig(void)
     + (vpMode.sensorFailSafe ? 16 : 0) 
     + (vpMode.wingLeveler ? 8 : 0) 
     + (vpMode.bankLimiter ? 4 : 0) 
-    + (vpMode.alphaHold ? 1 : 0)); 
+    + (vpMode.slowFlight ? 1 : 0)); 
     
   logGeneric(lc_target, targetAlpha*360);
   logGeneric(lc_target_pr, targetPitchRate*360);
@@ -915,8 +921,6 @@ void receiverTask(uint32_t currentMicros)
       consoleNoteLn_P(PSTR("Receiver failsafe mode ENABLED"));
       vpMode.rxFailSafe = true;
       vpMode.alphaFailSafe = vpMode.sensorFailSafe = vpMode.takeOff = false;
-      vpMode.stabilizePitch = vpMode.alphaHold = vpMode.bankLimiter = true;
-      elevTrim = elevFromAlpha(thresholdAlpha) - elevTrimSub;
     }
   } else if(vpMode.rxFailSafe) {
     consoleNoteLn_P(PSTR("Receiver failsafe mode DISABLED"));
@@ -1492,7 +1496,6 @@ void configurationTask(uint32_t currentMicros)
     } else if(!vpMode.sensorFailSafe) {
       consoleNoteLn_P(PSTR("Total sensor FAILSAFE"));
       vpMode.sensorFailSafe = true;
-      elevTrim = 0;
       logMark();
       
     } else if(!vpStatus.positiveIAS)
@@ -1535,9 +1538,10 @@ void configurationTask(uint32_t currentMicros)
   // LEFT DOWN CONTINUOUS : ENABLE ALPHA HOLD / SLOW FLIGHT
   //
   
-  if(downButton.depressed() && !vpMode.takeOff && !vpMode.alphaHold) {
-    consoleNoteLn_P(PSTR("Alpha hold ENABLED"));
-    vpMode.alphaHold = true;
+  if(downButton.depressed() && !vpMode.slowFlight) {
+    consoleNoteLn_P(PSTR("Slow flight mode ENABLED"));
+    vpMode.slowFlight = true;
+    vpMode.takeOff = false;
     logMark();
   }
 
@@ -1558,6 +1562,7 @@ void configurationTask(uint32_t currentMicros)
       } else if(!vpMode.takeOff && iasFilter.output() < vpParam.iasMin*2/3) {
 	consoleNoteLn_P(PSTR("TakeOff mode ENABLED"));
 	vpMode.takeOff = true;
+	vpMode.slowFlight = false;
 	elevTrim = vpParam.takeoffTrim;
       }
     }
@@ -1569,9 +1574,9 @@ void configurationTask(uint32_t currentMicros)
   // LEFT DOWN PULSE : DISABLE ALPHA HOLD
   //
   
-  if(downButton.singlePulse() && vpMode.alphaHold) {
-    vpMode.alphaHold = false;
-    consoleNoteLn_P(PSTR("Alpha hold DISABLED"));
+  if(downButton.singlePulse() && vpMode.slowFlight) {
+    consoleNoteLn_P(PSTR("Slow flight mode DISABLED"));
+    vpMode.slowFlight = false;
   }
 
   // Test parameter
@@ -1641,22 +1646,29 @@ void configurationTask(uint32_t currentMicros)
 
   // Mode-to-feature mapping: first nominal values
       
-  vpMode.stabilizeBank = true;
-  vpMode.stabilizePitch = vpMode.alphaHold;
-  vpMode.pitchHold = vpMode.autoBall = false;
+  vpFeature.stabilizeBank = vpFeature.pusher = true;
+  vpFeature.stabilizePitch = vpFeature.alphaHold = vpMode.slowFlight;
+  vpFeature.pitchHold = vpFeature.autoBall = false;
   
   //
   // Failsafe configuration
   //
-  
-  if(vpMode.sensorFailSafe)
-    vpMode.stabilizePitch = vpMode.stabilizeBank
-      = vpMode.pitchHold = vpMode.alphaHold = vpMode.bankLimiter
-      = vpMode.takeOff = false;
 
-  else if(vpMode.alphaFailSafe)
-    vpMode.stabilizePitch = vpMode.pitchHold = vpMode.alphaHold
-      = vpMode.takeOff = false;
+  if(vpMode.rxFailSafe) {
+    vpFeature.stabilizePitch = vpFeature.stabilizeBank
+      = vpFeature.pusher = vpFeature.alphaHold = vpMode.bankLimiter = true;
+
+    elevTrim = elevFromAlpha(thresholdAlpha) - elevTrimSub;
+    
+  } else if(vpMode.sensorFailSafe) {
+    vpFeature.stabilizePitch = vpFeature.stabilizeBank
+      = vpFeature.pitchHold = vpFeature.alphaHold = vpFeature.pusher
+      = vpMode.bankLimiter = vpMode.wingLeveler = vpMode.takeOff
+      = vpMode.slowFlight = false;
+
+  } else if(vpMode.alphaFailSafe)
+    vpFeature.stabilizePitch = vpFeature.pitchHold = vpFeature.alphaHold
+      = vpFeature.pusher = vpMode.takeOff = vpMode.slowFlight = false;
   
   // Safety scaling (test mode 0)
   
@@ -1692,7 +1704,7 @@ void configurationTask(uint32_t currentMicros)
     case 1:
       // Wing stabilizer gain
          
-      vpMode.stabilizeBank = vpMode.bankLimiter = vpMode.wingLeveler = true;
+      vpFeature.stabilizeBank = vpMode.bankLimiter = vpMode.wingLeveler = true;
       aileCtrl.setPID(testGain = testGainExpo(s_Ku_ref), 0, 0);
       break;
             
@@ -1700,7 +1712,7 @@ void configurationTask(uint32_t currentMicros)
       // Wing stabilizer gain autotest
 
       analyzerInputCh = ac_aile;
-      vpMode.stabilizeBank = vpMode.bankLimiter = vpMode.wingLeveler = true;
+      vpFeature.stabilizeBank = vpMode.bankLimiter = vpMode.wingLeveler = true;
 	
       if(!vpMode.autoTest) {
 	vpMode.autoTest = true;
@@ -1713,8 +1725,8 @@ void configurationTask(uint32_t currentMicros)
     case 2:
       // Elevator stabilizer gain, outer loop disabled
          
-      vpMode.stabilizePitch = true;
-      vpMode.alphaHold = false;
+      vpFeature.stabilizePitch = true;
+      vpFeature.alphaHold = false;
       elevCtrl.setPID(testGain = testGainExpo(i_Ku_ref), 0, 0);
       break;
          
@@ -1722,8 +1734,8 @@ void configurationTask(uint32_t currentMicros)
       // Elevator stabilizer gain, outer loop disabled
    
       analyzerInputCh = ac_elev;
-      vpMode.stabilizePitch = true;
-      vpMode.alphaHold = false;
+      vpFeature.stabilizePitch = true;
+      vpFeature.alphaHold = false;
 	
       if(!vpMode.autoTest) {
 	vpMode.autoTest = true;
@@ -1736,7 +1748,7 @@ void configurationTask(uint32_t currentMicros)
     case 3:
       // Elevator stabilizer gain, outer loop enabled
          
-      vpMode.stabilizePitch = vpMode.alphaHold = true;
+      vpFeature.stabilizePitch = vpFeature.alphaHold = true;
       elevCtrl.setPID(testGain = testGainExpo(i_Ku_ref), 0, 0);
       break;
          
@@ -1744,7 +1756,7 @@ void configurationTask(uint32_t currentMicros)
       // Elevator stabilizer gain, outer loop enabled
          
       analyzerInputCh = ac_elev;
-      vpMode.stabilizePitch = vpMode.alphaHold = true;
+      vpFeature.stabilizePitch = vpFeature.alphaHold = true;
 	
       if(!vpMode.autoTest) {
 	vpMode.autoTest = true;
@@ -1757,15 +1769,15 @@ void configurationTask(uint32_t currentMicros)
     case 4:
       // Auto alpha outer loop gain
          
-      vpMode.stabilizePitch = vpMode.alphaHold = true;
+      vpFeature.stabilizePitch = vpFeature.alphaHold = true;
       autoAlphaP = testGain = testGainExpo(vpParam.o_P);
       break;
          
     case 5:
       // Auto ball gain
          
-      vpMode.stabilizeBank = vpMode.bankLimiter = vpMode.wingLeveler = true;
-      vpMode.autoBall = true;
+      vpFeature.stabilizeBank = vpMode.bankLimiter = vpMode.wingLeveler = true;
+      vpFeature.autoBall = true;
       rudderMix = 0;
       rudderCtrl.setPID(testGain = testGainExpo(vpParam.r_Ku), 0, 0);
       break;
@@ -1774,8 +1786,8 @@ void configurationTask(uint32_t currentMicros)
       // Aileron and rudder calibration, straight and level flight with
       // ball centered, reduced controller gain to increase stability
          
-      vpMode.stabilizeBank = vpMode.bankLimiter = vpMode.wingLeveler = true;
-      vpMode.autoBall = true;
+      vpFeature.stabilizeBank = vpMode.bankLimiter = vpMode.wingLeveler = true;
+      vpFeature.autoBall = true;
       rudderMix = 0;
       aileCtrl.
 	setZieglerNicholsPID(s_Ku*testGain, vpParam.s_Tu);
@@ -1786,7 +1798,7 @@ void configurationTask(uint32_t currentMicros)
     case 7:
       // Auto ball empirical gain, PI
        
-      vpMode.autoBall = true;
+      vpFeature.autoBall = true;
       rudderCtrl.setZieglerNicholsPI(testGain = testGainExpo(vpParam.r_Ku),
 				     vpParam.r_Tu);
       break;
@@ -1794,7 +1806,7 @@ void configurationTask(uint32_t currentMicros)
     case 9:
       // Max alpha
 
-      vpMode.stabilizeBank = vpMode.bankLimiter = vpMode.wingLeveler = true;
+      vpFeature.stabilizeBank = vpMode.bankLimiter = vpMode.wingLeveler = true;
       maxAlpha = testGain = testGainLinear(20.0/360, 10.0/360);
       break;         
 
@@ -1822,7 +1834,7 @@ void configurationTask(uint32_t currentMicros)
   // Trim adjustment by mode
   //
 
-  if(!vpMode.alphaHold)
+  if(!vpFeature.alphaHold)
     elevTrimSub =
       elevFromAlpha(clamp(alpha, vpParam.alphaZeroLift, maxAlpha))
       - elevStick - elevTrim;
@@ -2114,7 +2126,7 @@ void controlTask(uint32_t currentMicros)
   const float effStick = vpMode.rxFailSafe ? shakerLimit : elevStick;
   const float stickStrength = fmaxf(effStick-shakerLimit, 0)/(1-shakerLimit);
 
-  effTrim = vpMode.alphaHold ? elevTrim + elevTrimSub : elevTrim;
+  effTrim = vpFeature.alphaHold ? elevTrim + elevTrimSub : elevTrim;
 
   elevOutput = effStick + effTrim;
   
@@ -2128,11 +2140,11 @@ void controlTask(uint32_t currentMicros)
   else
     alphaRateLimiter.reset(targetAlpha);
 
-  if(vpMode.alphaHold)
+  if(vpFeature.alphaHold)
     targetPitchRate = levelTurnPitchRate(rollAngle, targetAlpha)
       + (targetAlpha - alpha)*autoAlphaP*maxPitchRate;
   
-  else if(vpMode.pitchHold)
+  else if(vpFeature.pitchHold)
     targetPitchRate = (5 + effStick*30 - pitchAngle)/90 * maxPitchRate;
 
   else
@@ -2140,12 +2152,12 @@ void controlTask(uint32_t currentMicros)
 
   elevOutputFeedForward = elevFromAlpha(targetAlpha);
 
-  if(vpMode.stabilizePitch)
+  if(vpFeature.stabilizePitch)
     elevCtrl.input(targetPitchRate - pitchRate, controlCycle);
   else
     elevCtrl.reset(elevOutput - elevOutputFeedForward, 0.0);
     
-  if(!vpMode.alphaFailSafe && !vpMode.takeOff && vpMode.stabilizePitch) {
+  if(vpFeature.stabilizePitch && !vpMode.takeOff) {
     elevOutput = elevCtrl.output();
 
     static float elevTestBias = 0;
@@ -2157,13 +2169,13 @@ void controlTask(uint32_t currentMicros)
     else
       elevTestBias = elevOutput;
       
-    if(vpMode.alphaHold)
+    if(vpFeature.alphaHold)
       elevOutput += elevOutputFeedForward;
   }
 
   // Pusher
 
-  if(!vpMode.alphaFailSafe && !vpMode.takeOff && !vpStatus.alphaFailed) {
+  if(vpFeature.pusher && !vpMode.takeOff) {
     pushCtrl.input(levelTurnPitchRate(rollAngle, effMaxAlpha)
 		   + (effMaxAlpha - alpha)*autoAlphaP*maxPitchRate - pitchRate,
 		   controlCycle);
@@ -2183,14 +2195,14 @@ void controlTask(uint32_t currentMicros)
 
   if(vpMode.rxFailSafe)
     maxBank = 10.0;
-  else if(vpMode.alphaHold)
+  else if(vpFeature.alphaHold)
     maxBank /= 1 + alphaFromElev(effTrim) / thresholdAlpha / 2;
   
   float targetRollRate = maxRollRate*aileStick;
 
-  if(vpMode.sensorFailSafe || !vpMode.stabilizeBank || vpMode.takeOff) {
+  if(!vpFeature.stabilizeBank || vpMode.takeOff) {
 
-    if(!vpMode.sensorFailSafe && vpMode.wingLeveler)
+    if(vpMode.wingLeveler)
       aileOutput = clamp(aileOutput - rollAngle/60, -1, 1);
     
     aileCtrl.reset(aileOutput, 0);
@@ -2227,7 +2239,7 @@ void controlTask(uint32_t currentMicros)
     
   rudderOutput = rudderStick;
     
-  if(vpMode.sensorFailSafe || !vpMode.autoBall || vpMode.takeOff) {
+  if(!vpFeature.autoBall || vpMode.takeOff) {
 
     // Failsafe mode or auto ball disabled or taking off
     
@@ -2247,8 +2259,7 @@ void controlTask(uint32_t currentMicros)
 
   // Aileron/rudder mix
   
-  if(!vpMode.sensorFailSafe)
-    rudderOutput += aileRateLimiter.output()*rudderMix;
+  rudderOutput += aileRateLimiter.output()*rudderMix;
 
   rudderOutput = clamp(rudderOutput, -1, 1);
 
@@ -2260,10 +2271,10 @@ void controlTask(uint32_t currentMicros)
     
   // Brake
     
-  if(!vpMode.sensorFailSafe && gearOutput == 1)
+  if(gearOutput == 1 || elevStick > 0)
     brakeOutput = 0;
   else
-    brakeOutput = fmaxf(-elevStick, 0);
+    brakeOutput = -elevStick;
 }
 
 void actuatorTask(uint32_t currentMicros)
@@ -2303,7 +2314,7 @@ void trimTask(uint32_t currentMicros)
 
   const float trimMin = -0.20, trimMax = 0.80;
   
-  if(!vpMode.alphaHold)
+  if(!vpFeature.alphaHold)
     elevTrim = clamp(elevTrim, trimMin, trimMax);
   
   else
