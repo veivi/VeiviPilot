@@ -27,9 +27,6 @@ struct LogChannel logChannels[] = {
    { lc_trim, "TRIM", -180, 180 },
    { lc_gain, "GAIN", 0, 50},
    { lc_test, "TEST", 0, 255},
-   { lc_rpm, "RPM", 0, 50000 },
-   { lc_speed, "VELO", 0, 300 },
-   { lc_track, "TRAK", 0, 360 },
-   { lc_altgps, "ALTG", -10, 300 },
-   { lc_altbaro, "ALTB", -10, 300 } };
+   { lc_alt, "ALTI", -10, 300 },
+   { lc_rpm, "RPM", 0, 50000 } };
 

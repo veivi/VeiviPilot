@@ -377,7 +377,6 @@ void logConfig(void)
       modeSum += 1.0/(2<<i);
   
   logGeneric(lc_mode, modeSum);
-  
   logGeneric(lc_target, targetAlpha*360);
   logGeneric(lc_target_pr, targetPitchRate*360);
   logGeneric(lc_trim, effTrim*100);
@@ -393,10 +392,7 @@ void logConfig(void)
 
 void logPosition(void)
 {
-  logGeneric(lc_speed, gpsFix.speed);
-  logGeneric(lc_track, gpsFix.track);
-  logGeneric(lc_altgps, gpsFix.altitude);
-  logGeneric(lc_altbaro, altitude);
+  logGeneric(lc_alt, altitude);
 }
   
 void logInput(void)
