@@ -362,13 +362,22 @@ void logAlpha(void)
 
 void logConfig(void)
 {
-  logGeneric(lc_mode, 
-    (vpMode.rxFailSafe ? 32 : 0) 
-    + (vpMode.sensorFailSafe ? 16 : 0) 
-    + (vpMode.wingLeveler ? 8 : 0) 
-    + (vpMode.bankLimiter ? 4 : 0) 
-    + (vpMode.slowFlight ? 1 : 0)); 
-    
+  bool mode[] = { vpMode.rxFailSafe,
+		  vpMode.sensorFailSafe,
+		  vpMode.alphaFailSafe,
+		  vpMode.takeOff,
+		  vpMode.slowFlight,
+		  vpMode.bankLimiter,
+		  vpMode.wingLeveler };
+
+  float modeSum = 0;
+  
+  for(uint16_t i = 0; i < sizeof(mode)/sizeof(bool); i++)
+    if(mode[i])
+      modeSum += 1.0/(2<<i);
+  
+  logGeneric(lc_mode, modeSum);
+  
   logGeneric(lc_target, targetAlpha*360);
   logGeneric(lc_target_pr, targetPitchRate*360);
   logGeneric(lc_trim, effTrim*100);
