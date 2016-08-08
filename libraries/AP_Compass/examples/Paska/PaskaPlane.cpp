@@ -1530,11 +1530,35 @@ void configurationTask(uint32_t currentMicros)
     gearOutput = 0;
   }
 
-  //
-  // LEFT UP CONTINUOUS : WING LEVEL
-  //
+  if(upButton.singlePulse()) {
+    //
+    // LEFT UP PULSE : DISABLE BANK LIMITER
+    //
   
-  if(upButton.depressed()) {
+    if(vpMode.alphaFailSafe || vpMode.sensorFailSafe) {
+      vpMode.alphaFailSafe = vpMode.sensorFailSafe = false;
+      consoleNoteLn_P(PSTR("Alpha/Sensor failsafe DISABLED"));
+            
+    } else {
+      if(vpMode.bankLimiter || vpMode.slowFlight) {
+	consoleNoteLn_P(PSTR("Bank limiter/slow flight mode DISABLED"));
+	vpMode.wingLeveler = vpMode.bankLimiter = vpMode.slowFlight = false;
+	
+      } else if(!vpMode.takeOff && iasFilter.output() < vpParam.iasMin*2/3) {
+	consoleNoteLn_P(PSTR("TakeOff mode ENABLED"));
+	vpMode.takeOff = true;
+	vpMode.slowFlight = false;
+	elevTrim = vpParam.takeoffTrim;
+      }
+    }
+
+    logMark();
+  } else if(upButton.depressed()) {
+
+    //
+    // LEFT UP CONTINUOUS : WING LEVELER
+    //
+  
     if(!vpMode.bankLimiter) {
       consoleNoteLn_P(PSTR("Bank limiter ENABLED"));
       vpMode.bankLimiter = true;
@@ -1546,49 +1570,23 @@ void configurationTask(uint32_t currentMicros)
     } 
   }
 
-  //
-  // LEFT DOWN CONTINUOUS : ENABLE ALPHA HOLD / SLOW FLIGHT
-  //
+  if(downButton.singlePulse() && vpMode.slowFlight) {
+    //
+    // LEFT DOWN PULSE : DISABLE ALPHA HOLD
+    //
   
-  if(downButton.depressed() && !vpMode.slowFlight) {
+    consoleNoteLn_P(PSTR("Slow flight mode DISABLED"));
+    vpMode.slowFlight = false;
+  } else if(downButton.depressed() && !vpMode.slowFlight) {
+
+    //
+    // LEFT DOWN CONTINUOUS : ENABLE ALPHA HOLD / SLOW FLIGHT
+    //
+  
     consoleNoteLn_P(PSTR("Slow flight mode ENABLED"));
     vpMode.slowFlight = true;
     vpMode.takeOff = false;
     logMark();
-  }
-
-  //
-  // LEFT UP PULSE : DISABLE BANK LIMITER
-  //
-  
-  if(upButton.singlePulse()) {
-    if(vpMode.alphaFailSafe || vpMode.sensorFailSafe) {
-      vpMode.alphaFailSafe = vpMode.sensorFailSafe = false;
-      consoleNoteLn_P(PSTR("Alpha/Sensor failsafe DISABLED"));
-            
-    } else {
-      if(vpMode.bankLimiter) {
-	consoleNoteLn_P(PSTR("Bank limiter DISABLED"));
-	vpMode.wingLeveler = vpMode.bankLimiter = false;
-	
-      } else if(!vpMode.takeOff && iasFilter.output() < vpParam.iasMin*2/3) {
-	consoleNoteLn_P(PSTR("TakeOff mode ENABLED"));
-	vpMode.takeOff = true;
-	vpMode.slowFlight = false;
-	elevTrim = vpParam.takeoffTrim;
-      }
-    }
-
-    logMark();
-  }
-
-  //
-  // LEFT DOWN PULSE : DISABLE ALPHA HOLD
-  //
-  
-  if(downButton.singlePulse() && vpMode.slowFlight) {
-    consoleNoteLn_P(PSTR("Slow flight mode DISABLED"));
-    vpMode.slowFlight = false;
   }
 
   // Test parameter
@@ -1656,14 +1654,17 @@ void configurationTask(uint32_t currentMicros)
     vpMode.takeOff = false;
   }
 
-  // Mode-to-feature mapping: first nominal values
-      
-  vpFeature.stabilizeBank = vpFeature.pusher = true;
-  vpFeature.stabilizePitch = vpFeature.alphaHold = vpMode.slowFlight;
+  //
+  // Map mode to features
+  //
+  
+  vpFeature.stabilizeBank = vpFeature.pusher = !vpMode.takeOff;
+  vpFeature.stabilizePitch = vpFeature.alphaHold
+    = vpMode.slowFlight && !vpMode.takeOff;
   vpFeature.pitchHold = vpFeature.autoBall = false;
   
   //
-  // Failsafe configuration
+  // Failsafe mode interpretation
   //
 
   if(vpMode.rxFailSafe) {
@@ -1681,7 +1682,7 @@ void configurationTask(uint32_t currentMicros)
   } else if(vpMode.alphaFailSafe)
     vpFeature.stabilizePitch = vpFeature.pitchHold = vpFeature.alphaHold
       = vpFeature.pusher = vpMode.takeOff = vpMode.slowFlight = false;
-  
+
   // Safety scaling (test mode 0)
   
   float scale = 1.0;
@@ -2164,12 +2165,9 @@ void controlTask(uint32_t currentMicros)
 
   elevOutputFeedForward = elevFromAlpha(targetAlpha);
 
-  if(vpFeature.stabilizePitch)
+  if(vpFeature.stabilizePitch) {
     elevCtrl.input(targetPitchRate - pitchRate, controlCycle);
-  else
-    elevCtrl.reset(elevOutput - elevOutputFeedForward, 0.0);
     
-  if(vpFeature.stabilizePitch && !vpMode.takeOff) {
     elevOutput = elevCtrl.output();
 
     static float elevTestBias = 0;
@@ -2183,11 +2181,12 @@ void controlTask(uint32_t currentMicros)
       
     if(vpFeature.alphaHold)
       elevOutput += elevOutputFeedForward;
-  }
+  } else
+    elevCtrl.reset(elevOutput - elevOutputFeedForward, 0.0);
 
   // Pusher
 
-  if(vpFeature.pusher && !vpMode.takeOff) {
+  if(vpFeature.pusher) {
     pushCtrl.input(levelTurnPitchRate(rollAngle, effMaxAlpha)
 		   + (effMaxAlpha - alpha)*autoAlphaP*maxPitchRate - pitchRate,
 		   controlCycle);
@@ -2212,7 +2211,7 @@ void controlTask(uint32_t currentMicros)
   
   float targetRollRate = maxRollRate*aileStick;
 
-  if(!vpFeature.stabilizeBank || vpMode.takeOff) {
+  if(!vpFeature.stabilizeBank) {
 
     if(vpMode.wingLeveler)
       aileOutput = clamp(aileOutput - rollAngle/60, -1, 1);
@@ -2251,23 +2250,15 @@ void controlTask(uint32_t currentMicros)
     
   rudderOutput = rudderStick;
     
-  if(!vpFeature.autoBall || vpMode.takeOff) {
-
-    // Failsafe mode or auto ball disabled or taking off
-    
-    rudderCtrl.reset(rudderOutput, 0);
-    
-  } else {
-    
-    // Auto ball enabled
-    
+  if(vpFeature.autoBall) {
     const float factor_c = 1/9.81/4;
 
     if(!rudderPilotInput)
       rudderCtrl.input(-ball.output()*factor_c, controlCycle);
     
     rudderOutput += rudderCtrl.output();
-  }
+  } else
+    rudderCtrl.reset(rudderOutput, 0);
 
   // Aileron/rudder mix
   
