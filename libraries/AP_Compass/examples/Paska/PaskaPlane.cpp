@@ -90,10 +90,10 @@ ButtonInputChannel buttonInput;
 Button rightDownButton(-0.60), rightUpButton(0.26),
   leftDownButton(-0.13), leftUpButton(0.66);
 
-#define aileModeButton rightUpButton
-#define elevModeButton rightDownButton
-#define trimButton leftUpButton
-#define gearButton leftDownButton
+#define AILEMODE rightUpButton
+#define ELEVMODE rightDownButton
+#define TRIM leftUpButton
+#define GEAR leftDownButton
 
 int8_t flapSwitchValue;
 
@@ -925,10 +925,10 @@ void receiverTask(uint32_t currentMicros)
   
   buttonInput.input(inputValue(&modeSwitchInput));  
 
-  aileModeButton.input(buttonInput.value());
-  elevModeButton.input(buttonInput.value());
-  trimButton.input(buttonInput.value());
-  gearButton.input(buttonInput.value());
+  AILEMODE.input(buttonInput.value());
+  ELEVMODE.input(buttonInput.value());
+  TRIM.input(buttonInput.value());
+  GEAR.input(buttonInput.value());
 
   //
   // Receiver fail detection
@@ -1428,16 +1428,16 @@ void configurationTask(uint32_t currentMicros)
   //
   
   if(!vpStatus.armed) {
-    if(trimButton.doublePulse() && aileStick < -0.90 && elevStick > 0.90) {
+    if(TRIM.doublePulse() && aileStick < -0.90 && elevStick > 0.90) {
       consoleNoteLn_P(PSTR("We're now ARMED"));
       vpStatus.armed = true;
       
       if(!vpStatus.consoleLink)
 	vpStatus.silent = true;
 
-      elevModeButton.reset();
-      aileModeButton.reset();
-      gearButton.reset();
+      ELEVMODE.reset();
+      AILEMODE.reset();
+      GEAR.reset();
     } else
       return;
   }
@@ -1499,7 +1499,7 @@ void configurationTask(uint32_t currentMicros)
   // Configuration control
   //
 
-  if(gearButton.doublePulse()) {
+  if(GEAR.doublePulse()) {
     //
     // GEAR DOUBLE PULSE: FAILSAFE MODE SELECT
     //
@@ -1517,7 +1517,7 @@ void configurationTask(uint32_t currentMicros)
     } else if(!vpStatus.positiveIAS)
       logDisable();
     
-  } else if(gearButton.singlePulse() && !gearOutput) {
+  } else if(GEAR.singlePulse() && !gearOutput) {
     //
     // GEAR SINGLE PULSE: GEAR UP
     //
@@ -1525,7 +1525,7 @@ void configurationTask(uint32_t currentMicros)
     consoleNoteLn_P(PSTR("Gear UP"));
     gearOutput = 1;
 
-  } else if(gearButton.depressed() && gearOutput) {
+  } else if(GEAR.depressed() && gearOutput) {
     //
     // GEAR CONTINUOUS: GEAR DOWN
     //
@@ -1534,7 +1534,7 @@ void configurationTask(uint32_t currentMicros)
     gearOutput = 0;
   }
 
-  if(aileModeButton.singlePulse()) {
+  if(AILEMODE.singlePulse()) {
     //
     // AILE MODE PULSE : DISABLE BANK LIMITER
     //
@@ -1557,7 +1557,7 @@ void configurationTask(uint32_t currentMicros)
     }
 
     logMark();
-  } else if(aileModeButton.depressed()) {
+  } else if(AILEMODE.depressed()) {
     //
     // AILE MODE CONTINUOUS : LEVEL WINGS
     //
@@ -1573,14 +1573,14 @@ void configurationTask(uint32_t currentMicros)
     } 
   }
 
-  if(elevModeButton.singlePulse() && vpMode.slowFlight) {
+  if(ELEVMODE.singlePulse() && vpMode.slowFlight) {
     //
     // ELEV MODE PULSE : DISABLE ALPHA HOLD
     //
   
     consoleNoteLn_P(PSTR("Slow flight mode DISABLED"));
     vpMode.slowFlight = false;
-  } else if(elevModeButton.depressed() && !vpMode.slowFlight) {
+  } else if(ELEVMODE.depressed() && !vpMode.slowFlight) {
     //
     // ELEV MODE CONTINUOUS : ENABLE ALPHA HOLD / SLOW FLIGHT
     //
@@ -2314,8 +2314,8 @@ void actuatorTask(uint32_t currentMicros)
 
 void trimTask(uint32_t currentMicros)
 {
-  if(trimButton.state())
-    elevTrim += clamp(elevStick/TRIM_HZ, -0.125/TRIM_HZ, 0.125/TRIM_HZ);
+  if(TRIM.state())
+    elevTrim += clamp(elevStick/TRIM_HZ, -0.15/TRIM_HZ, 0.15/TRIM_HZ);
 
   const float trimMin = -0.20, trimMax = 0.80;
   
