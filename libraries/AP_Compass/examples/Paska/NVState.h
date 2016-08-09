@@ -3,7 +3,6 @@
 
 #include <stdint.h>
 
-#define MAX_MODELS   8
 #define NAME_LEN     8
 #define MAX_CH       8
 
@@ -47,12 +46,13 @@ extern struct ParamRecord vpParam;
 extern struct NVStateRecord nvState;
 
 void defaultParams(void);
-void setModel(int model);
+bool setModel(int model);
 void storeParams(void);
 void readNVState(void);
 void storeNVState(void);
 void printParams(void);
 void dumpParams(void);
+int maxModels(void);
 
 float elevFromAlpha(float x);
 float alphaFromElev(float x);

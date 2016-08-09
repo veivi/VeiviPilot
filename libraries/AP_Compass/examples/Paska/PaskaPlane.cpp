@@ -90,10 +90,10 @@ ButtonInputChannel buttonInput;
 Button rightDownButton(-0.60), rightUpButton(0.26),
   leftDownButton(-0.13), leftUpButton(0.66);
 
-#define AILEMODE rightUpButton
-#define ELEVMODE rightDownButton
-#define TRIM leftUpButton
-#define GEAR leftDownButton
+#define AILEMODEBUTTON rightUpButton
+#define ELEVMODEBUTTON rightDownButton
+#define TRIMBUTTON leftUpButton
+#define GEARBUTTON leftDownButton
 
 int8_t flapSwitchValue;
 
@@ -199,7 +199,7 @@ float cycleTimeStore[cycleTimeWindow];
 int cycleTimePtr = 0;
 bool cycleTimesValid;
 float cycleMin = -1.0, cycleMax = -1.0, cycleMean = -1.0;
-float iAS, dynPressure, alpha, aileStick, elevStick, throttleStick, rudderStick;
+float iAS, dynPressure, alpha, effAlpha, aileStick, elevStick, throttleStick, rudderStick;
 bool ailePilotInput, elevPilotInput, rudderPilotInput;
 uint32_t controlCycleEnded;
 float elevTrim, effTrim, elevTrimSub, targetAlpha;
@@ -626,6 +626,9 @@ void executeCommand(const char *buf)
     //
     // Complex
     //
+
+    int currentModel = nvState.model;
+    float offset = 0.0;
     
     switch(command.token) {
     case c_atrim:
@@ -695,17 +698,12 @@ void executeCommand(const char *buf)
       }
       break;
           
-    case c_zero:
-      vpParam.alphaRef += (int16_t) ((1L<<16) * alpha);
-      consoleNoteLn_P(PSTR("Alpha zero set"));
-      break;
-
     case c_alpha:
-      if(numParams > 0) {
-	vpParam.alphaRef +=
-	  (int16_t) ((1L<<16) * (alpha - (float) param[0] / 360));
-	consoleNoteLn_P(PSTR("Alpha calibrated"));
-      }
+      if(numParams > 0)
+	offset = param[0];
+      
+      vpParam.alphaRef += (int16_t) ((1L<<16) * (alpha - offset / 360));
+      consoleNoteLn_P(PSTR("Alpha calibrated"));
       break;
 
     case c_loop:
@@ -730,7 +728,11 @@ void executeCommand(const char *buf)
       break;
     
     case c_backup:
-      dumpParams();
+      for(int i = 0; i < maxModels(); i++) {
+	if(setModel(i))
+	  dumpParams();
+      }
+      setModel(currentModel);
       break;
 
     case c_stamp:
@@ -744,8 +746,8 @@ void executeCommand(const char *buf)
 
     case c_model:
       if(numParams > 0) {
-	if(param[0] > MAX_MODELS-1)
-	  param[0] = MAX_MODELS-1;
+	if(param[0] > maxModels()-1)
+	  param[0] = maxModels()-1;
 	setModel(param[0]);
 	storeNVState();
       } else { 
@@ -925,10 +927,10 @@ void receiverTask(uint32_t currentMicros)
   
   buttonInput.input(inputValue(&modeSwitchInput));  
 
-  AILEMODE.input(buttonInput.value());
-  ELEVMODE.input(buttonInput.value());
-  TRIM.input(buttonInput.value());
-  GEAR.input(buttonInput.value());
+  AILEMODEBUTTON.input(buttonInput.value());
+  ELEVMODEBUTTON.input(buttonInput.value());
+  TRIMBUTTON.input(buttonInput.value());
+  GEARBUTTON.input(buttonInput.value());
 
   //
   // Receiver fail detection
@@ -995,7 +997,8 @@ void sensorTaskFast(uint32_t currentMicros)
   
   // Alpha input
   
-  alpha = clamp(alphaFilter.output(), -1.0/8, 1.0/8);
+  alpha = alphaFilter.output();
+  effAlpha = clamp(alpha, -1.0/8, 1.0/8);
   
   // Airspeed
   
@@ -1056,16 +1059,16 @@ void sensorMonitorTask(uint32_t currentMicros)
 {
   static uint32_t iasLastAlive;
 
-  if(fabsf(iAS - iasFilterSlow.output()) > 0.5) {
+  if(iAS < vpParam.iasMin/3 || fabsf(iAS - iasFilterSlow.output()) > 0.5) {
     if(vpStatus.pitotBlocked) {
-      consoleNoteLn_P(PSTR("IAS sensor block CLEARED"));
+      consoleNoteLn_P(PSTR("Pitot block CLEARED"));
       vpStatus.pitotBlocked = false;
     }
     
     iasLastAlive = currentMicros;
   } else if(!vpStatus.simulatorLink
 	    && currentMicros - iasLastAlive > 10.0e6 && !vpStatus.pitotBlocked) {
-    consoleNoteLn_P(PSTR("IAS sensor appears BLOCKED"));
+    consoleNoteLn_P(PSTR("Pitot appears BLOCKED"));
     vpStatus.pitotBlocked = true;
   }
 }
@@ -1428,16 +1431,16 @@ void configurationTask(uint32_t currentMicros)
   //
   
   if(!vpStatus.armed) {
-    if(TRIM.doublePulse() && aileStick < -0.90 && elevStick > 0.90) {
+    if(leftUpButton.doublePulse() && aileStick < -0.90 && elevStick > 0.90) {
       consoleNoteLn_P(PSTR("We're now ARMED"));
       vpStatus.armed = true;
       
       if(!vpStatus.consoleLink)
 	vpStatus.silent = true;
 
-      ELEVMODE.reset();
-      AILEMODE.reset();
-      GEAR.reset();
+      leftDownButton.reset();
+      rightUpButton.reset();
+      rightDownButton.reset();
     } else
       return;
   }
@@ -1498,10 +1501,11 @@ void configurationTask(uint32_t currentMicros)
   //
   // Configuration control
   //
+  //   GEAR BUTTON
 
-  if(GEAR.doublePulse()) {
+  if(GEARBUTTON.doublePulse()) {
     //
-    // GEAR DOUBLE PULSE: FAILSAFE MODE SELECT
+    // DOUBLE PULSE: FAILSAFE MODE SELECT
     //
     
     if(!vpMode.alphaFailSafe) {
@@ -1517,26 +1521,30 @@ void configurationTask(uint32_t currentMicros)
     } else if(!vpStatus.positiveIAS)
       logDisable();
     
-  } else if(GEAR.singlePulse() && !gearOutput) {
+  } else if(GEARBUTTON.singlePulse() && !gearOutput) {
     //
-    // GEAR SINGLE PULSE: GEAR UP
+    // SINGLE PULSE: GEAR UP
     //
     
     consoleNoteLn_P(PSTR("Gear UP"));
     gearOutput = 1;
 
-  } else if(GEAR.depressed() && gearOutput) {
+  } else if(GEARBUTTON.depressed() && gearOutput) {
     //
-    // GEAR CONTINUOUS: GEAR DOWN
+    // CONTINUOUS: GEAR DOWN
     //
     
     consoleNoteLn_P(PSTR("Gear DOWN"));
     gearOutput = 0;
   }
 
-  if(AILEMODE.singlePulse()) {
+  //
+  // AILE MODE BUTTON
+  //
+  
+  if(AILEMODEBUTTON.singlePulse()) {
     //
-    // AILE MODE PULSE : DISABLE BANK LIMITER
+    // PULSE : DISABLE BANK LIMITER
     //
   
     if(vpMode.alphaFailSafe || vpMode.sensorFailSafe) {
@@ -1557,9 +1565,9 @@ void configurationTask(uint32_t currentMicros)
     }
 
     logMark();
-  } else if(AILEMODE.depressed()) {
+  } else if(AILEMODEBUTTON.depressed()) {
     //
-    // AILE MODE CONTINUOUS : LEVEL WINGS
+    // CONTINUOUS : LEVEL WINGS
     //
   
     if(!vpMode.bankLimiter) {
@@ -1573,16 +1581,20 @@ void configurationTask(uint32_t currentMicros)
     } 
   }
 
-  if(ELEVMODE.singlePulse() && vpMode.slowFlight) {
+  //
+  // ELEV MODE BUTTON
+  //
+
+  if(ELEVMODEBUTTON.singlePulse() && vpMode.slowFlight) {
     //
-    // ELEV MODE PULSE : DISABLE ALPHA HOLD
+    // PULSE : DISABLE ALPHA HOLD
     //
   
     consoleNoteLn_P(PSTR("Slow flight mode DISABLED"));
     vpMode.slowFlight = false;
-  } else if(ELEVMODE.depressed() && !vpMode.slowFlight) {
+  } else if(ELEVMODEBUTTON.depressed() && !vpMode.slowFlight) {
     //
-    // ELEV MODE CONTINUOUS : ENABLE ALPHA HOLD / SLOW FLIGHT
+    // CONTINUOUS : ENABLE ALPHA HOLD / SLOW FLIGHT
     //
   
     consoleNoteLn_P(PSTR("Slow flight mode ENABLED"));
@@ -1851,7 +1863,7 @@ void configurationTask(uint32_t currentMicros)
 
   if(!vpFeature.alphaHold)
     elevTrimSub =
-      elevFromAlpha(clamp(alpha, vpParam.alphaZeroLift, maxAlpha))
+      elevFromAlpha(clamp(effAlpha, vpParam.alphaZeroLift, maxAlpha))
       - elevStick - elevTrim;
 }
 
@@ -2157,7 +2169,7 @@ void controlTask(uint32_t currentMicros)
 
   if(vpFeature.alphaHold)
     targetPitchRate = levelTurnPitchRate(rollAngle, targetAlpha)
-      + (targetAlpha - alpha)*autoAlphaP*maxPitchRate;
+      + (targetAlpha - effAlpha)*autoAlphaP*maxPitchRate;
   
   else if(vpFeature.pitchHold)
     targetPitchRate = (5 + effStick*30 - pitchAngle)/90 * maxPitchRate;
@@ -2190,7 +2202,7 @@ void controlTask(uint32_t currentMicros)
 
   if(vpFeature.pusher) {
     pushCtrl.input(levelTurnPitchRate(rollAngle, effMaxAlpha)
-		   + (effMaxAlpha - alpha)*autoAlphaP*maxPitchRate - pitchRate,
+		   + (effMaxAlpha - effAlpha)*autoAlphaP*maxPitchRate - pitchRate,
 		   controlCycle);
 
     elevOutput = fminf(elevOutput, pushCtrl.output());
@@ -2314,7 +2326,7 @@ void actuatorTask(uint32_t currentMicros)
 
 void trimTask(uint32_t currentMicros)
 {
-  if(TRIM.state())
+  if(TRIMBUTTON.state())
     elevTrim += clamp(elevStick/TRIM_HZ, -0.15/TRIM_HZ, 0.15/TRIM_HZ);
 
   const float trimMin = -0.20, trimMax = 0.80;

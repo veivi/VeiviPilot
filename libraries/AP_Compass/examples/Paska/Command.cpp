@@ -40,7 +40,6 @@ const struct Command commands[] PROGMEM = {
   { "roll_k", c_roll_k, e_float, &vpParam.roll_C },
   { "servorate", c_servorate, e_float, &vpParam.servoRate },
   { "model", c_model },
-  { "zero", c_zero },
   { "alpha", c_alpha },
   { "dump", c_dump },
   { "dumpz", c_dumpz },

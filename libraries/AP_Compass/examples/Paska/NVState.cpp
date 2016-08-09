@@ -64,16 +64,17 @@ void defaultParams(void)
   vpParam = paramDefaults;
 }
 
-void setModel(int model)
+int maxModels(void)
 {
-  const int maxModels_c =
-    (nvState.logPartition - nvState.paramPartition)
-    / sizeof(vpParam);
-  
+  return (nvState.logPartition - nvState.paramPartition) / sizeof(vpParam);
+}
+
+bool setModel(int model)
+{
   if(model < 0)
     model = 0;
-  else if(model > maxModels_c - 1)
-    model = maxModels_c - 1;
+  else if(model > maxModels() - 1)
+    model = maxModels() - 1;
   
   nvState.model = model;
   cacheRead(paramOffset + sizeof(vpParam)*model,
@@ -83,14 +84,19 @@ void setModel(int model)
   consolePrintLn(model);
   consoleNote_P(PSTR("  Model record CRC = "));
   consolePrint(vpParam.crc);
-    
+
+  bool isGood = true;
+  
   if(paramRecordCrc(&vpParam) != vpParam.crc) {
     consolePrintLn_P(PSTR(" CORRUPT, using defaults")); 
     vpParam = paramDefaults;
+    isGood = false;
   } else
     consolePrintLn_P(PSTR(" OK"));
 
   printParams();
+
+  return isGood;
 }
   
 void storeParams(void)
