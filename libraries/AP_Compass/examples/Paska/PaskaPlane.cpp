@@ -989,6 +989,8 @@ void sensorTaskFast(uint32_t currentMicros)
     
     dynPressure = square(iAS)/2;
 
+    effAlpha = clamp(alpha, -1.0/8, 1.0/8);
+    
     iasFilter.input(iAS);
     iasFilterSlow.input(iAS);
     
@@ -2327,7 +2329,7 @@ void actuatorTask(uint32_t currentMicros)
 void trimTask(uint32_t currentMicros)
 {
   if(TRIMBUTTON.state())
-    elevTrim += clamp(elevStick/TRIM_HZ, -0.15/TRIM_HZ, 0.15/TRIM_HZ);
+    elevTrim += clamp(elevStick*3/2/TRIM_HZ, -0.15/TRIM_HZ, 0.15/TRIM_HZ);
 
   const float trimMin = -0.20, trimMax = 0.80;
   
@@ -2566,7 +2568,7 @@ void setup() {
 
   // Elevator delay
 
-  elevatorDelay.setDelay(2);
+  elevatorDelay.setDelay(1);
   
   // Misc filters
 
