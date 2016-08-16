@@ -19,8 +19,6 @@ bool cacheValid, cacheModified;
 uint32_t cacheTag;
 uint32_t writeBytesCum;
 
-bool eepromWarn = false, eepromFailed = false;
-
 void waitEEPROM(uint32_t addr);
 void writeEEPROM(uint32_t addr, const uint8_t *data, int bytes);
 bool readEEPROM(uint32_t addr, uint8_t *data, int size);
@@ -39,32 +37,32 @@ void waitEEPROM(uint32_t addr)
   handleFailure("EEPROM wait",
      I2c.wait((uint8_t) (EEPROM_I2C_ADDR
      			+ (uint8_t) ((addr>>16) & 0x7))) != 0, 
-                  	&eepromWarn, &eepromFailed, &eepromFailCount);
+                  	&vpStatus.eepromWarn, &vpStatus.eepromFailed, &eepromFailCount);
 }
 
 void writeEEPROM(uint32_t addr, const uint8_t *data, int bytes) 
 {
-  if(eepromFailed)
+  if(vpStatus.eepromFailed)
     return;
     
   waitEEPROM(addr);
   bool fail = I2c.write(  (uint8_t) EEPROM_I2C_ADDR + (uint8_t) ((addr>>16) & 0x7), 
                              (uint16_t) (addr & 0xFFFFL), 
                              data, bytes) != 0;
-  handleFailure("EEPROM write", fail, &eepromWarn, &eepromFailed, &eepromFailCount);
+  handleFailure("EEPROM write", fail, &vpStatus.eepromWarn, &vpStatus.eepromFailed, &eepromFailCount);
   lastWriteTime = hal.scheduler->micros();
 }
  
 bool readEEPROM(uint32_t addr, uint8_t *data, int size) 
 {
-  if(eepromFailed)
+  if(vpStatus.eepromFailed)
     return true;
     
   waitEEPROM(addr);
 
   bool fail = I2c.read((uint8_t) EEPROM_I2C_ADDR + (uint8_t) ((addr>>16) & 0x7), (uint16_t) (addr & 0xFFFFL), data, size) != 0;
   
-  return handleFailure("EEPROM read", fail, &eepromWarn, &eepromFailed, &eepromFailCount);
+  return handleFailure("EEPROM read", fail, &vpStatus.eepromWarn, &vpStatus.eepromFailed, &eepromFailCount);
 
 }
 

@@ -82,9 +82,9 @@ const struct PinDescriptor led[] = {{ PortA, 3 }, { PortA, 4 }, { PortA, 5 }};
 
 struct PinDescriptor ppmInputPin = { PortL, 1 }; 
 struct RxInputRecord aileInput, elevInput, throttleInput, rudderInput,
-  modeSwitchInput, tuningKnobInput, gearInput, flapInput;
+  modeSwitchInput, tuningKnobInput, flapInput, auxInput;
 struct RxInputRecord *ppmInputs[] = 
-  { &aileInput, &elevInput, &throttleInput, &rudderInput, &modeSwitchInput, &tuningKnobInput, &gearInput, &flapInput };
+  { &aileInput, &elevInput, &throttleInput, &rudderInput, &modeSwitchInput, &tuningKnobInput, &flapInput, &auxInput };
 
 ButtonInputChannel buttonInput;
 Button rightDownButton(-0.60), rightUpButton(0.26),
@@ -104,7 +104,7 @@ int8_t flapSwitchValue;
 #define NEUTRAL 1500
 #define RANGE 500
 
-const struct PWMOutput pwmOutput[] = {
+struct PWMOutput pwmOutput[] = {
   { { PortB, 6 }, &hwTimer1, COMnB },
   { { PortB, 5 }, &hwTimer1, COMnA },
   { { PortH, 5 }, &hwTimer4, COMnC },
@@ -114,6 +114,14 @@ const struct PWMOutput pwmOutput[] = {
   { { PortE, 4 }, &hwTimer3, COMnB },
   { { PortE, 3 }, &hwTimer3, COMnA }
 };
+
+//
+// Piezo
+//
+
+// const struct PinDescriptor piezo =  { PortE, 3 };
+
+#define PIEZO pwmOutput[3]
 
 //
 // Function to servo output mapping
@@ -139,15 +147,17 @@ const struct PWMOutput pwmOutput[] = {
 //
 
 #define CONTROL_HZ 50
-#define CONFIG_HZ (CONTROL_HZ/2)
+#define CONFIG_HZ (CONTROL_HZ/4)
 #define ALPHA_HZ (CONTROL_HZ*10)
 #define AIRSPEED_HZ (CONTROL_HZ*5)
+#define BEEP_HZ 5
 #define TRIM_HZ 10
 #define LED_HZ 3
 #define LED_TICK 100
 #define LOG_HZ_ALPHA CONTROL_HZ
 #define LOG_HZ_CONTROL (CONTROL_HZ/3)
 #define LOG_HZ_SLOW 2
+#define HEARTBEAT_HZ 1
   
 struct Task {
   void (*code)(uint32_t time);
@@ -180,6 +190,12 @@ struct FeatureRecord {
   bool autoBall;
 };
 
+struct TakeoffTestState {
+  bool zeroAlpha, bigAlpha;
+  float elevMin, elevMax, aileMin, aileMax, rudderMin, rudderMax,
+    throttleMin, throttleMax, tuningMin, tuningMax;
+};
+
 struct GPSFix {
   float altitude;
   float track;
@@ -191,6 +207,7 @@ struct GPSFix {
 struct ModeRecord vpMode;
 struct FeatureRecord vpFeature;
 struct StatusRecord vpStatus;
+struct TakeoffTestState takeoffTest;
 struct GPSFix gpsFix;
 
 float testGain = 0;
@@ -210,7 +227,7 @@ float accX, accY, accZ, altitude,  heading, rollAngle, pitchAngle, rollRate, pit
 int cycleTimeCounter = 0;
 float parameter;  
 NewI2C I2c = NewI2C();
-Accumulator ball, cycleTimeAcc, iasFilterSlow, iasFilter, accFilter;
+Damper ball(70), cycleTimeAcc(10), iasFilterSlow(100), iasFilter(2), accFilter(100), iasEntropyAcc(CONFIG_HZ), alphaEntropyAcc(CONFIG_HZ);
 AlphaBuffer pressureBuffer;
 RunningAvgFilter alphaFilter;
 float controlCycle = 10.0e-3;
@@ -219,6 +236,9 @@ float idleAvg, logBandWidth, ppmFreq, simInputFreq;
 uint32_t simTimeStamp;
 RateLimiter aileRateLimiter, flapRateLimiter, alphaRateLimiter;
 float elevOutput, elevOutputFeedForward, aileOutput = 0, flapOutput = 0, gearOutput = 0, brakeOutput = 0, rudderOutput = 0;
+uint32_t iasEntropy, alphaEntropy;
+bool beepGood;
+float beepDuration;
 
 const int maxTests_c = 32;
 float autoTestIAS[maxTests_c], autoTestK[maxTests_c], autoTestT[maxTests_c], autoTestKxIAS[maxTests_c];
@@ -359,6 +379,22 @@ bool read4525DO_word14(uint16_t *result)
     *result = (((uint16_t) (buf[0] & 0x3F)) << 8) + buf[1];
 
   return success && (buf[0]>>6) == 0;
+}
+
+void delayMicros(int x)
+{
+  uint32_t current = hal.scheduler->micros();
+  while(hal.scheduler->micros() < current+x);
+}
+
+void beep(int hz, long millis)
+{
+  for(long i = 0; i < hz*millis/1000; i++) {
+    setPinState(&PIEZO.pin, 0);
+    delayMicros(1e6/hz/2);
+    setPinState(&PIEZO.pin, 1);
+    delayMicros(1e6/hz/2);
+  }
 }
 
 void logAlpha(void)
@@ -799,7 +835,13 @@ void executeCommand(const char *buf)
 	consolePrintLn_P(PSTR(" FAIL"));
       else
 	consolePrintLn_P(PSTR(" OK"));
-      
+
+      consoleNoteLn_P(PSTR("Sensor entropy"));
+      consoleNote_P(PSTR("  Alpha = "));
+      consolePrint(alphaEntropyAcc.output());
+      consolePrint_P(PSTR("  IAS = "));
+      consolePrintLn(iasEntropyAcc.output());
+
       consoleNoteLn_P(PSTR("Cycle time (ms)"));
       consoleNote_P(PSTR("  median     = "));
       consolePrintLn(controlCycle*1e3);
@@ -810,7 +852,7 @@ void executeCommand(const char *buf)
       consoleNote_P(PSTR("  mean       = "));
       consolePrintLn(cycleMean*1e3);
       consoleNote_P(PSTR("  cum. value = "));
-      consolePrintLn(cycleTimeAcc.output());
+      consolePrintLn(cycleTimeAcc.output()*1e3);
       consoleNote_P(PSTR("Warning flags :"));
       if(pciWarn)
 	consolePrint_P(PSTR(" SPURIOUS_PCINT"));
@@ -820,16 +862,14 @@ void executeCommand(const char *buf)
 	consolePrint_P(PSTR(" PPM_SHORT"));
       if(ppmWarnSlow)
 	consolePrint_P(PSTR(" PPM_SLOW"));
-      if(eepromWarn)
+      if(vpStatus.eepromWarn)
 	consolePrint_P(PSTR(" EEPROM"));
-      if(eepromFailed)
+      if(vpStatus.eepromFailed)
 	consolePrint_P(PSTR(" EEPROM_FAILED"));
       if(vpStatus.iasWarn)
 	consolePrint_P(PSTR(" IAS_WARN"));
       if(vpStatus.iasFailed)
 	consolePrint_P(PSTR(" IAS_FAILED"));
-      //      if(alphaBuffer.warn)
-      //	consolePrint_P(PSTR(" ALPHA_BUFFER"));
       if(pushCtrl.warn)
 	consolePrint_P(PSTR(" PUSHER"));
       if(elevCtrl.warn)
@@ -846,7 +886,7 @@ void executeCommand(const char *buf)
 
     case c_reset:
       pciWarn = vpStatus.alphaWarn = vpStatus.alphaFailed = pushCtrl.warn = elevCtrl.warn
-	= eepromWarn = eepromFailed = ppmWarnShort
+	= vpStatus.eepromWarn = vpStatus.eepromFailed = ppmWarnShort
 	= ppmWarnSlow = aileCtrl.warn = false;
       consoleNoteLn_P(PSTR("Warning flags reset"));
       break;
@@ -862,7 +902,7 @@ void executeCommand(const char *buf)
 
 float scaleByIAS(float k, float p)
 {
-  return k * powf(fmax(iasFilter.output(), vpParam.iasMin), p);
+  return k * powf(fmaxf(iasFilter.output(), vpParam.iasMin), p);
 }
 
 void cacheTask(uint32_t currentMicros)
@@ -889,18 +929,26 @@ void alphaTask(uint32_t currentMicros)
 {
   int16_t raw = 0;
   static int failCount = 0;
+  static int16_t prev = 0;
   
-  if(!handleFailure("alpha", !readAlpha_5048B(&raw), &vpStatus.alphaWarn, &vpStatus.alphaFailed, &failCount))
+  if(!handleFailure("alpha", !readAlpha_5048B(&raw), &vpStatus.alphaWarn, &vpStatus.alphaFailed, &failCount)) {
     alphaFilter.input((float) raw / (1L<<(8*sizeof(raw))));
+    alphaEntropy += population(raw ^ prev);
+    prev = raw;
+  }
 }
 
 void airspeedTask(uint32_t currentMicros)
 {
   int16_t raw = 0;
   static int failCount = 0;
+  static int16_t prev = 0;
   
-  if(!handleFailure("airspeed", !readPressure(&raw), &vpStatus.iasWarn, &vpStatus.iasFailed, &failCount))
+  if(!handleFailure("airspeed", !readPressure(&raw), &vpStatus.iasWarn, &vpStatus.iasFailed, &failCount)) {
     pressureBuffer.input((float) raw);
+    iasEntropy += population(raw ^ prev);
+    prev = raw;
+  }
 }
 
 DelayLine elevatorDelay;
@@ -1059,6 +1107,18 @@ void sensorTaskSlow(uint32_t currentMicros)
 
 void sensorMonitorTask(uint32_t currentMicros)
 {
+  //
+  // Entropy monitor
+  //
+
+  iasEntropyAcc.input(iasEntropy);
+  alphaEntropyAcc.input(alphaEntropy);
+  iasEntropy = alphaEntropy = 0;
+  
+  //
+  // Pitot block detection
+  //
+  
   static uint32_t iasLastAlive;
 
   if(iAS < vpParam.iasMin/3 || fabsf(iAS - iasFilterSlow.output()) > 0.5) {
@@ -1275,7 +1335,7 @@ void testStateMachine(uint32_t currentMicros)
   }
 }
 
-Accumulator analAvg, analLowpass;
+Damper analAvg(10), analLowpass(2);
 float upSwing, downSwing, prevUpSwing, prevDownSwing;
 
 void analyzerTask(uint32_t currentMicros)
@@ -1490,6 +1550,57 @@ void configurationTask(uint32_t currentMicros)
   }
 
   //
+  // Takeoff config test
+  //
+
+  static uint32_t lastNonZeroAlpha, lastSmallAlpha;
+
+  if(vpMode.takeOff) {
+    // Rx range min
+    
+    takeoffTest.elevMin =
+      fminf(takeoffTest.elevMin, inputValue(&elevInput));
+    takeoffTest.aileMin =
+      fminf(takeoffTest.aileMin, inputValue(&aileInput));
+    takeoffTest.throttleMin =
+      fminf(takeoffTest.throttleMin, inputValue(&throttleInput));
+    takeoffTest.rudderMin =
+      fminf(takeoffTest.rudderMin, inputValue(&rudderInput));
+    takeoffTest.tuningMin =
+      fminf(takeoffTest.tuningMin, inputValue(&tuningKnobInput));
+
+    // Rx range max
+    
+    takeoffTest.elevMax =
+      fmaxf(takeoffTest.elevMax, inputValue(&elevInput));
+    takeoffTest.aileMax =
+      fmaxf(takeoffTest.aileMax, inputValue(&aileInput));
+    takeoffTest.throttleMax =
+      fmaxf(takeoffTest.throttleMax, inputValue(&throttleInput));
+    takeoffTest.rudderMax =
+      fmaxf(takeoffTest.rudderMax, inputValue(&rudderInput));
+    takeoffTest.tuningMax =
+      fmaxf(takeoffTest.tuningMax, inputValue(&tuningKnobInput));
+
+    // Alpha sensor
+    
+    if(!takeoffTest.zeroAlpha) {
+      if(fabs(alpha) > 1.5/360) {
+	lastNonZeroAlpha = currentMicros;
+      } else if(currentMicros - lastNonZeroAlpha > 1.0e6
+		&& !takeoffTest.zeroAlpha) {
+	consoleNoteLn_P(PSTR("Stable ZERO ALPHA"));
+	takeoffTest.zeroAlpha = true;
+      }
+    } else if(!takeoffTest.bigAlpha && alpha < 60.0/360) {
+      lastSmallAlpha = currentMicros;
+    } else if(currentMicros - lastSmallAlpha > 1.0e6 && !takeoffTest.bigAlpha) {
+	consoleNoteLn_P(PSTR("Stable BIG ALPHA"));
+      takeoffTest.bigAlpha = true;
+    }
+  }
+
+  //
   // Logging control
   //
 
@@ -1554,19 +1665,61 @@ void configurationTask(uint32_t currentMicros)
       consoleNoteLn_P(PSTR("Alpha/Sensor failsafe DISABLED"));
             
     } else {
-      if(vpMode.bankLimiter || vpMode.slowFlight) {
-	consoleNoteLn_P(PSTR("Bank limiter/slow flight mode DISABLED"));
-	vpMode.wingLeveler = vpMode.bankLimiter = vpMode.slowFlight = false;
-	
-      } else if(!vpMode.takeOff && iasFilter.output() < vpParam.iasMin*2/3) {
+      if(!vpMode.takeOff && iasFilter.output() < vpParam.iasMin*2/3) {
 	consoleNoteLn_P(PSTR("TakeOff mode ENABLED"));
 	vpMode.takeOff = true;
 	vpMode.slowFlight = false;
 	elevTrim = vpParam.takeoffTrim;
+	beepDuration = 0.1;
+	beepGood = true;
+	memset(&takeoffTest, '\0', sizeof(takeoffTest));
+	lastNonZeroAlpha = lastSmallAlpha = currentMicros;
+	
+      } else if(vpMode.takeOff) {
+	const float margin_c = 0.025;
+	
+	if(vpMode.wingLeveler
+	   && !vpMode.test
+	   && fabsf(elevTrim - vpParam.takeoffTrim) < margin_c
+	   && !vpStatus.alphaFailed
+	   && alphaEntropyAcc.output() > 10
+	   && !vpStatus.iasFailed
+	   && iasEntropyAcc.output() > 10
+	   && !vpStatus.pitotBlocked
+	   && !vpStatus.eepromFailed
+	   && fabsf(pitchAngle) < 10
+	   && fabsf(rollAngle) < 10
+	   && takeoffTest.zeroAlpha
+	   && takeoffTest.bigAlpha
+	   && fabsf(inputValue(&elevInput)) < margin_c
+	   && fabsf(inputValue(&aileInput)) < margin_c
+	   && fabsf(inputValue(&rudderInput)) < margin_c
+	   && fabsf(inputValue(&throttleInput)) < margin_c
+	   && fabsf(inputValue(&tuningKnobInput)) < margin_c
+	   && fabsf(takeoffTest.elevMin + 1) < margin_c
+	   && fabsf(takeoffTest.aileMin + 1) < margin_c
+	   && fabsf(takeoffTest.rudderMin + 1) < margin_c
+	   && fabsf(takeoffTest.throttleMin) < margin_c
+	   && fabsf(takeoffTest.tuningMin) < margin_c
+	   && fabsf(takeoffTest.elevMax - 1) < margin_c
+	   && fabsf(takeoffTest.aileMax - 1) < margin_c
+	   && fabsf(takeoffTest.rudderMax - 1) < margin_c
+	   && fabsf(takeoffTest.throttleMax - 1) < margin_c
+	   && fabsf(takeoffTest.tuningMax - 1) < margin_c) {
+	  consoleNoteLn_P(PSTR("T/o configuration is GOOD"));
+	  beepDuration = 1;
+	  beepGood = true;
+	} else {
+	  consoleNoteLn_P(PSTR("T/o configuration test FAILED"));
+	  beepDuration = 5;
+	  beepGood = false;
+	}
+      } else if(vpMode.bankLimiter) {
+	consoleNoteLn_P(PSTR("Bank limiter DISABLED"));
+	vpMode.wingLeveler = vpMode.bankLimiter = vpMode.slowFlight = false;
+	logMark();
       }
     }
-
-    logMark();
   } else if(AILEMODEBUTTON.depressed()) {
     //
     // CONTINUOUS : LEVEL WINGS
@@ -1594,7 +1747,7 @@ void configurationTask(uint32_t currentMicros)
   
     consoleNoteLn_P(PSTR("Slow flight mode DISABLED"));
     vpMode.slowFlight = false;
-  } else if(ELEVMODEBUTTON.depressed() && !vpMode.slowFlight) {
+  } else if(ELEVMODEBUTTON.depressed() && !vpMode.slowFlight && !vpMode.takeOff) {
     //
     // CONTINUOUS : ENABLE ALPHA HOLD / SLOW FLIGHT
     //
@@ -2389,6 +2542,26 @@ void blinkTask(uint32_t currentMicros)
   setPinState(&RED_LED, tick < ledRatio*LED_TICK/LED_HZ ? 0 : 1);
 }
 
+void beepTask(uint32_t currentMicros)
+{
+  static int phase = 0;
+
+  if(beepDuration > 0) {
+    if(beepGood)
+      beep(400, 1e3/BEEP_HZ);
+    else {
+      if(phase < 2) {
+	beep(phase > 0 ? 300 : 500, 1e3/BEEP_HZ);
+	phase++;
+      } else
+	phase = 0;
+    }
+
+    beepDuration -= 1.0/BEEP_HZ;
+  } else
+    phase = 0;
+}
+
 void simulatorLinkTask(uint32_t currentMicros)
 {
   if(vpStatus.simulatorLink && vpStatus.armed) {
@@ -2448,9 +2621,11 @@ struct Task taskList[] = {
   { measurementTask,
     HZ_TO_PERIOD(1) },
   { heartBeatTask,
-    HZ_TO_PERIOD(1) },
+    HZ_TO_PERIOD(HEARTBEAT_HZ) },
   { loopTask,
     HZ_TO_PERIOD(10) },
+  { beepTask,
+    HZ_TO_PERIOD(BEEP_HZ) },
   { NULL } };
 
 int scheduler(uint32_t currentMicros)
@@ -2528,16 +2703,10 @@ void setup() {
   ppmInputInit(ppmInputs, sizeof(ppmInputs)/sizeof(struct RxInputRecord*),
 	       nvState.rxMin, nvState.rxCenter, nvState.rxMax);
 
-  // Servos
-
-  consoleNoteLn_P(PSTR("Initializing servos"));
-
-  pwmTimerInit(hwTimers, sizeof(hwTimers)/sizeof(struct HWTimer*));
-  pwmOutputInitList(pwmOutput, sizeof(pwmOutput)/sizeof(struct PWMOutput));
-
   // Misc sensors
   
   consoleNote_P(PSTR("Initializing barometer... "));
+  consoleFlush();
 
   barometer.init();
   barometer.calibrate();
@@ -2550,8 +2719,15 @@ void setup() {
   ins.init(AP_InertialSensor::COLD_START, AP_InertialSensor::RATE_50HZ);
   ahrs.init();
 
-  consoleNoteLn_P(PSTR("  done"));
+  consolePrintLn_P(PSTR("  done"));
   
+  // Servos
+
+  consoleNoteLn_P(PSTR("Initializing servos"));
+
+  pwmTimerInit(hwTimers, sizeof(hwTimers)/sizeof(struct HWTimer*));
+  pwmOutputInitList(pwmOutput, sizeof(pwmOutput)/sizeof(struct PWMOutput));
+
   // LED output
 
   configureOutput(&RED_LED);
@@ -2561,6 +2737,11 @@ void setup() {
   setPinState(&RED_LED, 1);
   setPinState(&GREEN_LED, 1);
   setPinState(&BLUE_LED, 1);
+
+  // Piezo element
+  
+  pwmDisable(&PIEZO);
+  setPinState(&PIEZO.pin, 1);
 
   // Alpha filter (sliding average over alphaWindow_c/seconds)
   
@@ -2572,13 +2753,6 @@ void setup() {
   
   // Misc filters
 
-  ball.setTau(70);
-  cycleTimeAcc.setTau(10);
-  analLowpass.setTau(2);
-  analAvg.setTau(10);
-  iasFilter.setTau(2);
-  iasFilterSlow.setTau(100);
-  accFilter.setTau(100);
   accFilter.reset(G);
   
   // Done

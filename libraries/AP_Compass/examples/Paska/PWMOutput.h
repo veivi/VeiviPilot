@@ -15,13 +15,14 @@ struct PWMOutput {
   struct PinDescriptor pin;
   const struct HWTimer *timer;
   PWM_Ch_t pwmCh; // COMnA / COMnB / COMnC
+  bool active;
 };
 
 void pwmTimerInit(const struct HWTimer *timer[], int num);
 void pwmEnable(const struct PWMOutput *output);
 void pwmDisable(const struct PWMOutput *output);
-void pwmOutputInit(const struct PWMOutput *output);
-void pwmOutputInitList(const struct PWMOutput output[], int num);
-void pwmOutputWrite(const struct PWMOutput *output, uint16_t value);
+void pwmOutputInit(struct PWMOutput *output);
+void pwmOutputInitList(struct PWMOutput output[], int num);
+void pwmOutputWrite(struct PWMOutput *output, uint16_t value);
 
 

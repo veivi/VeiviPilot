@@ -70,9 +70,9 @@ static void handlePPMInput(const uint16_t *pulse, int numCh)
   for(int i = 0; i < numCh; i++) {
     if(inputRecords[i]) {
        inputRecords[i]->alive = true;
-       inputRecords[i]->pulseCount++;
-       inputRecords[i]->pulseWidthLast = pulse[i]/2;              
-       inputRecords[i]->pulseWidthAcc += inputRecords[i]->pulseWidthLast;
+       inputRecords[i]->pulseCount = 1;
+       inputRecords[i]->pulseWidthAcc = inputRecords[i]->pulseWidthLast
+	 = pulse[i]/2;              
 
        if(calibrating) {
 	 inputRecords[i]->pulseMin = min(inputRecords[i]->pulseWidthLast, inputRecords[i]->pulseMin);

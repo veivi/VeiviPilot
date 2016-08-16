@@ -14,17 +14,18 @@ const int windowLenMax = 1<<5;
 float sign(float x);
 float clamp(float value, float a, float b);
 float mixValue(float mixRatio, float a, float b);
+uint8_t population(uint16_t a);
 
 class RunningAvgFilter {
-  public:
-    void setWindow(int l);
-    float input(float v);
-    float output();
+ public:
+  void setWindow(int l);
+  float input(float v);
+  float output();
     
-  private:
-    float memory[windowLenMax], sum;
-    int windowLen;
-    int ptr;
+ private:
+  float memory[windowLenMax], sum;
+  int windowLen;
+  int ptr;
 };
 
 class DelayLine {
@@ -39,15 +40,18 @@ class DelayLine {
     int ptr;
 };
 
-class Accumulator {
-  public:
+class Damper {
+ public:
+  Damper(void);
+  Damper(float tau);
+  
   void reset(float v);
-    void setTau(float tau);
-    void input(float v);
-    float output();
+  void setTau(float tau);
+  void input(float v);
+  float output();
     
-  private:
-    float tau, avg;
+ private:
+  float tau, avg;
 };
 
 class Derivator {

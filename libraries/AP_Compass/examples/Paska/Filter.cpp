@@ -2,6 +2,17 @@
 #include "Console.h"
 #include <math.h>
 
+uint8_t population(uint16_t a)
+{
+  uint8_t v = 0;
+  
+  for(uint8_t i = 0; i < 16; i++)
+    if(a & (1U<<i))
+      v++;
+  
+  return v;
+}
+
 float sign(float x)
 {
   return x < 0.0 ? -1.0 : 1.0;
@@ -49,22 +60,34 @@ float Median3Filter::output(void)
   return max(min(memory[0],memory[1]), min(max(memory[0],memory[1]),memory[2]));
 }
 
-void Accumulator::input(float v)
+Damper::Damper(void)
+{
+  avg = 0;
+  setTau(1);
+}
+
+Damper::Damper(float t)
+{
+  avg = 0;
+  setTau(t);
+}
+
+void Damper::input(float v)
 {
   avg = mixValue(tau, avg, v);
 }
 
-void Accumulator::reset(float v)
+void Damper::reset(float v)
 {
   avg = v;
 }
 
-float Accumulator::output(void)
+float Damper::output(void)
 {
   return avg;
 }
 
-void Accumulator::setTau(float tauValue)
+void Damper::setTau(float tauValue)
 {
   tau = 1.0/(1+tauValue);
 }

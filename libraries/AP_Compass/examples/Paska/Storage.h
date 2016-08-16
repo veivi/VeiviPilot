@@ -1,10 +1,10 @@
 #include <stdint.h>
 #include "NewI2C.h"
+#include "Status.h"
 
 #define EXT_EEPROM_LATENCY 6000
 
 extern uint32_t writeBytesCum;
-extern bool eepromWarn, eepromFailed;
 
 void waitEEPROM(uint32_t addr);
 void writeEEPROM(uint32_t addr, const uint8_t *data, int bytes);

@@ -35,14 +35,14 @@ void pwmDisable(const struct PWMOutput *output)
    *(output->timer->TCCRA) &= ~outputModeMask[output->pwmCh];
 }
 
-void pwmOutputInit(const struct PWMOutput *output)
+void pwmOutputInit(struct PWMOutput *output)
 {
-  configureOutput(&output->pin);
   pwmOutputWrite(output, 1500);
   pwmEnable(output);
+  output->active = false;
 }
 
-void pwmOutputInitList(const struct PWMOutput output[], int num)
+void pwmOutputInitList(struct PWMOutput output[], int num)
 {
    for(int i = 0; i < num; i++)
       pwmOutputInit(&output[i]);
@@ -56,11 +56,16 @@ uint16_t constrain_period(uint16_t p) {
     else return p;
 }
 
-void pwmOutputWrite(const struct PWMOutput *output, uint16_t value)
+void pwmOutputWrite(struct PWMOutput *output, uint16_t value)
 {
   if(!output)
     return;
   
-   *(output->timer->OCR[output->pwmCh]) = constrain_period(value) << 1;
+  *(output->timer->OCR[output->pwmCh]) = constrain_period(value) << 1;
+
+  if(!output->active) {
+    configureOutput(&output->pin);
+    output->active = true;
+  }
 }
 

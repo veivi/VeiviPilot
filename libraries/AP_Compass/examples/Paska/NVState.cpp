@@ -3,6 +3,7 @@
 #include "Console.h"
 #include "Storage.h"
 #include "Command.h"
+#include "Status.h"
 
 extern "C" {
 #include "CRC16.h"
