@@ -1595,7 +1595,7 @@ void configurationTask(uint32_t currentMicros)
     } else if(!takeoffTest.bigAlpha && alpha < 60.0/360) {
       lastSmallAlpha = currentMicros;
     } else if(currentMicros - lastSmallAlpha > 1.0e6 && !takeoffTest.bigAlpha) {
-	consoleNoteLn_P(PSTR("Stable BIG ALPHA"));
+      consoleNoteLn_P(PSTR("Stable BIG ALPHA"));
       takeoffTest.bigAlpha = true;
     }
   }
@@ -1661,8 +1661,8 @@ void configurationTask(uint32_t currentMicros)
     //
   
     if(vpMode.alphaFailSafe || vpMode.sensorFailSafe) {
-      vpMode.alphaFailSafe = vpMode.sensorFailSafe = false;
       consoleNoteLn_P(PSTR("Alpha/Sensor failsafe DISABLED"));
+      vpMode.alphaFailSafe = vpMode.sensorFailSafe = false;
             
     } else {
       if(!vpMode.takeOff && iasFilter.output() < vpParam.iasMin*2/3) {
@@ -1676,10 +1676,9 @@ void configurationTask(uint32_t currentMicros)
 	lastNonZeroAlpha = lastSmallAlpha = currentMicros;
 	
       } else if(vpMode.takeOff) {
-	const float margin_c = 0.025;
+	const float margin_c = 0.02;
 	
-	if(vpMode.wingLeveler
-	   && !vpMode.test
+	if(!vpMode.test && vpMode.wingLeveler
 	   && fabsf(elevTrim - vpParam.takeoffTrim) < margin_c
 	   && !vpStatus.alphaFailed
 	   && alphaEntropyAcc.output() > 10
@@ -1687,15 +1686,18 @@ void configurationTask(uint32_t currentMicros)
 	   && iasEntropyAcc.output() > 10
 	   && !vpStatus.pitotBlocked
 	   && !vpStatus.eepromFailed
-	   && fabsf(pitchAngle) < 10
-	   && fabsf(rollAngle) < 10
+	   && fabsf(pitchAngle) < 10.0
+	   && fabsf(rollAngle) < 5.0
+	   && fabsf(pitchRate) < 2.0/360
+	   && fabsf(rollRate) < 2.0/360
+	   && fabsf(yawRate) < 2.0/360
 	   && takeoffTest.zeroAlpha
 	   && takeoffTest.bigAlpha
-	   && fabsf(inputValue(&elevInput)) < margin_c
-	   && fabsf(inputValue(&aileInput)) < margin_c
-	   && fabsf(inputValue(&rudderInput)) < margin_c
-	   && fabsf(inputValue(&throttleInput)) < margin_c
-	   && fabsf(inputValue(&tuningKnobInput)) < margin_c
+	   && fabsf(inputValue(&elevInput)) < margin_c/3
+	   && fabsf(inputValue(&aileInput)) < margin_c/3
+	   && fabsf(inputValue(&rudderInput)) < margin_c/3
+	   && fabsf(inputValue(&throttleInput)) < margin_c/3
+	   && fabsf(inputValue(&tuningKnobInput)) < margin_c/3
 	   && fabsf(takeoffTest.elevMin + 1) < margin_c
 	   && fabsf(takeoffTest.aileMin + 1) < margin_c
 	   && fabsf(takeoffTest.rudderMin + 1) < margin_c
