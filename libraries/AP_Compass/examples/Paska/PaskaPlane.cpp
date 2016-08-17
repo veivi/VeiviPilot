@@ -160,7 +160,7 @@ struct PWMOutput pwmOutput[] = {
 #define HEARTBEAT_HZ 1
   
 struct Task {
-  void (*code)(uint32_t time);
+  void (*code)(void);
   uint32_t period, lastExecuted;
 };
 
@@ -190,12 +190,6 @@ struct FeatureRecord {
   bool autoBall;
 };
 
-struct TakeoffTestState {
-  bool zeroAlpha, bigAlpha;
-  float elevMin, elevMax, aileMin, aileMax, rudderMin, rudderMax,
-    throttleMin, throttleMax, tuningMin, tuningMax;
-};
-
 struct GPSFix {
   float altitude;
   float track;
@@ -207,9 +201,9 @@ struct GPSFix {
 struct ModeRecord vpMode;
 struct FeatureRecord vpFeature;
 struct StatusRecord vpStatus;
-struct TakeoffTestState takeoffTest;
 struct GPSFix gpsFix;
 
+uint32_t currentTime;
 float testGain = 0;
 const int cycleTimeWindow = 31;
 float cycleTimeStore[cycleTimeWindow];
@@ -905,7 +899,7 @@ float scaleByIAS(float k, float p)
   return k * powf(fmaxf(iasFilter.output(), vpParam.iasMin), p);
 }
 
-void cacheTask(uint32_t currentMicros)
+void cacheTask()
 {
   cacheFlush();
 }
@@ -920,12 +914,12 @@ void logStartCallback()
   logPosition();
 }
 
-void logSaveTask(uint32_t currentMicros)
+void logSaveTask()
 {
   logSave(logStartCallback);
 }
 
-void alphaTask(uint32_t currentMicros)
+void alphaTask()
 {
   int16_t raw = 0;
   static int failCount = 0;
@@ -938,7 +932,7 @@ void alphaTask(uint32_t currentMicros)
   }
 }
 
-void airspeedTask(uint32_t currentMicros)
+void airspeedTask()
 {
   int16_t raw = 0;
   static int failCount = 0;
@@ -953,7 +947,7 @@ void airspeedTask(uint32_t currentMicros)
 
 DelayLine elevatorDelay;
 
-void receiverTask(uint32_t currentMicros)
+void receiverTask()
 {
   if(inputValid(&aileInput))
     aileStick = applyNullZone(inputValue(&aileInput), &ailePilotInput);
@@ -1016,7 +1010,7 @@ void receiverTask(uint32_t currentMicros)
     }
 }
 
-void sensorTaskFast(uint32_t currentMicros)
+void sensorTaskFast()
 {
   if(vpStatus.simulatorLink) {
     // We take sensor inputs from the simulator (sensorData record)
@@ -1095,7 +1089,7 @@ void sensorTaskFast(uint32_t currentMicros)
   barometer.accumulate();
 }
 
-void sensorTaskSlow(uint32_t currentMicros)
+void sensorTaskSlow()
 {
   // Altitude
 
@@ -1105,7 +1099,7 @@ void sensorTaskSlow(uint32_t currentMicros)
     altitude = (float) barometer.get_altitude();
 }
 
-void sensorMonitorTask(uint32_t currentMicros)
+void sensorMonitorTask()
 {
   //
   // Entropy monitor
@@ -1127,20 +1121,20 @@ void sensorMonitorTask(uint32_t currentMicros)
       vpStatus.pitotBlocked = false;
     }
     
-    iasLastAlive = currentMicros;
+    iasLastAlive = currentTime;
   } else if(!vpStatus.simulatorLink
-	    && currentMicros - iasLastAlive > 10.0e6 && !vpStatus.pitotBlocked) {
+	    && currentTime - iasLastAlive > 10.0e6 && !vpStatus.pitotBlocked) {
     consoleNoteLn_P(PSTR("Pitot appears BLOCKED"));
     vpStatus.pitotBlocked = true;
   }
 }
 
-void alphaLogTask(uint32_t currentMicros)
+void alphaLogTask()
 {
   logAlpha();  
 }
 
-void controlLogTask(uint32_t currentMicros)
+void controlLogTask()
 {
   logAttitude();
   logInput();
@@ -1148,7 +1142,7 @@ void controlLogTask(uint32_t currentMicros)
   logConfig();
 }
 
-void positionLogTask(uint32_t currentMicros)
+void positionLogTask()
 {
   logPosition();
 }
@@ -1183,7 +1177,7 @@ int compareFloat(const void *a, const void *b)
   else return 0;    
 }
 
-void measurementTask(uint32_t currentMicros)
+void measurementTask()
 {
   static uint32_t prevMeasurement;
  
@@ -1195,21 +1189,21 @@ void measurementTask(uint32_t currentMicros)
   // PPM monitoring
   
   FORBID;
-  ppmFreq = 1.0e6 * ppmFrames / (currentMicros - prevMeasurement);
+  ppmFreq = 1.0e6 * ppmFrames / (currentTime - prevMeasurement);
   ppmFrames = 0;
   PERMIT;
 
   // Sim link monitoring
 
-  simInputFreq = 1.0e6 * simFrames / (currentMicros - prevMeasurement);
+  simInputFreq = 1.0e6 * simFrames / (currentTime - prevMeasurement);
   simFrames = 0;
 
   // Log bandwidth
 
-  logBandWidth = 1.0e6 * writeBytesCum / (currentMicros - prevMeasurement);
+  logBandWidth = 1.0e6 * writeBytesCum / (currentTime - prevMeasurement);
   writeBytesCum = 0;
   
-  prevMeasurement = currentMicros;
+  prevMeasurement = currentTime;
 
   // Cycle time monitoring
   
@@ -1242,7 +1236,7 @@ bool increasing, autoTestCompleted;
 int oscCount;
 float finalK, finalKxIAS, finalT, finalIAS;
 
-void testStateMachine(uint32_t currentMicros)
+void testStateMachine()
 {
   static uint32_t nextTransition;
 
@@ -1252,7 +1246,7 @@ void testStateMachine(uint32_t currentMicros)
     return;
   }
   
-  if(currentMicros < nextTransition)
+  if(currentTime < nextTransition)
     return;
   
   switch(testState) {
@@ -1260,7 +1254,7 @@ void testStateMachine(uint32_t currentMicros)
     increasing = true;
     oscCount = 0;
     testState = trim_c;
-    nextTransition = currentMicros+4*1e6;
+    nextTransition = currentTime+4*1e6;
     break;
 
   case trim_c:
@@ -1273,18 +1267,18 @@ void testStateMachine(uint32_t currentMicros)
     else
       pertubPolarity = 1.0;
     testState = pert0_c;
-    nextTransition = currentMicros+1e6/4;
+    nextTransition = currentTime+1e6/4;
     autoTestCompleted = false;
     break;
 
   case pert0_c:
     testState = pert1_c;
-    nextTransition = currentMicros+1e6/4;
+    nextTransition = currentTime+1e6/4;
     break;
 
   case pert1_c:
     testState = wait_c;
-    nextTransition = currentMicros+4*1e6;
+    nextTransition = currentTime+4*1e6;
     break;
 
   case wait_c:
@@ -1298,7 +1292,7 @@ void testStateMachine(uint32_t currentMicros)
 	consoleNoteLn_P(PSTR("Reached stable oscillation"));
       }
       
-      nextTransition = currentMicros + 3*1e6/2;
+      nextTransition = currentTime + 3*1e6/2;
       testGain /= 1 + testGainStep_c/5;
       consoleNote_P(PSTR("Gain decreased to = "));
       consolePrintLn(testGain);	
@@ -1338,7 +1332,7 @@ void testStateMachine(uint32_t currentMicros)
 Damper analAvg(10), analLowpass(2);
 float upSwing, downSwing, prevUpSwing, prevDownSwing;
 
-void analyzerTask(uint32_t currentMicros)
+void analyzerTask()
 {
   if(!vpMode.test || !vpMode.autoTest)
     return;
@@ -1386,7 +1380,7 @@ void analyzerTask(uint32_t currentMicros)
 
   float lastSwing = prevUpSwing - prevDownSwing;
   
-  uint32_t halfCycle = currentMicros - prevCrossing;  
+  uint32_t halfCycle = currentTime - prevCrossing;  
   static uint32_t prevHalfCycle;
 
   if(crossing && lastSwing > threshold_c) {
@@ -1429,7 +1423,7 @@ void analyzerTask(uint32_t currentMicros)
   }
 
   if(crossing)
-    prevCrossing = currentMicros;
+    prevCrossing = currentTime;
 }
 
 float quantize(float param)
@@ -1481,12 +1475,239 @@ float testGainLinear(float start, float stop)
   return testGainLinear(start, stop, parameter);
 }
 
+//
+// Takeoff configuration test
+//
+
+typedef enum {
+  toc_mode,
+  toc_trim,
+  toc_eeprom,
+  toc_attitude,
+  toc_turn,
+  toc_alpha_sensor,
+  toc_alpha_range,
+  toc_pitot_sensor,
+  toc_pitot_block,
+  toc_button,
+  toc_aile_neutral,
+  toc_aile_range,
+  toc_elev_neutral,
+  toc_elev_range,
+  toc_rudder_neutral,
+  toc_rudder_range,
+  toc_throttle_zero,
+  toc_throttle_range,
+  toc_tuning_zero,
+  toc_tuning_range } testCode_t;
+
+struct TakeoffTest {
+  const char *description;
+  bool (*function)(bool);
+};
+
+const float toc_margin_c = 0.02;
+
+bool toc_test_mode(bool reset)
+{
+  return !vpMode.test && vpMode.wingLeveler;
+}
+
+bool toc_test_trim(bool reset)
+{
+  return fabsf(elevTrim - vpParam.takeoffTrim) < toc_margin_c;
+}
+
+bool toc_test_eeprom(bool reset)
+{
+  if(reset)
+    vpStatus.eepromWarn = false;
+
+  return !vpStatus.eepromWarn && !vpStatus.eepromFailed;
+}
+
+bool toc_test_alpha_sensor(bool reset)
+{
+  if(reset)
+    vpStatus.alphaWarn = false;
+  return (!vpStatus.alphaWarn && !vpStatus.alphaFailed
+	  && alphaEntropyAcc.output() > 10);
+}
+
+bool toc_test_alpha_range(bool reset)
+{
+  static bool zeroAlpha, bigAlpha;
+  static uint32_t lastNonZeroAlpha, lastSmallAlpha;
+
+  if(reset) {
+    zeroAlpha = bigAlpha = false;
+    lastNonZeroAlpha = lastSmallAlpha = currentTime;
+  } else if(!zeroAlpha) {
+    if(fabs(alpha) > 1.5/360) {
+      lastNonZeroAlpha = currentTime;
+    } else if(currentTime > lastNonZeroAlpha + 1.0e6) {
+      consoleNoteLn_P(PSTR("Stable ZERO ALPHA"));
+      zeroAlpha = true;
+    }
+  } else if(!bigAlpha) {
+    if(alpha < 60.0/360) {
+      lastSmallAlpha = currentTime;
+    } else if(currentTime > lastSmallAlpha + 1.0e6) {
+      consoleNoteLn_P(PSTR("Stable BIG ALPHA"));
+      bigAlpha = true;
+    }
+  }
+  
+  return zeroAlpha && bigAlpha;
+}
+
+bool toc_test_pitot_sensor(bool reset)
+{
+  if(reset)
+    vpStatus.iasWarn = false;
+  return (!vpStatus.iasWarn && !vpStatus.iasFailed
+	  && alphaEntropyAcc.output() > 10);
+}
+
+bool toc_test_pitot_block(bool reset)
+{
+  return !vpStatus.pitotBlocked;
+}
+
+bool toc_test_attitude(bool reset)
+{
+  return fabsf(pitchAngle) < 10.0 && fabsf(rollAngle) < 5.0;
+}
+
+bool toc_test_turn(bool reset)
+{
+  return (fabsf(pitchRate) < 1.0/360
+	  && fabsf(rollRate) < 1.0/360
+	  && fabsf(yawRate) < 1.0/360);
+}
+
+struct TOCRangeTestState {
+  float valueMin, valueMax;
+};
+
+bool toc_test_range_generic(struct TOCRangeTestState *state, bool reset, struct RxInputRecord *input, float expectedMin, float expectedMax)
+{
+  const float value = inputValue(input);
+  
+  if(reset)
+    state->valueMin = state->valueMax = value;
+  else {
+    state->valueMin = fminf(state->valueMin, value);
+    state->valueMax = fmaxf(state->valueMax, value);
+  }
+  
+  return (fabsf(state->valueMin - expectedMin) < toc_margin_c
+	  && fabsf(state->valueMax - expectedMax) < toc_margin_c);
+}
+
+bool toc_test_elev_range(bool reset)
+{
+  static struct TOCRangeTestState state;
+  return toc_test_range_generic(&state, reset, &elevInput, -1, 1);
+}
+
+bool toc_test_aile_range(bool reset)
+{
+  static struct TOCRangeTestState state;
+  return toc_test_range_generic(&state, reset, &aileInput, -1, 1);
+}
+
+bool toc_test_throttle_range(bool reset)
+{
+  static struct TOCRangeTestState state;
+  return toc_test_range_generic(&state, reset, &throttleInput, 0, 1);
+}
+
+bool toc_test_rudder_range(bool reset)
+{
+  static struct TOCRangeTestState state;
+  return toc_test_range_generic(&state, reset, &rudderInput, -1, 1);
+}
+
+bool toc_test_tuning_range(bool reset)
+{
+  static struct TOCRangeTestState state;
+  return toc_test_range_generic(&state, reset, &tuningKnobInput, 0, 1);
+}
+
+bool toc_test_aile_neutral(bool reset)
+{
+  return fabsf(inputValue(&aileInput)) < toc_margin_c/2;
+}
+
+bool toc_test_elev_neutral(bool reset)
+{
+  return fabsf(inputValue(&elevInput)) < toc_margin_c/2;
+}
+
+bool toc_test_rudder_neutral(bool reset)
+{
+  return fabsf(inputValue(&rudderInput)) < toc_margin_c/2;
+}
+
+bool toc_test_throttle_zero(bool reset)
+{
+  return fabsf(inputValue(&throttleInput)) < toc_margin_c/2;
+}
+
+bool toc_test_tuning_zero(bool reset)
+{
+  return fabsf(inputValue(&tuningKnobInput)) < toc_margin_c/2;
+}
+
+bool toc_test_button(bool reset)
+{
+  static bool leftUp, leftDown, rightUp, rightDown;
+
+  if(reset)
+    leftUp = leftDown = rightUp = rightDown = false;
+  else {
+    leftUp |= leftUpButton.state();
+    leftDown |= leftDownButton.state();
+    rightUp |= rightUpButton.state();
+    rightDown |= rightDownButton.state();
+  }
+
+  return (leftUp && leftDown && rightUp && rightDown
+	  && !leftUpButton.state() && !leftDownButton.state()
+	  && !rightUpButton.state() && !rightDownButton.state());
+}
+
+const struct TakeoffTest takeoffTest[] =
+  { [toc_mode] = { "MODE", toc_test_mode },
+    [toc_trim] = { "TRIM", toc_test_trim },
+    [toc_eeprom] = { "EEPROM", toc_test_eeprom },
+    [toc_attitude] = { "ATTITUDE", toc_test_attitude },
+    [toc_turn] = { "TURN", toc_test_turn },
+    [toc_alpha_sensor] = { "ALPHA_SENSOR", toc_test_alpha_sensor },
+    [toc_alpha_range] = { "ALPHA_RANGE", toc_test_alpha_range },
+    [toc_pitot_sensor] = { "PITOT_SENSOR", toc_test_pitot_sensor },
+    [toc_pitot_block] = { "PITOT_BLOCK", toc_test_pitot_block },
+    [toc_button] = { "BUTTON", toc_test_button },
+    [toc_aile_neutral] = { "AILE_NEUTRAL", toc_test_aile_neutral },
+    [toc_aile_range] = { "AILE_RANGE", toc_test_aile_range },
+    [toc_elev_neutral] = { "ELEV_NEUTRAL", toc_test_elev_neutral },
+    [toc_elev_range] = { "ELEV_RANGE", toc_test_elev_range },
+    [toc_rudder_neutral] = { "RUDDER_NEUTRAL", toc_test_rudder_neutral },
+    [toc_rudder_range] = { "RUDDER_RANGE", toc_test_rudder_range },
+    [toc_throttle_zero] = { "THR_ZERO", toc_test_throttle_zero },
+    [toc_throttle_range] = { "THR_RANGE", toc_test_throttle_range },
+    [toc_tuning_zero] = { "TUNING_ZERO", toc_test_tuning_zero },
+    [toc_tuning_range] = { "TUNING_RANGE", toc_test_tuning_range } };
+
+const int numTests = sizeof(takeoffTest)/sizeof(struct TakeoffTest);
+
 float s_Ku_ref, i_Ku_ref;
 
 const float minAlpha = (-2.0/360);
 const float origoAlpha = (-5.0/360);
 
-void configurationTask(uint32_t currentMicros)
+void configurationTask()
 {
   //
   // Are we armed yet or being armed now?
@@ -1519,9 +1740,9 @@ void configurationTask(uint32_t currentMicros)
       vpStatus.positiveIAS = false;
     }
     
-    lastNegativeIAS = currentMicros;
+    lastNegativeIAS = currentTime;
 
-  } else if(currentMicros - lastNegativeIAS > 1e6 && !vpStatus.positiveIAS) {
+  } else if(currentTime - lastNegativeIAS > 1e6 && !vpStatus.positiveIAS) {
     consoleNoteLn_P(PSTR("We have POSITIVE AIRSPEED"));
     vpStatus.positiveIAS = true;
   }
@@ -1542,62 +1763,11 @@ void configurationTask(uint32_t currentMicros)
       vpStatus.fullStop = false;
     }
     
-    lastMotion = currentMicros;
+    lastMotion = currentTime;
 
-  } else if(currentMicros - lastMotion > 10.0e6 && !vpStatus.fullStop) {
+  } else if(currentTime - lastMotion > 10.0e6 && !vpStatus.fullStop) {
     consoleNoteLn_P(PSTR("We have FULLY STOPPED"));
     vpStatus.fullStop = true;
-  }
-
-  //
-  // Takeoff config test
-  //
-
-  static uint32_t lastNonZeroAlpha, lastSmallAlpha;
-
-  if(vpMode.takeOff) {
-    // Rx range min
-    
-    takeoffTest.elevMin =
-      fminf(takeoffTest.elevMin, inputValue(&elevInput));
-    takeoffTest.aileMin =
-      fminf(takeoffTest.aileMin, inputValue(&aileInput));
-    takeoffTest.throttleMin =
-      fminf(takeoffTest.throttleMin, inputValue(&throttleInput));
-    takeoffTest.rudderMin =
-      fminf(takeoffTest.rudderMin, inputValue(&rudderInput));
-    takeoffTest.tuningMin =
-      fminf(takeoffTest.tuningMin, inputValue(&tuningKnobInput));
-
-    // Rx range max
-    
-    takeoffTest.elevMax =
-      fmaxf(takeoffTest.elevMax, inputValue(&elevInput));
-    takeoffTest.aileMax =
-      fmaxf(takeoffTest.aileMax, inputValue(&aileInput));
-    takeoffTest.throttleMax =
-      fmaxf(takeoffTest.throttleMax, inputValue(&throttleInput));
-    takeoffTest.rudderMax =
-      fmaxf(takeoffTest.rudderMax, inputValue(&rudderInput));
-    takeoffTest.tuningMax =
-      fmaxf(takeoffTest.tuningMax, inputValue(&tuningKnobInput));
-
-    // Alpha sensor
-    
-    if(!takeoffTest.zeroAlpha) {
-      if(fabs(alpha) > 1.5/360) {
-	lastNonZeroAlpha = currentMicros;
-      } else if(currentMicros - lastNonZeroAlpha > 1.0e6
-		&& !takeoffTest.zeroAlpha) {
-	consoleNoteLn_P(PSTR("Stable ZERO ALPHA"));
-	takeoffTest.zeroAlpha = true;
-      }
-    } else if(!takeoffTest.bigAlpha && alpha < 60.0/360) {
-      lastSmallAlpha = currentMicros;
-    } else if(currentMicros - lastSmallAlpha > 1.0e6 && !takeoffTest.bigAlpha) {
-      consoleNoteLn_P(PSTR("Stable BIG ALPHA"));
-      takeoffTest.bigAlpha = true;
-    }
   }
 
   //
@@ -1610,7 +1780,15 @@ void configurationTask(uint32_t currentMicros)
   
   else if(vpStatus.fullStop)
     logDisable();
-    
+
+  //
+  // T/O config test
+  //
+
+  if(vpMode.takeOff)
+    for(int i = 0; i < numTests; i++)
+      (*takeoffTest[i].function)(false);
+
   //
   // Configuration control
   //
@@ -1672,49 +1850,26 @@ void configurationTask(uint32_t currentMicros)
 	elevTrim = vpParam.takeoffTrim;
 	beepDuration = 0.1;
 	beepGood = true;
-	memset(&takeoffTest, '\0', sizeof(takeoffTest));
-	lastNonZeroAlpha = lastSmallAlpha = currentMicros;
+
+	for(int i = 0; i < numTests; i++)
+	  (*takeoffTest[i].function)(true);
 	
       } else if(vpMode.takeOff) {
-	const float margin_c = 0.02;
+	bool fail = false;
 	
-	if(!vpMode.test && vpMode.wingLeveler
-	   && fabsf(elevTrim - vpParam.takeoffTrim) < margin_c
-	   && !vpStatus.alphaFailed
-	   && alphaEntropyAcc.output() > 10
-	   && !vpStatus.iasFailed
-	   && iasEntropyAcc.output() > 10
-	   && !vpStatus.pitotBlocked
-	   && !vpStatus.eepromFailed
-	   && fabsf(pitchAngle) < 10.0
-	   && fabsf(rollAngle) < 5.0
-	   && fabsf(pitchRate) < 2.0/360
-	   && fabsf(rollRate) < 2.0/360
-	   && fabsf(yawRate) < 2.0/360
-	   && takeoffTest.zeroAlpha
-	   && takeoffTest.bigAlpha
-	   && fabsf(inputValue(&elevInput)) < margin_c/2
-	   && fabsf(inputValue(&aileInput)) < margin_c/2
-	   && fabsf(inputValue(&rudderInput)) < margin_c/2
-	   && fabsf(inputValue(&throttleInput)) < margin_c/2
-	   && fabsf(inputValue(&tuningKnobInput)) < margin_c/2
-	   && fabsf(takeoffTest.elevMin + 1) < margin_c
-	   && fabsf(takeoffTest.aileMin + 1) < margin_c
-	   && fabsf(takeoffTest.rudderMin + 1) < margin_c
-	   && fabsf(takeoffTest.throttleMin) < margin_c
-	   && fabsf(takeoffTest.tuningMin) < margin_c
-	   && fabsf(takeoffTest.elevMax - 1) < margin_c
-	   && fabsf(takeoffTest.aileMax - 1) < margin_c
-	   && fabsf(takeoffTest.rudderMax - 1) < margin_c
-	   && fabsf(takeoffTest.throttleMax - 1) < margin_c
-	   && fabsf(takeoffTest.tuningMax - 1) < margin_c) {
+	for(int i = 0; i < numTests; i++)
+	  if(!(*takeoffTest[i].function)(false)) {
+	    consoleNoteLn_P(PSTR("T/o configuration test FAILED"));
+	    beepDuration = 5;
+	    beepGood = false;
+	    fail = true;
+	    break;
+	  }
+
+	if(!fail) {
 	  consoleNoteLn_P(PSTR("T/o configuration is GOOD"));
 	  beepDuration = 1;
 	  beepGood = true;
-	} else {
-	  consoleNoteLn_P(PSTR("T/o configuration test FAILED"));
-	  beepDuration = 5;
-	  beepGood = false;
 	}
       } else if(vpMode.bankLimiter) {
 	consoleNoteLn_P(PSTR("Bank limiter DISABLED"));
@@ -2024,7 +2179,7 @@ void configurationTask(uint32_t currentMicros)
       - elevStick - elevTrim;
 }
 
-void loopTask(uint32_t currentMicros)
+void loopTask()
 {
   if(vpMode.loop) {
     consolePrint("alpha = ");
@@ -2128,7 +2283,7 @@ void loopTask(uint32_t currentMicros)
   }
 }
 
-void communicationTask(uint32_t currentMicros)
+void communicationTask()
 {
   int len = 0;
        
@@ -2239,7 +2394,7 @@ void gpsInput(const char *buf, int len)
 }
 */
 
-void gpsTask(uint32_t currentMicros)
+void gpsTask()
 {
   /*
   int len = 0;
@@ -2288,16 +2443,16 @@ float levelTurnPitchRate(float bank, float target)
     *ratio*iasFilter.output()*G/square(vpParam.iasMin)*RAD/360;
 }
 
-void controlTask(uint32_t currentMicros)
+void controlTask()
 {
   // Cycle time bookkeeping 
   
   if(controlCycleEnded > 0) {
-    controlCycle = (currentMicros - controlCycleEnded)/1.0e6;
+    controlCycle = (currentTime - controlCycleEnded)/1.0e6;
     cycleTimeMonitor(controlCycle);
   }
   
-  controlCycleEnded = currentMicros;
+  controlCycleEnded = currentTime;
 
   //
   // Elevator control
@@ -2450,7 +2605,7 @@ void controlTask(uint32_t currentMicros)
     brakeOutput = -elevStick;
 }
 
-void actuatorTask(uint32_t currentMicros)
+void actuatorTask()
 {
   if(!vpStatus.armed)
     return;
@@ -2480,7 +2635,7 @@ void actuatorTask(uint32_t currentMicros)
 			       + vpParam.brakeNeutral, -1, 1));
 }
 
-void trimTask(uint32_t currentMicros)
+void trimTask()
 {
   if(TRIMBUTTON.state())
     elevTrim += clamp(elevStick*3/2/TRIM_HZ, -0.15/TRIM_HZ, 0.15/TRIM_HZ);
@@ -2510,12 +2665,12 @@ void backgroundTask(uint32_t durationMicros)
   idleMicros += hal.scheduler->micros() - idleStart;
 }
 
-void heartBeatTask(uint32_t currentMicros)
+void heartBeatTask()
 {
   if(!heartBeatCount && linkDownCount++ > 2)
     vpStatus.consoleLink = vpStatus.simulatorLink = false;
 
-  if(vpStatus.simulatorLink && currentMicros - simTimeStamp > 1.0e6) {
+  if(vpStatus.simulatorLink && currentTime - simTimeStamp > 1.0e6) {
     consoleNoteLn_P(PSTR("Simulator link LOST"));
     vpStatus.simulatorLink = false;
   }    
@@ -2531,9 +2686,33 @@ void heartBeatTask(uint32_t currentMicros)
   
     count++;   
   }
+
+  //
+  // Takeoff config test display
+  //
+
+  if(vpMode.takeOff) {
+    bool fail = false;
+    
+    for(int i = 0; i < numTests; i++) {
+      if(!(*takeoffTest[i].function)(false)) {
+	if(!fail)
+	  consoleNote_P(PSTR("T/OC FAIL : "));
+	
+	consolePrint(takeoffTest[i].description);
+	consolePrint(" ");
+	fail = true;
+      }
+    }
+
+    if(fail) {
+      consolePrintLn("");
+      consoleFlush();
+    }
+  }
 }
 
-void blinkTask(uint32_t currentMicros)
+void blinkTask()
 {
   float ledRatio = vpMode.test ? 0.0 : !logInitialized ? 1.0 : (vpMode.sensorFailSafe || !vpStatus.armed) ? 0.5 : alpha > 0.0 ? 0.90 : 0.10;
   static int tick = 0;
@@ -2543,7 +2722,7 @@ void blinkTask(uint32_t currentMicros)
   setPinState(&RED_LED, tick < ledRatio*LED_TICK/LED_HZ ? 0 : 1);
 }
 
-void beepTask(uint32_t currentMicros)
+void beepTask()
 {
   static int phase = 0;
 
@@ -2563,7 +2742,7 @@ void beepTask(uint32_t currentMicros)
     phase = 0;
 }
 
-void simulatorLinkTask(uint32_t currentMicros)
+void simulatorLinkTask()
 {
   if(vpStatus.simulatorLink && vpStatus.armed) {
     struct SimLinkControl control = { .aileron = aileRateLimiter.output(),
@@ -2577,14 +2756,14 @@ void simulatorLinkTask(uint32_t currentMicros)
   }
 }
 
-void controlTaskGroup(uint32_t currentMicros)
+void controlTaskGroup()
 {
-  testStateMachine(currentMicros);
-  receiverTask(currentMicros);
-  sensorTaskFast(currentMicros);
-  controlTask(currentMicros);
-  actuatorTask(currentMicros);
-  analyzerTask(currentMicros);
+  testStateMachine();
+  receiverTask();
+  sensorTaskFast();
+  controlTask();
+  actuatorTask();
+  analyzerTask();
 }
 
 struct Task taskList[] = {
@@ -2629,15 +2808,15 @@ struct Task taskList[] = {
     HZ_TO_PERIOD(BEEP_HZ) },
   { NULL } };
 
-int scheduler(uint32_t currentMicros)
+int scheduler()
 {
   struct Task *task = taskList;
   
   while(task->code) {
-    if(task->lastExecuted + task->period < currentMicros
-      || task->lastExecuted > currentMicros) {
-      task->code(currentMicros);
-      task->lastExecuted = currentMicros;
+    if(task->lastExecuted + task->period < currentTime
+      || task->lastExecuted > currentTime) {
+      task->code();
+      task->lastExecuted = currentTime;
       
       if(task->period > 0)
         // Staggered execution for all but the critical tasks
@@ -2768,9 +2947,9 @@ void loop()
 {
   // Invoke scheduler
   
-  uint32_t currentTime = hal.scheduler->micros();
-    
-  if(!scheduler(currentTime))
+  currentTime = hal.scheduler->micros();
+
+  if(!scheduler())
     // Idle
       
     backgroundTask(1000);
