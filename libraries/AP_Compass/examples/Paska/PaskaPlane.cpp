@@ -208,12 +208,14 @@ struct StatusRecord vpStatus;
 // struct GPSFix gpsFix;
 
 uint32_t currentTime;
+float controlCycle = 10.0e-3;
+uint32_t idleMicros;
+float idleAvg, logBandWidth, ppmFreq, simInputFreq;
 float testGain = 0;
-float iAS, dynPressure, alpha, effAlpha, aileStick, elevStick, throttleStick, rudderStick;
+float iAS, dynPressure, alpha, effAlpha, aileStick, elevStick, throttleStick, rudderStick, tuningKnob;
 bool ailePilotInput, elevPilotInput, rudderPilotInput;
 uint32_t controlCycleEnded;
 float elevTrim, effTrim, elevTrimSub, targetAlpha;
-float tuningKnobValue;
 Controller elevCtrl, aileCtrl, pushCtrl, rudderCtrl;
 float autoAlphaP, maxAlpha, shakerAlpha, thresholdAlpha, rudderMix;
 float accX, accY, accZ, altitude,  heading, rollAngle, pitchAngle, rollRate, pitchRate, targetPitchRate, yawRate, levelBank;
@@ -222,9 +224,6 @@ NewI2C I2c = NewI2C();
 Damper ball(70), iasFilterSlow(100), iasFilter(2), accFilter(100), iasEntropyAcc(CONFIG_HZ), alphaEntropyAcc(CONFIG_HZ);
 AlphaBuffer pressureBuffer;
 RunningAvgFilter alphaFilter;
-float controlCycle = 10.0e-3;
-uint32_t idleMicros;
-float idleAvg, logBandWidth, ppmFreq, simInputFreq;
 uint32_t simTimeStamp;
 RateLimiter aileRateLimiter, flapRateLimiter, alphaRateLimiter;
 float elevOutput, elevOutputFeedForward, aileOutput = 0, flapOutput = 0, gearOutput = 0, brakeOutput = 0, rudderOutput = 0;
@@ -460,7 +459,7 @@ void logAttitude(void)
 
 float readParameter()
 {
-  return tuningKnobValue/0.95 - (1/0.95 - 1);
+  return tuningKnob/0.95 - (1/0.95 - 1);
 }
 
 #define AS5048_ADDRESS 0x40 
@@ -1113,7 +1112,6 @@ void executeCommand(const char *buf)
       break;
 
     case c_dump:
-    case c_dumpz:
       logDumpBinary();
       break;
     
@@ -1318,10 +1316,9 @@ void receiverTask()
   
   if(inputValid(&elevInput))
     elevStick = applyNullZone(inputValue(&elevInput), &elevPilotInput);
-  //    elevStick = inputValue(&elevInput);
     
   if(inputValid(&tuningKnobInput))
-    tuningKnobValue = inputValue(&tuningKnobInput);
+    tuningKnob = inputValue(&tuningKnobInput);
     
   if(inputValid(&throttleInput))
     throttleStick = inputValue(&throttleInput);
