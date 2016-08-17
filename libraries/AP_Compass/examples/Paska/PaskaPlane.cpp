@@ -667,19 +667,12 @@ bool toc_test_alpha_sensor(bool reset)
 
 bool toc_test_alpha_range(bool reset)
 {
-  static bool zeroAlpha, bigAlpha;
+  static bool bigAlpha, zeroAlpha, bigAlphaAgain;
   static uint32_t lastNonZeroAlpha, lastSmallAlpha;
 
   if(reset) {
-    zeroAlpha = bigAlpha = false;
+    zeroAlpha = bigAlpha = bigAlphaAgain = false;
     lastNonZeroAlpha = lastSmallAlpha = currentTime;
-  } else if(!zeroAlpha) {
-    if(fabs(alpha) > 1.5/360) {
-      lastNonZeroAlpha = currentTime;
-    } else if(currentTime > lastNonZeroAlpha + 1.0e6) {
-      consoleNoteLn_P(PSTR("Stable ZERO ALPHA"));
-      zeroAlpha = true;
-    }
   } else if(!bigAlpha) {
     if(fabsf(alpha - 90.0/360) > 15.0/360) {
       lastSmallAlpha = currentTime;
@@ -687,9 +680,23 @@ bool toc_test_alpha_range(bool reset)
       consoleNoteLn_P(PSTR("Stable BIG ALPHA"));
       bigAlpha = true;
     }
+  } else if(!zeroAlpha) {
+    if(fabs(alpha) > 1.5/360) {
+      lastNonZeroAlpha = currentTime;
+    } else if(currentTime > lastNonZeroAlpha + 1.0e6) {
+      consoleNoteLn_P(PSTR("Stable ZERO ALPHA"));
+      zeroAlpha = true;
+    }
+  } else if(!bigAlphaAgain) {
+    if(fabsf(alpha - 90.0/360) > 15.0/360) {
+      lastSmallAlpha = currentTime;
+    } else if(currentTime > lastSmallAlpha + 1.0e6) {
+      consoleNoteLn_P(PSTR("Stable BIG ALPHA seen again"));
+      bigAlphaAgain = true;
+    }
   }
   
-  return zeroAlpha && bigAlpha;
+  return bigAlpha && zeroAlpha && bigAlphaAgain;
 }
 
 bool toc_test_pitot_sensor(bool reset)
