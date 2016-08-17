@@ -25,6 +25,10 @@
 #include <AP_InertialSensor/AP_InertialSensor.h>
 #include <AP_AHRS/AP_AHRS.h>
 
+extern "C" {
+#include "CRC16.h"
+}
+
 //
 //
 //
@@ -224,7 +228,7 @@ float idleAvg, logBandWidth, ppmFreq, simInputFreq;
 uint32_t simTimeStamp;
 RateLimiter aileRateLimiter, flapRateLimiter, alphaRateLimiter;
 float elevOutput, elevOutputFeedForward, aileOutput = 0, flapOutput = 0, gearOutput = 0, brakeOutput = 0, rudderOutput = 0;
-uint32_t iasEntropy, alphaEntropy, iasHash, alphaHash;
+uint16_t iasEntropy, alphaEntropy, sensorHash = 0xFFFF;
 bool beepGood;
 int beepDuration;
 
@@ -620,19 +624,20 @@ bool toc_test_timing(bool reset)
   
   if(reset) {
     result = measured = started = false;
-    startTime = currentTime;
 
   } else if(!started) {
-    if(currentTime > startTime + 1e6 && !beepDuration) {
+    if(!beepDuration) {
       cycleTimeMin = cycleTimeMax = -1;
       startTime = currentTime;
       started = true;
     }
-  } else if(!measured && currentTime > startTime + 4.0e6) {
-    result = ( cycleTimeSampleAvailable
-	       && cycleTimeMin >= 1.0/CONTROL_HZ
-	       && cycleTimeAverage.output() < 1.1/CONTROL_HZ
-	       && cycleTimeMax < 1.5/CONTROL_HZ );
+  } else if(!measured && currentTime > startTime + 3.0e6) {
+    result =
+      cycleTimeSampleAvailable
+      && (cycleTimeMin >= 1.0/CONTROL_HZ)
+      && (cycleTimeMax < 1.5/CONTROL_HZ)
+      && (cycleTimeAverage.output() < 1.1/CONTROL_HZ);
+    
     measured = true;
   }
 
@@ -676,7 +681,7 @@ bool toc_test_alpha_range(bool reset)
       zeroAlpha = true;
     }
   } else if(!bigAlpha) {
-    if(alpha < 60.0/360) {
+    if(fabsf(alpha - 90.0/360) > 15.0/360) {
       lastSmallAlpha = currentTime;
     } else if(currentTime > lastSmallAlpha + 1.0e6) {
       consoleNoteLn_P(PSTR("Stable BIG ALPHA"));
@@ -1275,7 +1280,7 @@ void alphaTask()
   if(!handleFailure("alpha", !readAlpha_5048B(&raw), &vpStatus.alphaWarn, &vpStatus.alphaFailed, &failCount)) {
     alphaFilter.input((float) raw / (1L<<(8*sizeof(raw))));
     alphaEntropy += population(raw ^ prev);
-    alphaHash ^= raw;
+    sensorHash = crc16(sensorHash, (uint8_t*) &raw, sizeof(raw));
     prev = raw;
   }
 }
@@ -1289,7 +1294,7 @@ void airspeedTask()
   if(!handleFailure("airspeed", !readPressure(&raw), &vpStatus.iasWarn, &vpStatus.iasFailed, &failCount)) {
     pressureBuffer.input((float) raw);
     iasEntropy += population(raw ^ prev);
-    iasHash ^= raw;
+    sensorHash = crc16(sensorHash, (uint8_t*) &raw, sizeof(raw));
     prev = raw;
   }
 }
@@ -1456,8 +1461,13 @@ void sensorMonitorTask()
 
   iasEntropyAcc.input(iasEntropy);
   alphaEntropyAcc.input(alphaEntropy);
-  srand(rand() ^ iasHash ^ alphaHash);
   iasEntropy = alphaEntropy = 0;
+
+  //
+  // Random seed from hashed sensor data
+  //
+  
+  srand(sensorHash);
   
   //
   // Pitot block detection
@@ -1499,6 +1509,10 @@ void positionLogTask()
 
 void cycleTimeMonitor(float value)
 {
+  if(beepDuration > 0)
+    // We're beeping, fuggetaboutit
+    return;
+  
   //
   // Track min and max
   //
@@ -2284,6 +2298,16 @@ void loopTask()
   if(vpMode.loop) {
     consolePrint("alpha = ");
     consolePrint(alpha*360);
+
+    /*
+    uint16_t tmp = sensorHash;
+
+    for(int i = 0; i < 16; i++) {
+      consolePrint((tmp & 1) ? "+" : " ");
+      tmp = tmp >> 1;
+    }
+    */
+    
     /*
     consolePrint(" InputVec = ( ");
     for(uint8_t i = 0; i < sizeof(ppmInputs)/sizeof(void*); i++) {
@@ -2292,18 +2316,20 @@ void loopTask()
     }      
     consolePrint(")");
     */
+
     consolePrint(" IAS = ");
     consolePrint(iAS);
+
     /*
     consolePrint(" IAS(filt) = ");
     consolePrint(iasFilter.output());
     consolePrint(" IAS(slow) = ");
     consolePrint(iasFilterSlow.output());
     */
-    
+    /*    
     consolePrint(" avg G = ");
     consolePrint(accFilter.output());
-
+    */
     /*    consolePrint(" ppmFreq = ");
     consolePrint(ppmFreq);
     consolePrint(" aileStick = ");
@@ -2361,11 +2387,12 @@ void loopTask()
     consolePrint(" elevOutput% = ");
     consolePrint(elevOutput*100);
     */
+    /*
     consolePrint(" target = ");
     consolePrint(targetAlpha*360);
     consolePrint(" trim% = ");
     consolePrint(effTrim*100);
-
+    */
     /*    
     consolePrint(" param = ");
     consolePrint(parameter);  
@@ -2378,6 +2405,7 @@ void loopTask()
     consolePrint(" Qparam = ");
     consolePrint(quantize(parameter));  
     */
+
     consolePrint("      \r");
     consoleFlush();
   }
@@ -2814,6 +2842,7 @@ void beepTask()
     }
 
     beepDuration--;
+    controlCycleEnded = 0;
   } else
     phase = 0;
 }

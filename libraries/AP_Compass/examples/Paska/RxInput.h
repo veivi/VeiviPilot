@@ -20,7 +20,7 @@ struct SwitchRecord {
   float prevValue;
 };
 
-#define INERTIA 3
+#define INERTIA 2
 
 class ButtonInputChannel {
  public:
