@@ -201,11 +201,11 @@ struct GPSFix {
 struct ModeRecord vpMode;
 struct FeatureRecord vpFeature;
 struct StatusRecord vpStatus;
-struct GPSFix gpsFix;
+// struct GPSFix gpsFix;
 
 uint32_t currentTime;
 float testGain = 0;
-const int cycleTimeWindow = 31;
+const int cycleTimeWindow = 15;
 float cycleTimeStore[cycleTimeWindow];
 int cycleTimePtr = 0;
 bool cycleTimesValid;
@@ -234,7 +234,7 @@ uint32_t iasEntropy, alphaEntropy;
 bool beepGood;
 float beepDuration;
 
-const int maxTests_c = 32;
+const int maxTests_c = 4;
 float autoTestIAS[maxTests_c], autoTestK[maxTests_c], autoTestT[maxTests_c], autoTestKxIAS[maxTests_c];
 int autoTestCount;
 
@@ -528,6 +528,296 @@ bool readPressure(int16_t *result)
   }
   
   return true;
+}
+
+//
+// Takeoff configuration test
+//
+
+typedef enum {
+  toc_ram,
+  toc_load,
+  toc_ppm,
+  toc_mode,
+  toc_trim,
+  toc_eeprom,
+  toc_attitude,
+  toc_turn,
+  toc_alpha_sensor,
+  toc_alpha_range,
+  toc_pitot_sensor,
+  toc_pitot_block,
+  toc_button,
+  toc_aile_neutral,
+  toc_aile_range,
+  toc_elev_neutral,
+  toc_elev_range,
+  toc_rudder_neutral,
+  toc_rudder_range,
+  toc_throttle_zero,
+  toc_throttle_range,
+  toc_tuning_zero,
+  toc_tuning_range } testCode_t;
+
+#define TOC_TEST_NAME_MAX 16
+
+struct TakeoffTest {
+  char description[TOC_TEST_NAME_MAX];
+  bool (*function)(bool);
+};
+
+const float toc_margin_c = 0.02;
+
+bool toc_test_mode(bool reset)
+{
+  return !vpMode.test && vpMode.wingLeveler;
+}
+
+bool toc_test_trim(bool reset)
+{
+  return fabsf(elevTrim - vpParam.takeoffTrim) < toc_margin_c;
+}
+
+bool toc_test_ppm(bool reset)
+{
+  if(reset)
+    ppmWarnShort = ppmWarnSlow = false;
+
+  return !ppmWarnShort && !ppmWarnSlow;
+}
+
+bool toc_test_ram(bool reset)
+{
+  return hal.util->available_memory() > (1<<10);
+}
+
+bool toc_test_load(bool reset)
+{
+  return idleAvg > 0.2;
+}
+
+bool toc_test_eeprom(bool reset)
+{
+  if(reset)
+    vpStatus.eepromWarn = false;
+
+  return !vpStatus.eepromWarn && !vpStatus.eepromFailed;
+}
+
+bool toc_test_alpha_sensor(bool reset)
+{
+  if(reset)
+    vpStatus.alphaWarn = false;
+  return (!vpStatus.alphaWarn && !vpStatus.alphaFailed
+	  && alphaEntropyAcc.output() > 10);
+}
+
+bool toc_test_alpha_range(bool reset)
+{
+  static bool zeroAlpha, bigAlpha;
+  static uint32_t lastNonZeroAlpha, lastSmallAlpha;
+
+  if(reset) {
+    zeroAlpha = bigAlpha = false;
+    lastNonZeroAlpha = lastSmallAlpha = currentTime;
+  } else if(!zeroAlpha) {
+    if(fabs(alpha) > 1.5/360) {
+      lastNonZeroAlpha = currentTime;
+    } else if(currentTime > lastNonZeroAlpha + 1.0e6) {
+      consoleNoteLn_P(PSTR("Stable ZERO ALPHA"));
+      zeroAlpha = true;
+    }
+  } else if(!bigAlpha) {
+    if(alpha < 60.0/360) {
+      lastSmallAlpha = currentTime;
+    } else if(currentTime > lastSmallAlpha + 1.0e6) {
+      consoleNoteLn_P(PSTR("Stable BIG ALPHA"));
+      bigAlpha = true;
+    }
+  }
+  
+  return zeroAlpha && bigAlpha;
+}
+
+bool toc_test_pitot_sensor(bool reset)
+{
+  if(reset)
+    vpStatus.iasWarn = false;
+  return (!vpStatus.iasWarn && !vpStatus.iasFailed
+	  && alphaEntropyAcc.output() > 10);
+}
+
+bool toc_test_pitot_block(bool reset)
+{
+  return !vpStatus.pitotBlocked;
+}
+
+bool toc_test_attitude(bool reset)
+{
+  return fabsf(pitchAngle) < 10.0 && fabsf(rollAngle) < 5.0;
+}
+
+bool toc_test_turn(bool reset)
+{
+  return (fabsf(pitchRate) < 1.0/360
+	  && fabsf(rollRate) < 1.0/360
+	  && fabsf(yawRate) < 1.0/360);
+}
+
+struct TOCRangeTestState {
+  float valueMin, valueMax;
+};
+
+bool toc_test_range_generic(struct TOCRangeTestState *state, bool reset, struct RxInputRecord *input, float expectedMin, float expectedMax)
+{
+  const float value = inputValue(input);
+  
+  if(reset)
+    state->valueMin = state->valueMax = value;
+  else {
+    state->valueMin = fminf(state->valueMin, value);
+    state->valueMax = fmaxf(state->valueMax, value);
+  }
+  
+  return (fabsf(state->valueMin - expectedMin) < toc_margin_c
+	  && fabsf(state->valueMax - expectedMax) < toc_margin_c);
+}
+
+bool toc_test_elev_range(bool reset)
+{
+  static struct TOCRangeTestState state;
+  return toc_test_range_generic(&state, reset, &elevInput, -1, 1);
+}
+
+bool toc_test_aile_range(bool reset)
+{
+  static struct TOCRangeTestState state;
+  return toc_test_range_generic(&state, reset, &aileInput, -1, 1);
+}
+
+bool toc_test_throttle_range(bool reset)
+{
+  static struct TOCRangeTestState state;
+  return toc_test_range_generic(&state, reset, &throttleInput, 0, 1);
+}
+
+bool toc_test_rudder_range(bool reset)
+{
+  static struct TOCRangeTestState state;
+  return toc_test_range_generic(&state, reset, &rudderInput, -1, 1);
+}
+
+bool toc_test_tuning_range(bool reset)
+{
+  static struct TOCRangeTestState state;
+  return toc_test_range_generic(&state, reset, &tuningKnobInput, 0, 1);
+}
+
+bool toc_test_aile_neutral(bool reset)
+{
+  return fabsf(inputValue(&aileInput)) < toc_margin_c/2;
+}
+
+bool toc_test_elev_neutral(bool reset)
+{
+  return fabsf(inputValue(&elevInput)) < toc_margin_c/2;
+}
+
+bool toc_test_rudder_neutral(bool reset)
+{
+  return fabsf(inputValue(&rudderInput)) < toc_margin_c/2;
+}
+
+bool toc_test_throttle_zero(bool reset)
+{
+  return fabsf(inputValue(&throttleInput)) < toc_margin_c/2;
+}
+
+bool toc_test_tuning_zero(bool reset)
+{
+  return fabsf(inputValue(&tuningKnobInput)) < toc_margin_c/2;
+}
+
+bool toc_test_button(bool reset)
+{
+  static bool leftUp, leftDown, rightUp, rightDown;
+
+  if(reset)
+    leftUp = leftDown = rightUp = rightDown = false;
+  else {
+    leftUp |= leftUpButton.state();
+    leftDown |= leftDownButton.state();
+    rightUp |= rightUpButton.state();
+    rightDown |= rightDownButton.state();
+  }
+
+  return (leftUp && leftDown && rightUp && rightDown
+	  && !leftUpButton.state() && !leftDownButton.state()
+	  && !rightUpButton.state() && !rightDownButton.state());
+}
+
+const struct TakeoffTest takeoffTest[] PROGMEM =
+  { [toc_ram] = { "RAM", toc_test_ram },
+    [toc_load] = { "LOAD", toc_test_load },
+    [toc_ppm] = { "PPM", toc_test_ppm },
+    [toc_mode] = { "MODE", toc_test_mode },
+    [toc_trim] = { "TRIM", toc_test_trim },
+    [toc_eeprom] = { "EEPROM", toc_test_eeprom },
+    [toc_attitude] = { "ATTI", toc_test_attitude },
+    [toc_turn] = { "TURN", toc_test_turn },
+    [toc_alpha_sensor] = { "ALPHA_S", toc_test_alpha_sensor },
+    [toc_alpha_range] = { "ALPHA_R", toc_test_alpha_range },
+    [toc_pitot_sensor] = { "PITOT_S", toc_test_pitot_sensor },
+    [toc_pitot_block] = { "PITOT_B", toc_test_pitot_block },
+    [toc_button] = { "BUTTON", toc_test_button },
+    [toc_aile_neutral] = { "AILE_N", toc_test_aile_neutral },
+    [toc_aile_range] = { "AILE_R", toc_test_aile_range },
+    [toc_elev_neutral] = { "ELEV_N", toc_test_elev_neutral },
+    [toc_elev_range] = { "ELEV_R", toc_test_elev_range },
+    [toc_rudder_neutral] = { "RUD_N", toc_test_rudder_neutral },
+    [toc_rudder_range] = { "RUD_R", toc_test_rudder_range },
+    [toc_throttle_zero] = { "THR_Z", toc_test_throttle_zero },
+    [toc_throttle_range] = { "THR_R", toc_test_throttle_range },
+    [toc_tuning_zero] = { "TUNE_Z", toc_test_tuning_zero },
+    [toc_tuning_range] = { "TUNE_R", toc_test_tuning_range } };
+
+const int tocNumOfTests = sizeof(takeoffTest)/sizeof(struct TakeoffTest);
+
+bool takeoffTestInvoke(bool reset, bool verbose)
+{
+  bool fail = false;
+    
+  for(int i = 0; i < tocNumOfTests; i++) {
+    struct TakeoffTest cache;
+    memcpy_P(&cache, &takeoffTest[i], sizeof(cache));
+    
+    if(!(*cache.function)(reset)) {
+      if(!fail && verbose)
+	consoleNote_P(PSTR("T/OC FAIL : "));
+
+      if(verbose) {
+	consolePrint(cache.description);
+	consolePrint(" ");
+      }
+      
+      fail = true;
+    }
+  }
+
+  if(fail && verbose)
+    consolePrintLn("");
+  
+  return !fail;
+}
+
+void takeoffTestReset()
+{
+  takeoffTestInvoke(true, false);
+}
+
+bool takeoffTestStatus(bool verbose)
+{
+  return takeoffTestInvoke(false, verbose);
 }
 
 int indexOf(const char *s, const char c, int index)
@@ -872,6 +1162,9 @@ void executeCommand(const char *buf)
 	consolePrint_P(PSTR(" STABILIZER"));
       
       consolePrintLn("");
+
+      if(vpMode.takeOff && takeoffTestStatus(true))
+	consoleNoteLn_P(PSTR("T/O CONFIG GOOD"));
 
       consoleNote_P(PSTR("Log write bandwidth = "));
       consolePrint(logBandWidth);
@@ -1475,233 +1768,6 @@ float testGainLinear(float start, float stop)
   return testGainLinear(start, stop, parameter);
 }
 
-//
-// Takeoff configuration test
-//
-
-typedef enum {
-  toc_mode,
-  toc_trim,
-  toc_eeprom,
-  toc_attitude,
-  toc_turn,
-  toc_alpha_sensor,
-  toc_alpha_range,
-  toc_pitot_sensor,
-  toc_pitot_block,
-  toc_button,
-  toc_aile_neutral,
-  toc_aile_range,
-  toc_elev_neutral,
-  toc_elev_range,
-  toc_rudder_neutral,
-  toc_rudder_range,
-  toc_throttle_zero,
-  toc_throttle_range,
-  toc_tuning_zero,
-  toc_tuning_range } testCode_t;
-
-struct TakeoffTest {
-  const char *description;
-  bool (*function)(bool);
-};
-
-const float toc_margin_c = 0.02;
-
-bool toc_test_mode(bool reset)
-{
-  return !vpMode.test && vpMode.wingLeveler;
-}
-
-bool toc_test_trim(bool reset)
-{
-  return fabsf(elevTrim - vpParam.takeoffTrim) < toc_margin_c;
-}
-
-bool toc_test_eeprom(bool reset)
-{
-  if(reset)
-    vpStatus.eepromWarn = false;
-
-  return !vpStatus.eepromWarn && !vpStatus.eepromFailed;
-}
-
-bool toc_test_alpha_sensor(bool reset)
-{
-  if(reset)
-    vpStatus.alphaWarn = false;
-  return (!vpStatus.alphaWarn && !vpStatus.alphaFailed
-	  && alphaEntropyAcc.output() > 10);
-}
-
-bool toc_test_alpha_range(bool reset)
-{
-  static bool zeroAlpha, bigAlpha;
-  static uint32_t lastNonZeroAlpha, lastSmallAlpha;
-
-  if(reset) {
-    zeroAlpha = bigAlpha = false;
-    lastNonZeroAlpha = lastSmallAlpha = currentTime;
-  } else if(!zeroAlpha) {
-    if(fabs(alpha) > 1.5/360) {
-      lastNonZeroAlpha = currentTime;
-    } else if(currentTime > lastNonZeroAlpha + 1.0e6) {
-      consoleNoteLn_P(PSTR("Stable ZERO ALPHA"));
-      zeroAlpha = true;
-    }
-  } else if(!bigAlpha) {
-    if(alpha < 60.0/360) {
-      lastSmallAlpha = currentTime;
-    } else if(currentTime > lastSmallAlpha + 1.0e6) {
-      consoleNoteLn_P(PSTR("Stable BIG ALPHA"));
-      bigAlpha = true;
-    }
-  }
-  
-  return zeroAlpha && bigAlpha;
-}
-
-bool toc_test_pitot_sensor(bool reset)
-{
-  if(reset)
-    vpStatus.iasWarn = false;
-  return (!vpStatus.iasWarn && !vpStatus.iasFailed
-	  && alphaEntropyAcc.output() > 10);
-}
-
-bool toc_test_pitot_block(bool reset)
-{
-  return !vpStatus.pitotBlocked;
-}
-
-bool toc_test_attitude(bool reset)
-{
-  return fabsf(pitchAngle) < 10.0 && fabsf(rollAngle) < 5.0;
-}
-
-bool toc_test_turn(bool reset)
-{
-  return (fabsf(pitchRate) < 1.0/360
-	  && fabsf(rollRate) < 1.0/360
-	  && fabsf(yawRate) < 1.0/360);
-}
-
-struct TOCRangeTestState {
-  float valueMin, valueMax;
-};
-
-bool toc_test_range_generic(struct TOCRangeTestState *state, bool reset, struct RxInputRecord *input, float expectedMin, float expectedMax)
-{
-  const float value = inputValue(input);
-  
-  if(reset)
-    state->valueMin = state->valueMax = value;
-  else {
-    state->valueMin = fminf(state->valueMin, value);
-    state->valueMax = fmaxf(state->valueMax, value);
-  }
-  
-  return (fabsf(state->valueMin - expectedMin) < toc_margin_c
-	  && fabsf(state->valueMax - expectedMax) < toc_margin_c);
-}
-
-bool toc_test_elev_range(bool reset)
-{
-  static struct TOCRangeTestState state;
-  return toc_test_range_generic(&state, reset, &elevInput, -1, 1);
-}
-
-bool toc_test_aile_range(bool reset)
-{
-  static struct TOCRangeTestState state;
-  return toc_test_range_generic(&state, reset, &aileInput, -1, 1);
-}
-
-bool toc_test_throttle_range(bool reset)
-{
-  static struct TOCRangeTestState state;
-  return toc_test_range_generic(&state, reset, &throttleInput, 0, 1);
-}
-
-bool toc_test_rudder_range(bool reset)
-{
-  static struct TOCRangeTestState state;
-  return toc_test_range_generic(&state, reset, &rudderInput, -1, 1);
-}
-
-bool toc_test_tuning_range(bool reset)
-{
-  static struct TOCRangeTestState state;
-  return toc_test_range_generic(&state, reset, &tuningKnobInput, 0, 1);
-}
-
-bool toc_test_aile_neutral(bool reset)
-{
-  return fabsf(inputValue(&aileInput)) < toc_margin_c/2;
-}
-
-bool toc_test_elev_neutral(bool reset)
-{
-  return fabsf(inputValue(&elevInput)) < toc_margin_c/2;
-}
-
-bool toc_test_rudder_neutral(bool reset)
-{
-  return fabsf(inputValue(&rudderInput)) < toc_margin_c/2;
-}
-
-bool toc_test_throttle_zero(bool reset)
-{
-  return fabsf(inputValue(&throttleInput)) < toc_margin_c/2;
-}
-
-bool toc_test_tuning_zero(bool reset)
-{
-  return fabsf(inputValue(&tuningKnobInput)) < toc_margin_c/2;
-}
-
-bool toc_test_button(bool reset)
-{
-  static bool leftUp, leftDown, rightUp, rightDown;
-
-  if(reset)
-    leftUp = leftDown = rightUp = rightDown = false;
-  else {
-    leftUp |= leftUpButton.state();
-    leftDown |= leftDownButton.state();
-    rightUp |= rightUpButton.state();
-    rightDown |= rightDownButton.state();
-  }
-
-  return (leftUp && leftDown && rightUp && rightDown
-	  && !leftUpButton.state() && !leftDownButton.state()
-	  && !rightUpButton.state() && !rightDownButton.state());
-}
-
-const struct TakeoffTest takeoffTest[] =
-  { [toc_mode] = { "MODE", toc_test_mode },
-    [toc_trim] = { "TRIM", toc_test_trim },
-    [toc_eeprom] = { "EEPROM", toc_test_eeprom },
-    [toc_attitude] = { "ATTITUDE", toc_test_attitude },
-    [toc_turn] = { "TURN", toc_test_turn },
-    [toc_alpha_sensor] = { "ALPHA_SENSOR", toc_test_alpha_sensor },
-    [toc_alpha_range] = { "ALPHA_RANGE", toc_test_alpha_range },
-    [toc_pitot_sensor] = { "PITOT_SENSOR", toc_test_pitot_sensor },
-    [toc_pitot_block] = { "PITOT_BLOCK", toc_test_pitot_block },
-    [toc_button] = { "BUTTON", toc_test_button },
-    [toc_aile_neutral] = { "AILE_NEUTRAL", toc_test_aile_neutral },
-    [toc_aile_range] = { "AILE_RANGE", toc_test_aile_range },
-    [toc_elev_neutral] = { "ELEV_NEUTRAL", toc_test_elev_neutral },
-    [toc_elev_range] = { "ELEV_RANGE", toc_test_elev_range },
-    [toc_rudder_neutral] = { "RUDDER_NEUTRAL", toc_test_rudder_neutral },
-    [toc_rudder_range] = { "RUDDER_RANGE", toc_test_rudder_range },
-    [toc_throttle_zero] = { "THR_ZERO", toc_test_throttle_zero },
-    [toc_throttle_range] = { "THR_RANGE", toc_test_throttle_range },
-    [toc_tuning_zero] = { "TUNING_ZERO", toc_test_tuning_zero },
-    [toc_tuning_range] = { "TUNING_RANGE", toc_test_tuning_range } };
-
-const int numTests = sizeof(takeoffTest)/sizeof(struct TakeoffTest);
-
 float s_Ku_ref, i_Ku_ref;
 
 const float minAlpha = (-2.0/360);
@@ -1786,8 +1852,7 @@ void configurationTask()
   //
 
   if(vpMode.takeOff)
-    for(int i = 0; i < numTests; i++)
-      (*takeoffTest[i].function)(false);
+    takeoffTestStatus(false);
 
   //
   // Configuration control
@@ -1850,26 +1915,17 @@ void configurationTask()
 	elevTrim = vpParam.takeoffTrim;
 	beepDuration = 0.1;
 	beepGood = true;
-
-	for(int i = 0; i < numTests; i++)
-	  (*takeoffTest[i].function)(true);
+	takeoffTestReset();
 	
       } else if(vpMode.takeOff) {
-	bool fail = false;
-	
-	for(int i = 0; i < numTests; i++)
-	  if(!(*takeoffTest[i].function)(false)) {
-	    consoleNoteLn_P(PSTR("T/o configuration test FAILED"));
-	    beepDuration = 5;
-	    beepGood = false;
-	    fail = true;
-	    break;
-	  }
-
-	if(!fail) {
+	if(takeoffTestStatus(true)) {
 	  consoleNoteLn_P(PSTR("T/o configuration is GOOD"));
 	  beepDuration = 1;
 	  beepGood = true;
+	} else {
+	  consoleNoteLn_P(PSTR("T/o configuration test FAILED"));
+	  beepDuration = 5;
+	  beepGood = false;
 	}
       } else if(vpMode.bankLimiter) {
 	consoleNoteLn_P(PSTR("Bank limiter DISABLED"));
@@ -2685,30 +2741,6 @@ void heartBeatTask()
     datagramTxEnd();
   
     count++;   
-  }
-
-  //
-  // Takeoff config test display
-  //
-
-  if(vpMode.takeOff) {
-    bool fail = false;
-    
-    for(int i = 0; i < numTests; i++) {
-      if(!(*takeoffTest[i].function)(false)) {
-	if(!fail)
-	  consoleNote_P(PSTR("T/OC FAIL : "));
-	
-	consolePrint(takeoffTest[i].description);
-	consolePrint(" ");
-	fail = true;
-      }
-    }
-
-    if(fail) {
-      consolePrintLn("");
-      consoleFlush();
-    }
   }
 }
 
