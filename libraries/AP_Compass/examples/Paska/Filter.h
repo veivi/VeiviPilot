@@ -18,7 +18,9 @@ uint8_t population(uint16_t a);
 
 class RunningAvgFilter {
  public:
-  void setWindow(int l);
+  RunningAvgFilter(int w);
+  RunningAvgFilter(void);
+  void setWindow(int w);
   float input(float v);
   float output();
     
@@ -44,6 +46,7 @@ class Damper {
  public:
   Damper(void);
   Damper(float tau);
+  Damper(float tau, float initState);
   
   void reset(float v);
   void setTau(float tau);

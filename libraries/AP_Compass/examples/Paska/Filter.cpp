@@ -60,6 +60,17 @@ float Median3Filter::output(void)
   return max(min(memory[0],memory[1]), min(max(memory[0],memory[1]),memory[2]));
 }
 
+/*
+static int compareFloat(const void *a, const void *b)
+{
+  if(*(float*)a < *(float*)b)
+    return -1;
+  else if(*(float*)a > *(float*)b)
+    return 1;
+  else return 0;    
+}
+*/
+
 Damper::Damper(void)
 {
   avg = 0;
@@ -69,6 +80,12 @@ Damper::Damper(void)
 Damper::Damper(float t)
 {
   avg = 0;
+  setTau(t);
+}
+
+Damper::Damper(float t, float i)
+{
+  avg = i;
   setTau(t);
 }
 
@@ -123,6 +140,16 @@ float RateLimiter::input(float v, float dt)
 float RateLimiter::output(void)
 {
   return state;
+}
+
+RunningAvgFilter::RunningAvgFilter(void)
+{
+  setWindow(-1);
+}
+
+RunningAvgFilter::RunningAvgFilter(int w)
+{
+  setWindow(w);
 }
 
 void RunningAvgFilter::setWindow(int a) 

@@ -205,12 +205,6 @@ struct StatusRecord vpStatus;
 
 uint32_t currentTime;
 float testGain = 0;
-const int cycleTimeWindow = 15;
-const float cycleTimeSampleFraction = 1.0/15;
-float cycleTimeStore[cycleTimeWindow];
-int cycleTimePtr = 0;
-bool cycleTimesValid;
-float cycleMin = -1.0, cycleMax = -1.0;
 float iAS, dynPressure, alpha, effAlpha, aileStick, elevStick, throttleStick, rudderStick;
 bool ailePilotInput, elevPilotInput, rudderPilotInput;
 uint32_t controlCycleEnded;
@@ -219,10 +213,9 @@ float tuningKnobValue;
 Controller elevCtrl, aileCtrl, pushCtrl, rudderCtrl;
 float autoAlphaP, maxAlpha, shakerAlpha, thresholdAlpha, rudderMix;
 float accX, accY, accZ, altitude,  heading, rollAngle, pitchAngle, rollRate, pitchRate, targetPitchRate, yawRate, levelBank;
-int cycleTimeCounter = 0;
 float parameter;  
 NewI2C I2c = NewI2C();
-Damper ball(70), cycleTimeAcc(10), iasFilterSlow(100), iasFilter(2), accFilter(100), iasEntropyAcc(CONFIG_HZ), alphaEntropyAcc(CONFIG_HZ);
+Damper ball(70), iasFilterSlow(100), iasFilter(2), accFilter(100), iasEntropyAcc(CONFIG_HZ), alphaEntropyAcc(CONFIG_HZ);
 AlphaBuffer pressureBuffer;
 RunningAvgFilter alphaFilter;
 float controlCycle = 10.0e-3;
@@ -535,37 +528,28 @@ bool readPressure(int16_t *result)
 //
 //
 
-static int compareFloat(const void *a, const void *b)
+const int cycleTimeSampleWindow_c = CONTROL_HZ;
+Damper cycleTimeAcc(cycleTimeSampleWindow_c);
+float cycleTimeMin = -1.0, cycleTimeMax = -1.0;
+RunningAvgFilter cycleTimeAverage(cycleTimeSampleWindow_c);
+Damper cycleTimeSampleFraction(CONTROL_HZ, 1.0);
+int cycleTimeDisplayCount = 5;
+bool cycleTimeSampleAvailable = false;
+
+void cycleTimeSample(float value)
 {
-  if(*(float*)a < *(float*)b)
-    return -1;
-  else if(*(float*)a > *(float*)b)
-    return 1;
-  else return 0;    
-}
+  if((rand() & 0xFFF) < 0xFFF*cycleTimeSampleFraction.output()) {
+    cycleTimeAverage.input(value);
+    cycleTimeSampleFraction.input(1.0/100);
 
-float cycleTimeMedian()
-{
-  if(!cycleTimesValid)
-    return -1;
-
-  qsort((void*) cycleTimeStore, cycleTimeWindow, sizeof(float), compareFloat);
-
-  return cycleTimeStore[cycleTimeWindow/2];
-}
-
-float cycleTimeAverage()
-{
-  if(!cycleTimesValid)
-    return -1;
-
-  float sum = 0;
+    static int count = 0;
     
-  for(int i = 0; i < cycleTimeWindow; i++)
-    sum += cycleTimeStore[i];
-    
-  return sum /= cycleTimeWindow;
-}    
+    if(count < cycleTimeSampleWindow_c)
+      count++;
+    else
+      cycleTimeSampleAvailable = true;
+  }
+}
   
 //
 // Takeoff configuration test
@@ -575,7 +559,7 @@ typedef enum {
   toc_ram,
   toc_load,
   toc_ppm,
-  toc_cycle,
+  toc_timing,
   toc_mode,
   toc_trim,
   toc_eeprom,
@@ -629,7 +613,7 @@ bool toc_test_ram(bool reset)
   return hal.util->available_memory() > (1<<10);
 }
 
-bool toc_test_cycle(bool reset)
+bool toc_test_timing(bool reset)
 {
   static bool measured = false, started = false, result = false;
   static uint32_t startTime = 0;
@@ -640,16 +624,15 @@ bool toc_test_cycle(bool reset)
 
   } else if(!started) {
     if(currentTime > startTime + 1e6 && !beepDuration) {
-      cycleMin = cycleMax = -1;
+      cycleTimeMin = cycleTimeMax = -1;
       startTime = currentTime;
       started = true;
     }
   } else if(!measured && currentTime > startTime + 4.0e6) {
-    result = ( cycleTimeAverage() > 0 && cycleTimeMedian() > 0
-	       && cycleMin >= 1.0/CONTROL_HZ
-	       && cycleTimeAverage() < 1.1/CONTROL_HZ
-	       && cycleTimeMedian() < 1.1/CONTROL_HZ
-	       && cycleMax < 1.5/CONTROL_HZ );
+    result = ( cycleTimeSampleAvailable
+	       && cycleTimeMin >= 1.0/CONTROL_HZ
+	       && cycleTimeAverage.output() < 1.1/CONTROL_HZ
+	       && cycleTimeMax < 1.5/CONTROL_HZ );
     measured = true;
   }
 
@@ -825,7 +808,7 @@ const struct TakeoffTest takeoffTest[] PROGMEM =
   { [toc_ram] = { "RAM", toc_test_ram },
     [toc_load] = { "LOAD", toc_test_load },
     [toc_ppm] = { "PPM", toc_test_ppm },
-    [toc_cycle] = { "CYCLE", toc_test_cycle },
+    [toc_timing] = { "TIMING", toc_test_timing },
     [toc_mode] = { "MODE", toc_test_mode },
     [toc_trim] = { "TRIM", toc_test_trim },
     [toc_eeprom] = { "EEPROM", toc_test_eeprom },
@@ -849,7 +832,7 @@ const struct TakeoffTest takeoffTest[] PROGMEM =
 
 const int tocNumOfTests = sizeof(takeoffTest)/sizeof(struct TakeoffTest);
 
-bool takeoffTestInvoke(bool reset, bool done, bool verbose)
+bool takeoffTestInvoke(bool reset, bool challenge, bool verbose)
 {
   bool fail = false;
   struct TakeoffTest cache;
@@ -859,11 +842,11 @@ bool takeoffTestInvoke(bool reset, bool done, bool verbose)
 
     bool result = (*cache.function)(reset);
     
-    if(done && !result) {
-      if(!fail && verbose)
-	consoleNote_P(PSTR("T/O/C FAIL : "));
-
+    if(challenge && !result) {
       if(verbose) {
+	if(!fail)
+	  consoleNote_P(PSTR("T/O/C FAIL : "));
+
 	consolePrint(cache.description);
 	consolePrint(" ");
       }
@@ -1175,9 +1158,8 @@ void executeCommand(const char *buf)
       break;
       
     case c_cycle:
-      cycleMin = cycleMax = -1;
-      cycleTimesValid = false;
-      cycleTimePtr = 0;
+      cycleTimeMin = cycleTimeMax = -1;
+      cycleTimeDisplayCount = 5;
       break;
 
     case c_report:
@@ -1201,14 +1183,12 @@ void executeCommand(const char *buf)
       consolePrintLn(iasEntropyAcc.output());
 
       consoleNoteLn_P(PSTR("Cycle time (ms)"));
-      consoleNote_P(PSTR("  median     = "));
-      consolePrintLn(cycleTimeMedian()*1e3);
       consoleNote_P(PSTR("  min        = "));
-      consolePrintLn(cycleMin*1e3);
+      consolePrintLn(cycleTimeMin*1e3);
       consoleNote_P(PSTR("  max        = "));
-      consolePrintLn(cycleMax*1e3);
+      consolePrintLn(cycleTimeMax*1e3);
       consoleNote_P(PSTR("  mean       = "));
-      consolePrintLn(cycleTimeAverage()*1e3);
+      consolePrintLn(cycleTimeAverage.output()*1e3);
       consoleNote_P(PSTR("  cum. value = "));
       consolePrintLn(cycleTimeAcc.output()*1e3);
       consoleNote_P(PSTR("Warning flags :"));
@@ -1523,11 +1503,11 @@ void cycleTimeMonitor(float value)
   // Track min and max
   //
   
-  if(cycleMin < 0.0) {
-    cycleMin = cycleMax = value;
+  if(cycleTimeMin < 0.0) {
+    cycleTimeMin = cycleTimeMax = value;
   } else {
-    cycleMin = fminf(cycleMin, value);
-    cycleMax = fmaxf(cycleMax, value);
+    cycleTimeMin = fminf(cycleTimeMin, value);
+    cycleTimeMax = fmaxf(cycleTimeMax, value);
   }
 
   //
@@ -1540,16 +1520,7 @@ void cycleTimeMonitor(float value)
   // Random sampling for median and mean calculation
   //
 
-  if((rand() & 0xFFF) < 0xFFF*cycleTimeSampleFraction) {
-    cycleTimeStore[cycleTimePtr] = value;
-  
-    if(cycleTimePtr < cycleTimeWindow-1)
-      cycleTimePtr++;
-    else {
-      cycleTimePtr = 0;
-      cycleTimesValid = true;
-    }
-  }
+  cycleTimeSample(value);  
 }
 
 void measurementTask()
@@ -1582,19 +1553,15 @@ void measurementTask()
 
   // Cycle time display
 
-  static int count = 0;
-  
-  if(!cycleTimesValid)
-    count = 0;
-  else if(count++ < 5) {
-    consoleNote_P(PSTR("Cycle time (min, mean, median, max) = "));
-    consolePrint(cycleMin*1e3);
+  if(cycleTimeSampleAvailable && cycleTimeDisplayCount > 0) {
+    cycleTimeDisplayCount--;
+
+    consoleNote_P(PSTR("Cycle time (min, mean, max) = "));
+    consolePrint(cycleTimeMin*1e3);
     consolePrint_P(PSTR(", "));
-    consolePrint(cycleTimeAverage()*1e3);
+    consolePrint(cycleTimeAverage.output()*1e3);
     consolePrint_P(PSTR(", "));
-    consolePrint(cycleTimeMedian()*1e3);
-    consolePrint_P(PSTR(", "));
-    consolePrintLn(cycleMax*1e3);
+    consolePrintLn(cycleTimeMax*1e3);
   }
 }
 
