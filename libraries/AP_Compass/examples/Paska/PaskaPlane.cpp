@@ -1526,12 +1526,12 @@ void configurationTask(uint32_t currentMicros)
     vpStatus.positiveIAS = true;
   }
   
-  float turnRate = fabsf(rollRate) + fabsf(pitchRate) + fabsf(yawRate);
+  float turnRate = sqrt(square(rollRate) + square(pitchRate) + square(yawRate));
   float acceleration = sqrtf(square(accX) + square(accY) + square(accZ));
 
   accFilter.input(acceleration);
   
-  bool motionDetected = vpStatus.positiveIAS || turnRate > 3.0/360
+  bool motionDetected = vpStatus.positiveIAS || turnRate > 5.0/360
     || fabsf(acceleration - accFilter.output()) > 0.3;
   
   static uint32_t lastMotion;
@@ -1693,11 +1693,11 @@ void configurationTask(uint32_t currentMicros)
 	   && fabsf(yawRate) < 2.0/360
 	   && takeoffTest.zeroAlpha
 	   && takeoffTest.bigAlpha
-	   && fabsf(inputValue(&elevInput)) < margin_c/3
-	   && fabsf(inputValue(&aileInput)) < margin_c/3
-	   && fabsf(inputValue(&rudderInput)) < margin_c/3
-	   && fabsf(inputValue(&throttleInput)) < margin_c/3
-	   && fabsf(inputValue(&tuningKnobInput)) < margin_c/3
+	   && fabsf(inputValue(&elevInput)) < margin_c/2
+	   && fabsf(inputValue(&aileInput)) < margin_c/2
+	   && fabsf(inputValue(&rudderInput)) < margin_c/2
+	   && fabsf(inputValue(&throttleInput)) < margin_c/2
+	   && fabsf(inputValue(&tuningKnobInput)) < margin_c/2
 	   && fabsf(takeoffTest.elevMin + 1) < margin_c
 	   && fabsf(takeoffTest.aileMin + 1) < margin_c
 	   && fabsf(takeoffTest.rudderMin + 1) < margin_c
@@ -2029,8 +2029,7 @@ void loopTask(uint32_t currentMicros)
   if(vpMode.loop) {
     consolePrint("alpha = ");
     consolePrint(alpha*360);
-
-    /*    
+    /*
     consolePrint(" InputVec = ( ");
     for(uint8_t i = 0; i < sizeof(ppmInputs)/sizeof(void*); i++) {
       consolePrint(inputValue(ppmInputs[i]), 2);

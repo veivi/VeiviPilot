@@ -35,15 +35,19 @@ void Button :: input(float inputValue)
     if(inputState)
       pulseArmed = true;
       
-    else if(pulseArmed) {
-      if(count > 0) {
-	pulseDouble = true;
-	pulseSingle = false;
-	count = 0;
-      } else
-	count = 1;
+    else {
+      stateLazy = false;
       
-      pulseArmed = false;
+      if(pulseArmed) {
+	if(count > 0) {
+	  pulseDouble = true;
+	  pulseSingle = false;
+	  count = 0;
+	} else
+	  count = 1;
+      
+	pulseArmed = false;
+      }
     }
     
     statePrev = inputState;
