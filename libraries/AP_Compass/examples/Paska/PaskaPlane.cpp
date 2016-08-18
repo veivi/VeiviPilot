@@ -220,7 +220,7 @@ float autoAlphaP, maxAlpha, shakerAlpha, thresholdAlpha, rudderMix;
 float accX, accY, accZ, altitude,  heading, rollAngle, pitchAngle, rollRate, pitchRate, targetPitchRate, yawRate, levelBank;
 float parameter;  
 NewI2C I2c = NewI2C();
-Damper ball(70), iasFilterSlow(100), iasFilter(2), accFilter(100), iasEntropyAcc(CONFIG_HZ), alphaEntropyAcc(CONFIG_HZ);
+Damper ball(1.5*CONTROL_HZ), iasFilterSlow(3*CONTROL_HZ), iasFilter(2), accFilter(2*CONTROL_HZ), iasEntropyAcc(CONFIG_HZ), alphaEntropyAcc(CONFIG_HZ);
 AlphaBuffer pressureBuffer;
 RunningAvgFilter alphaFilter;
 uint32_t simTimeStamp;
@@ -609,7 +609,7 @@ void cycleTimeMonitor(float value)
   cycleTimeAcc.input(value);
 
   //
-  // Random sampling for median and mean calculation
+  // Random sampling for statistics
   //
 
   cycleTimeSample(value);  
@@ -1151,12 +1151,18 @@ void executeCommand(const char *buf)
       consoleNoteLn_P(PSTR("Alpha calibrated"));
       break;
 
-    case c_loop:
-      gaugeCount = numParams;      
-      for(int i = 0; i < numParams; i++)
-	gaugeVariable[i] = param[i];
+    case c_gauge:
+      if(numParams < 1) {
+	gaugeCount = 1;
+	gaugeVariable[0] = 1;
+      } else {
+	gaugeCount = numParams;
+	
+	for(int i = 0; i < numParams; i++)
+	  gaugeVariable[i] = param[i];
+      }
       break;
-    
+	
     case c_store:
       consoleNoteLn_P(PSTR("Params & NV state stored"));
       storeParams();
@@ -1234,11 +1240,6 @@ void executeCommand(const char *buf)
       vpMode.alwaysLog = true;
       break;
       
-    case c_cycle:
-      cycleTimeMin = cycleTimeMax = -1;
-      cycleTimeMonitorReset();
-      break;
-
     case c_report:
       consoleNote_P(PSTR("Idle avg = "));
       consolePrintLn(idleAvg*100,1);
@@ -1307,6 +1308,7 @@ void executeCommand(const char *buf)
 	= vpStatus.eepromWarn = vpStatus.eepromFailed = ppmWarnShort
 	= ppmWarnSlow = aileCtrl.warn = false;
       consoleNoteLn_P(PSTR("Warning flags reset"));
+      cycleTimeMonitorReset();
       break;
     
     default:
