@@ -49,6 +49,11 @@ float mixValue(float mixRatio, float a, float b)
     return (1.0 - mixRatio)*a + mixRatio*b;
 }
 
+float randomNum(float small, float large)
+{
+  return small + (large-small)*(float) ((rand()>>3) & 0xFFF) / 0x1000;
+}
+
 void Median3Filter::input(float v)
 {
   memory[ptr++] = v;

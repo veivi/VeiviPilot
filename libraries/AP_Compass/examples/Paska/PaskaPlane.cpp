@@ -542,7 +542,7 @@ bool cycleTimeSampleAvailable = false;
 
 void cycleTimeSample(float value)
 {
-  if((rand() & 0xFFF) < 0xFFF*cycleTimeSampleFraction.output()) {
+  if(randomNum(0, 1) < cycleTimeSampleFraction.output()) {
     cycleTimeAverage.input(value);
     cycleTimeSampleFraction.input(1.0/100);
 
@@ -635,7 +635,7 @@ bool toc_test_timing(bool reset)
     result =
       cycleTimeSampleAvailable
       && (cycleTimeMin >= 1.0/CONTROL_HZ)
-      && (cycleTimeMax < 1.5/CONTROL_HZ)
+      && (cycleTimeMax < 2.0/CONTROL_HZ)
       && (cycleTimeAverage.output() < 1.1/CONTROL_HZ);
     
     measured = true;
@@ -863,8 +863,7 @@ bool takeoffTestInvoke(bool reset, bool challenge, bool verbose)
 	consolePrint(" ");
       }
       
-      (*cache.function)(true);
-
+      (*cache.function)(true); // Reset the failed test
       fail = true;
     }
   }
@@ -2542,11 +2541,6 @@ void gpsTask()
     }        
   }
   */
-}
-
-float randomNum(float small, float large)
-{
-  return small + (large-small)*(float) (rand() & 0xFFF) / 0x1000;
 }
 
 float levelTurnPitchRate(float bank, float target)

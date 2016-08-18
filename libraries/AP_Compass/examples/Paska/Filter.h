@@ -15,6 +15,7 @@ float sign(float x);
 float clamp(float value, float a, float b);
 float mixValue(float mixRatio, float a, float b);
 uint8_t population(uint16_t a);
+float randomNum(float small, float large);
 
 class RunningAvgFilter {
  public:
