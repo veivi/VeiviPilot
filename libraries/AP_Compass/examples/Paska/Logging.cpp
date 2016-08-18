@@ -111,16 +111,37 @@ void logClear(void)
   if(!logReady())
     return;
 
-  if(logLen > 0) {
-    logEnter(ENTRY_TOKEN(t_start));
-    logLen = 0;
+  bool wasNotEmpty = logLen > 0;
+  
+  consoleNoteLn_P(PSTR("Log being CLEARED"));
+  
+  logEnter(ENTRY_TOKEN(t_start + (nvState.testNum & 0xFF)));
+  
+  logLen = 0;
+    
+  if(wasNotEmpty) {
     nvState.logStamp++;
     storeNVState();
-
-    consoleNoteLn_P(PSTR("Log being CLEARED"));
+    consoleNote_P(PSTR("Log STAMP incremented to "));
+    consolePrintLn(nvState.logStamp);
   }
+    
 }
   
+void logTestSet(uint16_t ch)
+{
+  if(!logReady())
+    return;
+
+  nvState.testNum = ch;
+  
+  logClear();
+  storeNVState();
+
+  consoleNote_P(PSTR("Test channel set to "));
+  consolePrintLn(nvState.testNum);
+}
+
 static int prevCh = -1;
 
 static void logWithCh(int ch, uint16_t value)
@@ -206,7 +227,7 @@ void logDumpBinary(void)
   if(!logReady())
     return;
   
-  struct LogInfo info = { nvState.logStamp };
+  struct LogInfo info = { nvState.logStamp, nvState.testNum, logLen };
   strncpy(info.name, vpParam.name, NAME_LEN);
 
   datagramTxStart(DG_LOGINFO);    
@@ -218,7 +239,7 @@ void logDumpBinary(void)
   
   consolePrintLn("");
   consoleNote_P(PSTR("TEST CH = "));
-  consolePrintLn(nvState.testChannel);
+  consolePrintLn(nvState.testNum);
   consolePrintLn("");
 
   int32_t total = 0, block = 0;
@@ -297,8 +318,9 @@ bool logInit(uint32_t maxDuration)
 
       uint16_t entry = logRead(searchPtr);
       
-      if(entry == ENTRY_TOKEN(t_start)) {
+      if(entry >= ENTRY_TOKEN(t_start) && entry <= ENTRY_TOKEN(t_start+BYTE_MASK)) {
 	startPtr = searchPtr;
+	nvState.testNum = entry & BYTE_MASK;
       } else if(entry == ENTRY_TOKEN(t_stamp)) {
         uint16_t stamp = logRead(logIndex(searchPtr+1));
 
@@ -346,9 +368,13 @@ bool logInit(uint32_t maxDuration)
 	consolePrint(searchPtr);
 	consolePrintLn("...");
       }
-	
-      if(logRead(searchPtr) == ENTRY_TOKEN(t_start))
+
+      uint16_t entry = logRead(searchPtr);
+      
+      if(entry >= ENTRY_TOKEN(t_start) && entry <= ENTRY_TOKEN(t_start+BYTE_MASK)) {
 	startPtr = searchPtr;
+	nvState.testNum = entry & BYTE_MASK;
+      }
       
       searchPtr++;
       
@@ -368,6 +394,8 @@ bool logInit(uint32_t maxDuration)
 
     consoleNote_P(PSTR("LOG READY, PTR = "));
     consolePrintLn(logPtr);
+    consoleNote_P(PSTR("  TEST = "));
+    consolePrintLn(nvState.testNum);
     consoleNote_P(PSTR("  LENGTH = "));
     consolePrintLn(logLen);
     consoleNote_P(PSTR("  STAMP = "));

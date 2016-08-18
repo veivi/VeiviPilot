@@ -12,10 +12,11 @@ struct LogChannel logChannels[] = {
    { lc_rollrate, "RRTE", -360, 360 },
    { lc_pitch, "PTCH", -90, 90 },
    { lc_pitchrate, "PRTE", -360, 360 },
-   { lc_heading, "HEAD", -180, 180},
+   { lc_heading, "HEAD", 0, 360},
    { lc_yawrate, "YRTE", -360, 360},
    { lc_ailestick, "ASTK", -1, 1 },
    { lc_elevstick, "ESTK", -1, 1 },
+   { lc_thrstick, "THRO", 0, 1 },
    { lc_rudstick, "RSTK", -1, 1 },
    { lc_aileron, "AILE", -1, 1 },
    { lc_elevator, "ELEV", -1, 1 },
@@ -27,6 +28,5 @@ struct LogChannel logChannels[] = {
    { lc_trim, "TRIM", -180, 180 },
    { lc_gain, "GAIN", 0, 50},
    { lc_test, "TEST", 0, 255},
-   { lc_alt, "ALTI", -10, 300 },
-   { lc_rpm, "RPM", 0, 50000 } };
+   { lc_alt, "ALTI", -10, 300 } };
 

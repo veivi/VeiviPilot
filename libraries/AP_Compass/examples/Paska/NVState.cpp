@@ -228,7 +228,7 @@ void printParams()
   consolePrintLn(vpParam.servoRate);
 }
 
-static void dumpParamEntry(const Command *e)
+static void backupParamEntry(const Command *e)
 {
   consolePrint(e->name);
 
@@ -268,7 +268,7 @@ static void dumpParamEntry(const Command *e)
   consolePrintLn("");
 } 
 
-void dumpParams()
+void backupParams()
 {
   datagramTxStart(DG_PARAMS);
   datagramTxOut((const uint8_t*) vpParam.name, strlen(vpParam.name));
@@ -294,7 +294,7 @@ void dumpParams()
     if(cache.token == c_invalid)
       break;
     if(cache.var[0])
-      dumpParamEntry(&cache);    
+      backupParamEntry(&cache);    
   }
 
   consolePrintLn_P(PSTR("store"));

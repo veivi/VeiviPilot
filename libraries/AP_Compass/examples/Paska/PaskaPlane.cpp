@@ -159,8 +159,8 @@ struct PWMOutput pwmOutput[] = {
 #define LED_HZ 3
 #define LED_TICK 100
 #define LOG_HZ_ALPHA CONTROL_HZ
-#define LOG_HZ_CONTROL (CONTROL_HZ/3)
-#define LOG_HZ_SLOW 2
+#define LOG_HZ_SLOW (CONTROL_HZ/3)
+#define LOG_HZ_SAVE 2
 #define HEARTBEAT_HZ 1
   
 struct Task {
@@ -416,7 +416,7 @@ void logConfig(void)
 
   if(vpMode.test) {
     logGeneric(lc_gain, testGain);
-    logGeneric(lc_test, nvState.testChannel);
+    logGeneric(lc_test, nvState.testNum);
   } else {
     logGeneric(lc_gain, 0);
     logGeneric(lc_test, 0);
@@ -432,6 +432,7 @@ void logInput(void)
 {
   logGeneric(lc_ailestick, aileStick);
   logGeneric(lc_elevstick, elevStick);
+  logGeneric(lc_thrstick, throttleStick);
   logGeneric(lc_rudstick, rudderStick);
 }
 
@@ -651,7 +652,7 @@ bool toc_test_load(bool reset)
 bool toc_test_eeprom(bool reset)
 {
   if(reset)
-    vpStatus.eepromWarn = false;
+    vpStatus.eepromWarn = vpStatus.eepromFailed = false;
 
   return !vpStatus.eepromWarn && !vpStatus.eepromFailed;
 }
@@ -659,7 +660,7 @@ bool toc_test_eeprom(bool reset)
 bool toc_test_alpha_sensor(bool reset)
 {
   if(reset)
-    vpStatus.alphaWarn = false;
+    vpStatus.alphaWarn = vpStatus.alphaFailed = false;
   return (!vpStatus.alphaWarn && !vpStatus.alphaFailed
 	  && alphaEntropyAcc.output() > 10);
 }
@@ -701,7 +702,7 @@ bool toc_test_alpha_range(bool reset)
 bool toc_test_pitot_sensor(bool reset)
 {
   if(reset)
-    vpStatus.iasWarn = false;
+    vpStatus.iasWarn = vpStatus.iasFailed = false;
   return (!vpStatus.iasWarn && !vpStatus.iasFailed
 	  && alphaEntropyAcc.output() > 10);
 }
@@ -1053,13 +1054,11 @@ void executeCommand(const char *buf)
       break;
     
     case c_test:
-      if(numParams > 0) {
-	nvState.testChannel = param[0];
-	storeNVState();
-      }
+      if(numParams > 0)
+	logTestSet(param[0]);
 
       consoleNote_P(PSTR("Current test channel = "));
-      consolePrintLn(nvState.testChannel);
+      consolePrintLn(nvState.testNum);
       break;
 
     case c_calibrate:
@@ -1118,7 +1117,7 @@ void executeCommand(const char *buf)
     case c_backup:
       for(int i = 0; i < maxModels(); i++) {
 	if(setModel(i))
-	  dumpParams();
+	  backupParams();
       }
       setModel(currentModel);
       break;
@@ -1259,21 +1258,6 @@ float scaleByIAS(float k, float p)
 void cacheTask()
 {
   cacheFlush();
-}
-
-void logStartCallback()
-{
-  logAlpha();
-  logAttitude();
-  logInput();
-  logActuator();
-  logConfig();
-  logPosition();
-}
-
-void logSaveTask()
-{
-  logSave(logStartCallback);
 }
 
 void alphaTask()
@@ -1498,16 +1482,12 @@ void alphaLogTask()
   logAlpha();  
 }
 
-void controlLogTask()
+void slowLogTask()
 {
   logAttitude();
   logInput();
   logActuator();
   logConfig();
-}
-
-void positionLogTask()
-{
   logPosition();
 }
 
@@ -2131,7 +2111,7 @@ void configurationTask()
   
   float scale = 1.0;
   
-  if(vpMode.test && nvState.testChannel == 0)
+  if(vpMode.test && nvState.testNum == 0)
     scale = testGainLinear(1.0/3, 1.0);
   
   // Default controller settings
@@ -2157,7 +2137,7 @@ void configurationTask()
   // Then apply test modes
   
   if(vpMode.test) {
-    switch(nvState.testChannel) {
+    switch(nvState.testNum) {
     case 1:
       // Wing stabilizer gain
          
@@ -2323,6 +2303,9 @@ void loopTask()
 
     consolePrint(" IAS = ");
     consolePrint(iAS);
+
+    consolePrint(" alt = ");
+    consolePrint(altitude);
 
     /*
     consolePrint(" IAS(filt) = ");
@@ -2629,8 +2612,7 @@ void controlTask()
 
     static float elevTestBias = 0;
 
-    if((vpMode.test && (nvState.testChannel == 2
-		       || nvState.testChannel == 3))
+    if((vpMode.test && (nvState.testNum == 2 || nvState.testNum == 3))
     || (testActive() && analyzerInputCh == ac_elev))
       elevOutput += elevTestBias;
     else
@@ -2865,6 +2847,17 @@ void simulatorLinkTask()
   }
 }
 
+static void logStartCallback()
+{
+  alphaLogTask();
+  slowLogTask();
+}
+
+void logSaveTask()
+{
+  logSave(logStartCallback);
+}
+
 void controlTaskGroup()
 {
   testStateMachine();
@@ -2899,14 +2892,12 @@ struct Task taskList[] = {
     HZ_TO_PERIOD(CONFIG_HZ) },
   { alphaLogTask,
     HZ_TO_PERIOD(LOG_HZ_ALPHA) },
-  { controlLogTask,
-    HZ_TO_PERIOD(LOG_HZ_CONTROL) },
-  { positionLogTask,
+  { slowLogTask,
     HZ_TO_PERIOD(LOG_HZ_SLOW) },
   { logSaveTask,
-    HZ_TO_PERIOD(LOG_HZ_SLOW) },
+    HZ_TO_PERIOD(LOG_HZ_SAVE) },
   { cacheTask,
-    HZ_TO_PERIOD(LOG_HZ_SLOW) },
+    HZ_TO_PERIOD(LOG_HZ_SAVE) },
   { measurementTask,
     HZ_TO_PERIOD(1) },
   { heartBeatTask,

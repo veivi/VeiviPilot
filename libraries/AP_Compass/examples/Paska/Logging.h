@@ -18,7 +18,8 @@ bool logReady(bool verbose);
 bool logReady(void);
 bool logInit(uint32_t);
 uint16_t logRead(int32_t index);
-void logClear(void);
+void logClear();
+void logTestSet(uint16_t);
 void logDumpBinary(void);
 
 void logGeneric(int ch, float value);
