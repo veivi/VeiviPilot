@@ -173,7 +173,6 @@ struct Task {
 struct ModeRecord {
   bool test;
   bool rattle;
-  bool loop;
   bool alphaFailSafe;
   bool sensorFailSafe;
   bool rxFailSafe;
@@ -229,7 +228,8 @@ RateLimiter aileRateLimiter, flapRateLimiter, alphaRateLimiter;
 float elevOutput, elevOutputFeedForward, aileOutput = 0, flapOutput = 0, gearOutput = 0, brakeOutput = 0, rudderOutput = 0;
 uint16_t iasEntropy, alphaEntropy, sensorHash = 0xFFFF;
 bool beepGood;
-int beepDuration;
+const int maxParams = 8;
+int beepDuration, gaugeCount, gaugeVariable[maxParams];
 
 const int maxTests_c = 4;
 float autoTestIAS[maxTests_c], autoTestK[maxTests_c], autoTestT[maxTests_c], autoTestKxIAS[maxTests_c];
@@ -378,7 +378,7 @@ void delayMicros(int x)
   while(hal.scheduler->micros() < current+x);
 }
 
-void beep(int hz, long millis)
+void beepPrim(int hz, long millis)
 {
   for(long i = 0; i < hz*millis/1000; i++) {
     setPinState(&PIEZO.pin, 0);
@@ -386,6 +386,22 @@ void beep(int hz, long millis)
     setPinState(&PIEZO.pin, 1);
     delayMicros(1e6/hz/2);
   }
+}
+
+void beep(float dur, bool good)
+{
+  beepGood = good;
+  beepDuration = dur*BEEP_HZ;
+}
+
+void goodBeep(float dur)
+{
+  beep(dur, true);
+}
+
+void badBeep(float dur)
+{
+  beep(dur, false);
 }
 
 void logAlpha(void)
@@ -537,24 +553,68 @@ Damper cycleTimeAcc(cycleTimeSampleWindow_c);
 float cycleTimeMin = -1.0, cycleTimeMax = -1.0;
 RunningAvgFilter cycleTimeAverage(cycleTimeSampleWindow_c);
 Damper cycleTimeSampleFraction(CONTROL_HZ, 1.0);
-int cycleTimeDisplayCount = 5;
+int cycleTimeSampleCount = 0;
 bool cycleTimeSampleAvailable = false;
 
+void cycleTimeSampleReset(void)
+{
+  cycleTimeSampleCount = 0;
+  cycleTimeSampleAvailable = false;
+  cycleTimeSampleFraction.reset(1.0);
+}
+  
 void cycleTimeSample(float value)
 {
   if(randomNum(0, 1) < cycleTimeSampleFraction.output()) {
     cycleTimeAverage.input(value);
     cycleTimeSampleFraction.input(1.0/100);
 
-    static int count = 0;
-    
-    if(count < cycleTimeSampleWindow_c)
-      count++;
-    else
+    if(cycleTimeSampleCount < cycleTimeSampleWindow_c)
+      cycleTimeSampleCount++;
+    else if(!cycleTimeSampleAvailable) {
+      consoleNoteLn_P(PSTR("Cycle time sample available"));
       cycleTimeSampleAvailable = true;
+    }
   }
 }
   
+void cycleTimeMonitorReset(void)
+{
+  cycleTimeSampleReset();
+  cycleTimeMin = cycleTimeMax = -1;
+  consoleNoteLn_P(PSTR("Cycle time monitor RESET"));
+}
+  
+void cycleTimeMonitor(float value)
+{
+  if(beepDuration > 0)
+    // We're beeping, fuggetaboutit
+    return;
+  
+  //
+  // Track min and max
+  //
+  
+  if(cycleTimeMin < 0.0) {
+    cycleTimeMin = cycleTimeMax = value;
+  } else {
+    cycleTimeMin = fminf(cycleTimeMin, value);
+    cycleTimeMax = fmaxf(cycleTimeMax, value);
+  }
+
+  //
+  // Cumulative average
+  //
+  
+  cycleTimeAcc.input(value);
+
+  //
+  // Random sampling for median and mean calculation
+  //
+
+  cycleTimeSample(value);  
+}
+
 //
 // Takeoff configuration test
 //
@@ -627,7 +687,7 @@ bool toc_test_timing(bool reset)
 
   } else if(!started) {
     if(!beepDuration) {
-      cycleTimeMin = cycleTimeMax = -1;
+      cycleTimeMonitorReset();
       startTime = currentTime;
       started = true;
     }
@@ -816,7 +876,7 @@ bool toc_test_button(bool reset)
 	  && !rightUpButton.state() && !rightDownButton.state());
 }
 
-const struct TakeoffTest takeoffTest[] PROGMEM =
+const struct TakeoffTest tocTest[] PROGMEM =
   { [toc_ram] = { "RAM", toc_test_ram },
     [toc_load] = { "LOAD", toc_test_load },
     [toc_ppm] = { "PPM", toc_test_ppm },
@@ -842,15 +902,15 @@ const struct TakeoffTest takeoffTest[] PROGMEM =
     [toc_tuning_zero] = { "TUNE_Z", toc_test_tuning_zero },
     [toc_tuning_range] = { "TUNE_R", toc_test_tuning_range } };
 
-const int tocNumOfTests = sizeof(takeoffTest)/sizeof(struct TakeoffTest);
+const int tocNumOfTests = sizeof(tocTest)/sizeof(struct TakeoffTest);
 
-bool takeoffTestInvoke(bool reset, bool challenge, bool verbose)
+bool tocTestInvoke(bool reset, bool challenge, bool verbose)
 {
   bool fail = false;
   struct TakeoffTest cache;
     
   for(int i = 0; i < tocNumOfTests; i++) {
-    memcpy_P(&cache, &takeoffTest[i], sizeof(cache));
+    memcpy_P(&cache, &tocTest[i], sizeof(cache));
 
     bool result = (*cache.function)(reset);
     
@@ -874,19 +934,19 @@ bool takeoffTestInvoke(bool reset, bool challenge, bool verbose)
   return !fail;
 }
 
-void takeoffTestReset()
+void tocTestReset()
 {
-  takeoffTestInvoke(true, false, false);
+  tocTestInvoke(true, false, false);
 }
 
-void takeoffTestUpdate()
+void tocTestUpdate()
 {
-  takeoffTestInvoke(false, false, false);
+  tocTestInvoke(false, false, false);
 }
 
-bool takeoffTestStatus(bool verbose)
+bool tocTestStatus(bool verbose)
 {
-  return takeoffTestInvoke(false, true, verbose);
+  return tocTestInvoke(false, true, verbose);
 }
 
 int indexOf(const char *s, const char c, int index)
@@ -915,13 +975,11 @@ void executeCommand(const char *buf)
   consolePrintLn("");
 
   if(bufLen < 1 || buf[0] == '/') {
-    vpMode.loop = false;
+    gaugeCount = 0;
     calibStop(nvState.rxMin, nvState.rxCenter, nvState.rxMax);
     return;
   }
   
-  const int maxParams = 8;
-
   int index = 0, prevIndex = 0, numParams = 0, tokenLen = bufLen;
   float param[maxParams];
   const char *paramText[maxParams];
@@ -1094,7 +1152,9 @@ void executeCommand(const char *buf)
       break;
 
     case c_loop:
-      vpMode.loop = true;
+      gaugeCount = numParams;      
+      for(int i = 0; i < numParams; i++)
+	gaugeVariable[i] = param[i];
       break;
     
     case c_store:
@@ -1167,7 +1227,7 @@ void executeCommand(const char *buf)
       
     case c_cycle:
       cycleTimeMin = cycleTimeMax = -1;
-      cycleTimeDisplayCount = 5;
+      cycleTimeMonitorReset();
       break;
 
     case c_report:
@@ -1225,7 +1285,7 @@ void executeCommand(const char *buf)
       
       consolePrintLn("");
 
-      if(vpMode.takeOff && takeoffTestStatus(true))
+      if(vpMode.takeOff && tocTestStatus(true))
 	consoleNoteLn_P(PSTR("T/O CONFIG GOOD"));
 
       consoleNote_P(PSTR("Log write bandwidth = "));
@@ -1490,36 +1550,6 @@ void slowLogTask()
   logPosition();
 }
 
-void cycleTimeMonitor(float value)
-{
-  if(beepDuration > 0)
-    // We're beeping, fuggetaboutit
-    return;
-  
-  //
-  // Track min and max
-  //
-  
-  if(cycleTimeMin < 0.0) {
-    cycleTimeMin = cycleTimeMax = value;
-  } else {
-    cycleTimeMin = fminf(cycleTimeMin, value);
-    cycleTimeMax = fmaxf(cycleTimeMax, value);
-  }
-
-  //
-  // Cumulative average
-  //
-  
-  cycleTimeAcc.input(value);
-
-  //
-  // Random sampling for median and mean calculation
-  //
-
-  cycleTimeSample(value);  
-}
-
 void measurementTask()
 {
   static uint32_t prevMeasurement;
@@ -1547,19 +1577,6 @@ void measurementTask()
   writeBytesCum = 0;
   
   prevMeasurement = currentTime;
-
-  // Cycle time display
-
-  if(cycleTimeSampleAvailable && cycleTimeDisplayCount > 0) {
-    cycleTimeDisplayCount--;
-
-    consoleNote_P(PSTR("Cycle time (min, mean, max) = "));
-    consolePrint(cycleTimeMin*1e3);
-    consolePrint_P(PSTR(", "));
-    consolePrint(cycleTimeAverage.output()*1e3);
-    consolePrint_P(PSTR(", "));
-    consolePrintLn(cycleTimeMax*1e3);
-  }
 }
 
 const float testGainStep_c = 0.05;
@@ -1822,6 +1839,7 @@ void configurationTask()
     if(leftUpButton.doublePulse() && aileStick < -0.90 && elevStick > 0.90) {
       consoleNoteLn_P(PSTR("We're now ARMED"));
       vpStatus.armed = true;
+      badBeep(1);
       
       if(!vpStatus.consoleLink)
 	vpStatus.silent = true;
@@ -1891,7 +1909,7 @@ void configurationTask()
   //
 
   if(vpMode.takeOff)
-    takeoffTestUpdate();
+    tocTestUpdate();
 
   //
   // Configuration control
@@ -1949,28 +1967,25 @@ void configurationTask()
     } else {
       if(!vpMode.takeOff && iasFilter.output() < vpParam.iasMin*2/3) {
 	consoleNoteLn_P(PSTR("TakeOff mode ENABLED"));
-	beepDuration = BEEP_HZ/2;
-	beepGood = true;
+	goodBeep(0.5);
 	
 	vpMode.takeOff = true;
 	vpMode.slowFlight = false;
 	elevTrim = vpParam.takeoffTrim;
 	
-	takeoffTestReset();
+	tocTestReset();
 	
       } else if(vpMode.takeOff) {
-	if(takeoffTestStatus(true)) {
+	if(tocTestStatus(true)) {
 	  consoleNoteLn_P(PSTR("T/o configuration is GOOD"));
-	  beepDuration = BEEP_HZ;
-	  beepGood = true;
+	  goodBeep(1);
 	} else {
 	  consoleNoteLn_P(PSTR("T/o configuration test FAILED"));
-	  beepDuration = 5*BEEP_HZ;
-	  beepGood = false;
+	  badBeep(5);
 	}
       } else if(vpMode.bankLimiter) {
 	consoleNoteLn_P(PSTR("Bank limiter DISABLED"));
-	vpMode.wingLeveler = vpMode.bankLimiter = vpMode.slowFlight = false;
+	vpMode.wingLeveler = vpMode.bankLimiter = false;
 	logMark();
       }
     }
@@ -2001,6 +2016,8 @@ void configurationTask()
   
     consoleNoteLn_P(PSTR("Slow flight mode DISABLED"));
     vpMode.slowFlight = false;
+    logMark();
+    
   } else if(ELEVMODEBUTTON.depressed() && !vpMode.slowFlight && !vpMode.takeOff) {
     //
     // CONTINUOUS : ENABLE ALPHA HOLD / SLOW FLIGHT
@@ -2008,7 +2025,6 @@ void configurationTask()
   
     consoleNoteLn_P(PSTR("Slow flight mode ENABLED"));
     vpMode.slowFlight = true;
-    vpMode.takeOff = false;
     logMark();
   }
 
@@ -2135,7 +2151,7 @@ void configurationTask()
   
   // Then apply test modes
   
-  if(vpMode.test) {
+  if(vpMode.test && !vpMode.takeOff) {
     switch(nvState.testNum) {
     case 1:
       // Wing stabilizer gain
@@ -2276,123 +2292,113 @@ void configurationTask()
       - elevStick - elevTrim;
 }
 
-void loopTask()
+void gaugeTask()
 {
-  if(vpMode.loop) {
-    consolePrint("alpha = ");
-    consolePrint(alpha*360);
-
-    /*
+  if(gaugeCount > 0) {
     uint16_t tmp = sensorHash;
+	
+    for(int g = 0; g < gaugeCount; g++) {
+      switch(gaugeVariable[g]) {
+      case 1:
+	consolePrint_P(PSTR(" alpha = "));
+	consolePrint(alpha*360);
+	consolePrint_P(PSTR(" IAS = "));
+	consolePrint(iAS);
+	consolePrint_P(PSTR(" IAS(filt) = "));
+	consolePrint(iasFilter.output());
+	consolePrint_P(PSTR(" IAS(slow) = "));
+	consolePrint(iasFilterSlow.output());
+	break;
 
-    for(int i = 0; i < 16; i++) {
-      consolePrint((tmp & 1) ? "+" : " ");
-      tmp = tmp >> 1;
+      case 2:
+	consolePrint_P(PSTR(" trim%(eff) = "));
+	consolePrint(elevTrim*100);
+	consolePrint("(");
+	consolePrint(effTrim*100);
+	consolePrint(")");
+	consolePrint_P(PSTR(" target = "));
+	consolePrint(targetAlpha*360);
+	consolePrint_P(PSTR(" targetPR = "));
+	consolePrint(targetPitchRate*360);
+	break;
+	
+      case 3:
+	consoleNote_P(PSTR("Cycle time (min, mean, max) = "));
+	consolePrint(cycleTimeMin*1e3);
+	consolePrint_P(PSTR(", "));
+	consolePrint(cycleTimeAverage.output()*1e3);
+	consolePrint_P(PSTR(", "));
+	consolePrintLn(cycleTimeMax*1e3);
+	break;
+	
+      case 10:
+	consolePrint_P(PSTR(" roll = "));
+	consolePrint(rollAngle, 2);
+	consolePrint_P(PSTR(" pitch = "));
+	consolePrint(pitchAngle, 2);
+	consolePrint_P(PSTR(" heading = "));
+	consolePrint(heading);
+	consolePrint_P(PSTR(" alt = "));
+	consolePrint(altitude);
+	consolePrint_P(PSTR(" ball = "));
+	consolePrint(ball.output(), 2);
+	break;
+
+      case 11:
+	consolePrint_P(PSTR(" rollR = "));
+	consolePrint(rollRate*360, 1);
+	consolePrint_P(PSTR(" pitchR = "));
+	consolePrint(pitchRate*360, 1);
+	consolePrint_P(PSTR(" yawR = "));
+	consolePrint(yawRate*360, 1);
+	break;
+
+      case 40:
+        consolePrint_P(PSTR(" ppmFreq = "));
+	consolePrint(ppmFreq);
+	consolePrint_P(PSTR(" InputVec = ( "));
+	for(uint8_t i = 0; i < sizeof(ppmInputs)/sizeof(void*); i++) {
+	  consolePrint(inputValue(ppmInputs[i]), 2);
+	  consolePrint(" ");
+	}      
+	consolePrint(")");
+	break;
+
+      case 5:
+	consolePrint_P(PSTR(" aileStick = "));
+	consolePrint(aileStick);
+	consolePrint_P(PSTR(" elevStick = "));
+	consolePrint(elevStick);
+	consolePrint_P(PSTR(" throttleStick = "));
+	consolePrint(throttleStick);
+	consolePrint_P(PSTR(" rudderStick = "));
+	consolePrint(rudderStick);
+	break;
+
+      case 6:
+	consolePrint_P(PSTR(" avg G = "));
+	consolePrint(accFilter.output());
+	consolePrint_P(PSTR(" acc = ("));
+	consolePrint(accX, 2);
+	consolePrint_P(PSTR(", "));
+	consolePrint(accY, 2);
+	consolePrint_P(PSTR(", "));
+	consolePrint(accZ, 2);
+	consolePrint_P(PSTR(")"));
+	break;
+
+      case 20:
+	consolePrint_P(PSTR(" hash = "));
+	
+	for(int i = 0; i < 16; i++) {
+	  consolePrint((tmp & 1) ? "+" : " ");
+	  tmp = tmp >> 1;
+	}
+	break;
+      }
     }
-    */
-    
-    /*
-    consolePrint(" InputVec = ( ");
-    for(uint8_t i = 0; i < sizeof(ppmInputs)/sizeof(void*); i++) {
-      consolePrint(inputValue(ppmInputs[i]), 2);
-      consolePrint(" ");
-    }      
-    consolePrint(")");
-    */
 
-    consolePrint(" IAS = ");
-    consolePrint(iAS);
-
-    consolePrint(" alt = ");
-    consolePrint(altitude);
-
-    /*
-    consolePrint(" IAS(filt) = ");
-    consolePrint(iasFilter.output());
-    consolePrint(" IAS(slow) = ");
-    consolePrint(iasFilterSlow.output());
-    */
-    /*    
-    consolePrint(" avg G = ");
-    consolePrint(accFilter.output());
-    */
-    /*    consolePrint(" ppmFreq = ");
-    consolePrint(ppmFreq);
-    consolePrint(" aileStick = ");
-    consolePrint(aileStick);
-    consolePrint(" elevStick = ");
-    consolePrint(elevStick);
-    consolePrint(" rudderStick = ");
-    consolePrint(rudderStick);
-    */
-    /*
-    consolePrint(" ball = ");
-    consolePrint(ball.output(), 2);
-    */
-    
-    /*
-    consolePrint(" acc = (");
-    consolePrint(accX, 2);
-    consolePrint(", ");
-    consolePrint(accY, 2);
-    consolePrint(", ");
-    consolePrint(accZ, 2);
-    consolePrint(")");
-    */
-    /*
-    consolePrint(" roll = ");
-    consolePrint(rollAngle, 2);
-    consolePrint(" (rate = ");
-    consolePrint(rollRate*360, 1);
-
-    consolePrint(") pitch = ");
-    consolePrint(pitchAngle, 2);
-    consolePrint(" (rate = ");
-    consolePrint(pitchRate*360, 1);
-    consolePrint(")");
-    */
-/*    consolePrint(" heading = ");
-    consolePrint(heading);
-*/
-    /*
-    consolePrint(" alt(GPS) = ");
-    consolePrint(altitude);
-    consolePrint(" m (");
-    consolePrint(gpsFix.altitude);
-    consolePrint(" m)");
-    */
-    /*
-    consolePrint(" speed = ");
-    consolePrint(gpsFix.speed);
-    */
-    /* 
-    consolePrint(" targetPR = ");
-    consolePrint(targetPitchRate*360);
-    */
-    /*
-    consolePrint(" elevOutput% = ");
-    consolePrint(elevOutput*100);
-    */
-    /*
-    consolePrint(" target = ");
-    consolePrint(targetAlpha*360);
-    consolePrint(" trim% = ");
-    consolePrint(effTrim*100);
-    */
-    /*    
-    consolePrint(" param = ");
-    consolePrint(parameter);  
-    */
-    /*
-    consolePrint(" testGain = ");
-    consolePrint(testGain);
-    */
-    /* 
-    consolePrint(" Qparam = ");
-    consolePrint(quantize(parameter));  
-    */
-
-    consolePrint("      \r");
+    consolePrint_P(PSTR("      \r"));
     consoleFlush();
   }
 }
@@ -2745,9 +2751,12 @@ void actuatorTask()
 
 void trimTask()
 {
-  if(TRIMBUTTON.state())
+  if(TRIMBUTTON.state()) {
+    //    consoleNote_P(PSTR("TRIM "));
+    //    consolePrintLn(elevStick);
     elevTrim += clamp(elevStick*3/2/TRIM_HZ, -0.15/TRIM_HZ, 0.15/TRIM_HZ);
-
+  }
+  
   const float trimMin = -0.20, trimMax = 0.80;
   
   if(!vpFeature.alphaHold)
@@ -2812,10 +2821,10 @@ void beepTask()
 
   if(beepDuration > 0) {
     if(beepGood)
-      beep(400, 1e3/BEEP_HZ);
+      beepPrim(400, 1e3/BEEP_HZ);
     else {
       if(phase < 2) {
-	beep(phase > 0 ? 300 : 500, 1e3/BEEP_HZ);
+	beepPrim(phase > 0 ? 300 : 500, 1e3/BEEP_HZ);
 	phase++;
       } else
 	phase = 0;
@@ -2896,7 +2905,7 @@ struct Task taskList[] = {
     HZ_TO_PERIOD(1) },
   { heartBeatTask,
     HZ_TO_PERIOD(HEARTBEAT_HZ) },
-  { loopTask,
+  { gaugeTask,
     HZ_TO_PERIOD(10) },
   { beepTask,
     HZ_TO_PERIOD(BEEP_HZ) },
@@ -3032,6 +3041,7 @@ void setup() {
   // Done
   
   consoleNoteLn_P(PSTR("Initialized"));
+  goodBeep(0.5);
   
   datagramTxStart(DG_INITIALIZED);
   datagramTxEnd();

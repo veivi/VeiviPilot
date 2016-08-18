@@ -39,12 +39,10 @@ bool inputValid(struct RxInputRecord *record);
 float inputValue(struct RxInputRecord *record);
 int8_t readSwitch(struct SwitchRecord *record);
 
-#define NULLZONE 0.05
+#define NULLZONE 0.075
 
 float applyNullZone(float value, bool *pilotInput);
 float applyNullZone(float value);
-
-// float decodePWM(float pulse);
 
 extern bool pciWarn;
 
