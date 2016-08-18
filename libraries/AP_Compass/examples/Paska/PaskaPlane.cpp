@@ -381,9 +381,9 @@ void delayMicros(int x)
 void beepPrim(int hz, long millis)
 {
   for(long i = 0; i < hz*millis/1000; i++) {
-    setPinState(&PIEZO.pin, 0);
-    delayMicros(1e6/hz/2);
     setPinState(&PIEZO.pin, 1);
+    delayMicros(1e6/hz/2);
+    setPinState(&PIEZO.pin, 0);
     delayMicros(1e6/hz/2);
   }
 }
@@ -1188,6 +1188,15 @@ void executeCommand(const char *buf)
       }
       consoleNote_P(PSTR("Current log stamp is "));
       consolePrintLn(nvState.logStamp);  
+      break;
+
+    case c_beep:
+      if(numParams > 0) {
+	if(numParams > 1)
+	  beepPrim(param[0], 1e3*param[1]);
+	else
+	  beepPrim(param[0], 1e3);
+      }
       break;
 
     case c_model:
@@ -2821,10 +2830,10 @@ void beepTask()
 
   if(beepDuration > 0) {
     if(beepGood)
-      beepPrim(400, 1e3/BEEP_HZ);
+      beepPrim(800, 1e3/BEEP_HZ);
     else {
       if(phase < 2) {
-	beepPrim(phase > 0 ? 300 : 500, 1e3/BEEP_HZ);
+	beepPrim(phase < 1 ? 1000 : 750, 1e3/BEEP_HZ);
 	phase++;
       } else
 	phase = 0;
@@ -2941,8 +2950,6 @@ void setup() {
   
   // initialise serial port
   
-  // serial_manager.init_console();
-
   cliSerial = hal.console;
 
   vpStatus.consoleLink = true;
@@ -2950,6 +2957,13 @@ void setup() {
   consoleNoteLn_P(PSTR("Project | Alpha"));   
   consoleNote_P(PSTR("Init Free RAM: "));
   consolePrintLn((unsigned long) hal.util->available_memory());
+
+  // PWM output
+
+  consoleNoteLn_P(PSTR("Initializing PWM output"));
+
+  pwmTimerInit(hwTimers, sizeof(hwTimers)/sizeof(struct HWTimer*));
+  pwmOutputInitList(pwmOutput, sizeof(pwmOutput)/sizeof(struct PWMOutput));
 
   // I2C
   
@@ -3004,13 +3018,6 @@ void setup() {
 
   consolePrintLn_P(PSTR("  done"));
   
-  // Servos
-
-  consoleNoteLn_P(PSTR("Initializing servos"));
-
-  pwmTimerInit(hwTimers, sizeof(hwTimers)/sizeof(struct HWTimer*));
-  pwmOutputInitList(pwmOutput, sizeof(pwmOutput)/sizeof(struct PWMOutput));
-
   // LED output
 
   configureOutput(&RED_LED);
@@ -3024,7 +3031,8 @@ void setup() {
   // Piezo element
   
   pwmDisable(&PIEZO);
-  setPinState(&PIEZO.pin, 1);
+  setPinState(&PIEZO.pin, 0);
+  configureOutput(&PIEZO.pin);
 
   // Alpha filter (sliding average over alphaWindow_c/seconds)
   

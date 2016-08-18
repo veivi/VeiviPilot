@@ -75,7 +75,8 @@ typedef enum {
   c_rtrim,
   c_servorate,
   c_calibrate,
-  c_takeoff
+  c_takeoff,
+  c_beep
 } token_t;
 
 typedef enum
