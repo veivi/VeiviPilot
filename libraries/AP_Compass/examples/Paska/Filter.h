@@ -52,7 +52,7 @@ class Damper {
   
   void reset(float v);
   void setTau(float tau);
-  void input(float v);
+  float input(float v);
   float output();
     
  private:

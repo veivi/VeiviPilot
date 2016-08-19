@@ -104,9 +104,10 @@ Damper::Damper(float t, float i)
   setTau(t);
 }
 
-void Damper::input(float v)
+float Damper::input(float v)
 {
   avg = mixValue(tau, avg, v);
+  return output();
 }
 
 void Damper::reset(float v)
