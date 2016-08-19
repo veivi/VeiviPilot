@@ -224,7 +224,7 @@ Damper ball(1.5*CONTROL_HZ), iasFilterSlow(3*CONTROL_HZ), iasFilter(2), accFilte
 AlphaBuffer pressureBuffer;
 RunningAvgFilter alphaFilter;
 uint32_t simTimeStamp;
-RateLimiter aileRateLimiter, flapRateLimiter, alphaRateLimiter;
+RateLimiter aileRateLimiter, flapRateLimiter, trimRateLimiter;
 float elevOutput, elevOutputFeedForward, aileOutput = 0, flapOutput = 0, gearOutput = 0, brakeOutput = 0, rudderOutput = 0;
 uint16_t iasEntropy, alphaEntropy, sensorHash = 0xFFFF;
 bool beepGood;
@@ -1404,6 +1404,19 @@ void receiverTask()
     vpMode.rxFailSafe = false;
   }
 
+  //
+  // Apply rx failsafe settings
+  //
+  
+  if(vpMode.rxFailSafe) {
+    vpFeature.stabilizePitch = vpFeature.stabilizeBank
+      = vpFeature.pusher = vpFeature.alphaHold = vpMode.bankLimiter = true;
+
+    elevTrim = elevFromAlpha(thresholdAlpha) - elevTrimSub;
+    trimRateLimiter.setRate(1.5/360);
+  } else
+    trimRateLimiter.setRate(1);
+      
   // Delay the elevator so we always detect the failsafe mode before
   // doing anything with the raw elevator
   
@@ -2124,13 +2137,7 @@ void configurationTask()
   // Failsafe mode interpretation
   //
 
-  if(vpMode.rxFailSafe) {
-    vpFeature.stabilizePitch = vpFeature.stabilizeBank
-      = vpFeature.pusher = vpFeature.alphaHold = vpMode.bankLimiter = true;
-
-    elevTrim = elevFromAlpha(thresholdAlpha) - elevTrimSub;
-    
-  } else if(vpMode.sensorFailSafe) {
+  if(vpMode.sensorFailSafe) {
     vpFeature.stabilizePitch = vpFeature.stabilizeBank
       = vpFeature.pitchHold = vpFeature.alphaHold = vpFeature.pusher
       = vpMode.bankLimiter = vpMode.wingLeveler = vpMode.takeOff
@@ -2165,7 +2172,6 @@ void configurationTask()
   
   aileRateLimiter.setRate(vpParam.servoRate/(90.0/2)/vpParam.aileDefl);
   flapRateLimiter.setRate(0.5);
-  alphaRateLimiter.setRate(1.5/360);
   
   // Then apply test modes
   
@@ -2349,7 +2355,7 @@ void gaugeTask()
 	consolePrintLn(cycleTimeMax*1e3);
 	break;
 	
-      case 10:
+      case 4:
 	consolePrint_P(PSTR(" roll = "));
 	consolePrint(rollAngle, 2);
 	consolePrint_P(PSTR(" pitch = "));
@@ -2362,7 +2368,7 @@ void gaugeTask()
 	consolePrint(ball.output(), 2);
 	break;
 
-      case 11:
+      case 5:
 	consolePrint_P(PSTR(" rollR = "));
 	consolePrint(rollRate*360, 1);
 	consolePrint_P(PSTR(" pitchR = "));
@@ -2371,7 +2377,7 @@ void gaugeTask()
 	consolePrint(yawRate*360, 1);
 	break;
 
-      case 40:
+      case 6:
         consolePrint_P(PSTR(" ppmFreq = "));
 	consolePrint(ppmFreq);
 	consolePrint_P(PSTR(" InputVec = ( "));
@@ -2382,7 +2388,7 @@ void gaugeTask()
 	consolePrint(")");
 	break;
 
-      case 5:
+      case 7:
 	consolePrint_P(PSTR(" aileStick = "));
 	consolePrint(aileStick);
 	consolePrint_P(PSTR(" elevStick = "));
@@ -2393,7 +2399,7 @@ void gaugeTask()
 	consolePrint(rudderStick);
 	break;
 
-      case 6:
+      case 8:
 	consolePrint_P(PSTR(" avg G = "));
 	consolePrint(accFilter.output());
 	consolePrint_P(PSTR(" acc = ("));
@@ -2405,7 +2411,7 @@ void gaugeTask()
 	consolePrint_P(PSTR(")"));
 	break;
 
-      case 20:
+      case 9:
 	consolePrint_P(PSTR(" hash = "));
 	
 	for(int i = 0; i < 16; i++) {
@@ -2603,14 +2609,16 @@ void controlTask()
   
   const float effMaxAlpha = mixValue(stickStrength, shakerAlpha, maxAlpha);
     
-  targetAlpha =
-    clamp(alphaFromElev(elevOutput), -vpParam.alphaMax, effMaxAlpha);
+  targetAlpha = trimRateLimiter.input
+    (clamp(alphaFromElev(elevOutput), -vpParam.alphaMax, effMaxAlpha),
+     controlCycle);
 
+/*
   if(vpMode.rxFailSafe)
-    targetAlpha = alphaRateLimiter.input(targetAlpha, controlCycle);
+    targetAlpha = trimRateLimiter.input(targetAlpha, controlCycle);
   else
-    alphaRateLimiter.reset(targetAlpha);
-
+    trimRateLimiter.reset(targetAlpha);
+*/
   if(vpFeature.alphaHold)
     targetPitchRate = levelTurnPitchRate(rollAngle, targetAlpha)
       + (targetAlpha - effAlpha)*autoAlphaP*maxPitchRate;
@@ -2769,11 +2777,8 @@ void actuatorTask()
 
 void trimTask()
 {
-  if(TRIMBUTTON.state()) {
-    //    consoleNote_P(PSTR("TRIM "));
-    //    consolePrintLn(elevStick);
-    elevTrim += clamp(elevStick*3/2/TRIM_HZ, -0.15/TRIM_HZ, 0.15/TRIM_HZ);
-  }
+  if(TRIMBUTTON.state())
+    elevTrim += clamp(elevStick/TRIM_HZ, -0.1/TRIM_HZ, 0.1/TRIM_HZ);
   
   const float trimMin = -0.20, trimMax = 0.80;
   

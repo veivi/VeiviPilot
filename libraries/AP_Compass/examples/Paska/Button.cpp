@@ -19,7 +19,7 @@ void Button :: reset()
 
 void Button :: input(float inputValue)
 {
-  bool inputState = fabsf(inputValue - activeValue) < 0.075;
+  inputState = fabsf(inputValue - activeValue) < 0.075;
 
   if(!inputState)
     inertiaState = false;
@@ -67,6 +67,11 @@ void Button :: input(float inputValue)
 }
 
 bool Button::state(void)
+{
+  return inputState && inertiaState;
+}  
+
+bool Button::lazy(void)
 {
   return stateLazy;
 }  

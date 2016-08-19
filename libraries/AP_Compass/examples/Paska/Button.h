@@ -12,12 +12,13 @@ public:
   bool doublePulse();
   bool depressed();
   bool state();
+  bool lazy();
 
 private:
   float activeValue;
-  bool filterOutput, statePrev, stateLazy;
+  bool statePrev, stateLazy;
+  bool pulseArmed, inputState, inertiaState;
   uint32_t transition;
-  bool pulseArmed, inertiaState;
   uint8_t count;
   bool pulseDouble, pulseSingle, buttonPress;
 };
