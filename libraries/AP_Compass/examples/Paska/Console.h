@@ -3,7 +3,10 @@
 #include <AP_ProgMem/AP_ProgMem.h>
 
 void consoleFlush();
+void consoleCR();
+void consoleNL();
 void consolePrint(const char c);
+void consoleTab(int i);
 void consoleNote_P(const prog_char_t *s);
 void consoleNote(const char *s);
 void consoleNoteLn_P(const prog_char_t *s);

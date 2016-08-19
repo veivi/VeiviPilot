@@ -11,12 +11,11 @@ extern "C" {
 
 extern const AP_HAL::HAL& hal;
 
-static void newline(void);
-
 #define BUF_SIZE (1<<6)
 
 static uint8_t outputBuf[BUF_SIZE];
 static uint8_t bufPtr;
+static int column;
 
 void consoleFlush()
 {
@@ -38,12 +37,27 @@ void consoleOut(const uint8_t c)
     consoleFlush();
 
   outputBuf[bufPtr++] = c;
+  column++;
 }
 
-static void newline(void)
+void consoleNL(void)
 {
-  consolePrint("\n");
+  consoleOut('\n');
   consoleFlush();
+  column = 0;
+}
+
+void consoleCR(void)
+{
+  consoleOut('\r');
+  consoleFlush();
+  column = 0;
+}
+
+void consoleTab(int i)
+{
+  while(column < i)
+    consoleOut(' ');
 }
 
 void consoleNote(const char *s)
@@ -55,7 +69,7 @@ void consoleNote(const char *s)
 void consoleNoteLn(const char *s)
 {
   consoleNote(s);
-  newline();
+  consoleNL();
 }
 
 void consoleNote_P(const prog_char_t *s)
@@ -67,7 +81,7 @@ void consoleNote_P(const prog_char_t *s)
 void consoleNoteLn_P(const prog_char_t *s)
 {
   consoleNote_P(s);
-  newline();
+  consoleNL();
 }
 
 void consolevNotef(const char *s, va_list argp)
@@ -93,7 +107,7 @@ void consoleNotefLn(const char *s, ...)
   consolevNotef(s, argp);
   va_end(argp);
   
-  newline();
+  consoleNL();
 }
 
 void consolePrintf(const char *s, ...)
@@ -113,7 +127,7 @@ void consolePrintfLn(const char *s, ...)
   consolevPrintf(s, argp);
   va_end(argp);
 
-  newline();
+  consoleNL();
 }
 
 void consolevPrintf(const char *s, va_list argp)
@@ -240,66 +254,66 @@ void consolePrint(uint8_t v)
 void consolePrintLn(const char *s)
 {
   consolePrint(s);
-  newline();
+  consoleNL();
 }
 
 void consolePrintLn_P(const prog_char_t *s)
 {
   consolePrint_P(s);
-  newline();
+  consoleNL();
 }
 
 void consolePrintLn(float v)
 {
   consolePrint(v);
-  newline();
+  consoleNL();
 }
 
 void consolePrintLn(float v, int p)
 {
   consolePrint(v, p);
-  newline();
+  consoleNL();
 }
 
 void consolePrintLn(double v)
 {
   consolePrint(v);
-  newline();
+  consoleNL();
 }
 
 void consolePrintLn(double v, int p)
 {
   consolePrint(v, p);
-  newline();
+  consoleNL();
 }
 
 void consolePrintLn(int v)
 {
   consolePrint(v);
-  newline();
+  consoleNL();
 }
 
 void consolePrintLn(unsigned int v)
 {
   consolePrint(v);
-  newline();
+  consoleNL();
 }
 
 void consolePrintLn(uint8_t v)
 {
   consolePrint(v);
-  newline();
+  consoleNL();
 }
 
 void consolePrintLn(long v)
 {
   consolePrint(v);
-  newline();
+  consoleNL();
 }
 
 void consolePrintLn(unsigned long v)
 {
   consolePrint(v);
-  newline();
+  consoleNL();
 }
 

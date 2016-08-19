@@ -982,6 +982,10 @@ void executeCommand(const char *buf)
     gaugeCount = 0;
     calibStop(nvState.rxMin, nvState.rxCenter, nvState.rxMax);
     return;
+  } else if(atoi(buf) > 0) {
+    gaugeCount = 1;
+    gaugeVariable[0] = atoi(buf);
+    return;
   }
   
   int index = 0, prevIndex = 0, numParams = 0, tokenLen = bufLen;
@@ -1398,6 +1402,7 @@ void receiverTask()
       consoleNoteLn_P(PSTR("Receiver failsafe mode ENABLED"));
       vpMode.rxFailSafe = true;
       vpMode.alphaFailSafe = vpMode.sensorFailSafe = vpMode.takeOff = false;
+      elevTrim = elevFromAlpha(thresholdAlpha) - elevTrimSub;
     }
   } else if(vpMode.rxFailSafe) {
     consoleNoteLn_P(PSTR("Receiver failsafe mode DISABLED"));
@@ -1412,7 +1417,6 @@ void receiverTask()
     vpFeature.stabilizePitch = vpFeature.stabilizeBank
       = vpFeature.pusher = vpFeature.alphaHold = vpMode.bankLimiter = true;
 
-    elevTrim = elevFromAlpha(thresholdAlpha) - elevTrimSub;
     trimRateLimiter.setRate(1.5/360);
   } else
     trimRateLimiter.setRate(1);
@@ -2319,19 +2323,22 @@ void configurationTask()
 void gaugeTask()
 {
   if(gaugeCount > 0) {
-    uint16_t tmp = sensorHash;
+    uint16_t tmp = 0;
 	
     for(int g = 0; g < gaugeCount; g++) {
       switch(gaugeVariable[g]) {
       case 1:
 	consolePrint_P(PSTR(" alpha = "));
-	consolePrint(alpha*360);
-	consolePrint_P(PSTR(" IAS = "));
-	consolePrint(iAS);
-	consolePrint_P(PSTR(" IAS(filt) = "));
-	consolePrint(iasFilter.output());
-	consolePrint_P(PSTR(" IAS(slow) = "));
-	consolePrint(iasFilterSlow.output());
+	consolePrint(alpha*360, 1);
+	consoleTab(15);
+	consolePrint_P(PSTR(" KIAS = "));
+	consolePrint((int) (60*60*iAS/1852));
+	consoleTab(30);
+	consolePrint_P(PSTR(" head = "));
+	consolePrint((int) heading);
+	consoleTab(45);
+	consolePrint_P(PSTR(" alt = "));
+	consolePrint((int) (100*altitude/12/25.4)*10);
 	break;
 
       case 2:
@@ -2347,12 +2354,12 @@ void gaugeTask()
 	break;
 	
       case 3:
-	consoleNote_P(PSTR("Cycle time (min, mean, max) = "));
+	consolePrint_P(PSTR(" Cycle time (min, mean, max) = "));
 	consolePrint(cycleTimeMin*1e3);
 	consolePrint_P(PSTR(", "));
 	consolePrint(cycleTimeAverage.output()*1e3);
 	consolePrint_P(PSTR(", "));
-	consolePrintLn(cycleTimeMax*1e3);
+	consolePrint(cycleTimeMax*1e3);
 	break;
 	
       case 4:
@@ -2412,8 +2419,14 @@ void gaugeTask()
 	break;
 
       case 9:
+	consoleNote_P(PSTR(" entropy(alpha,ias) = "));
+	consolePrint(alphaEntropyAcc.output());
+	consolePrint_P(PSTR(", "));
+	consolePrintLn(iasEntropyAcc.output());
 	consolePrint_P(PSTR(" hash = "));
 	
+	tmp = sensorHash;
+
 	for(int i = 0; i < 16; i++) {
 	  consolePrint((tmp & 1) ? "+" : " ");
 	  tmp = tmp >> 1;
@@ -2422,8 +2435,8 @@ void gaugeTask()
       }
     }
 
-    consolePrint_P(PSTR("      \r"));
-    consoleFlush();
+    consolePrint_P(PSTR("      "));
+    consoleCR();
   }
 }
 
@@ -2778,7 +2791,7 @@ void actuatorTask()
 void trimTask()
 {
   if(TRIMBUTTON.state())
-    elevTrim += clamp(elevStick/TRIM_HZ, -0.1/TRIM_HZ, 0.1/TRIM_HZ);
+    elevTrim += clamp(elevStick*2/TRIM_HZ, -0.1/TRIM_HZ, 0.1/TRIM_HZ);
   
   const float trimMin = -0.20, trimMax = 0.80;
   
