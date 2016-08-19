@@ -949,6 +949,10 @@ bool tocTestStatus(bool verbose)
   return tocTestInvoke(false, true, verbose);
 }
 
+//
+// Command interpreter
+//
+
 int indexOf(const char *s, const char c, int index)
 {
   while(s[index] != '\0') {
@@ -1320,10 +1324,9 @@ void executeCommand(const char *buf)
   }
 }
 
-float scaleByIAS(float k, float p)
-{
-  return k * powf(fmaxf(iasFilter.output(), vpParam.iasMin), p);
-}
+//
+// Periodic tasks
+//
 
 void cacheTask()
 {
@@ -1590,6 +1593,10 @@ void measurementTask()
   prevMeasurement = currentTime;
 }
 
+//
+// Auto test stuff
+//
+
 const float testGainStep_c = 0.05;
 
 bool increasing, autoTestCompleted;
@@ -1786,37 +1793,32 @@ void analyzerTask()
     prevCrossing = currentTime;
 }
 
-float quantize(float param)
+//
+//
+//
+
+const int paramSteps = 20;
+
+static float testGainExpoGeneric(float range, float param)
 {
-  static int state;
-  const int steps = 20;
-
-  if((int) ((param-1.0/steps/2)*steps) > state)
-    state = (param-1.0/steps/2)*steps;
-  else if((int) ((param+1.0/steps/2)*steps) < state)
-    state = (param+1.0/steps/2)*steps;
-
-  return (float) state / steps;
-}
-
-float testGainExpoFunction(float range, float param)
-{
-  return exp(log(4)*(2*quantize(param)-1))*range;
+  static float state;
+  return exp(log(4)*(2*quantize(param, &state, paramSteps)-1))*range;
 }
 
 float testGainExpo(float range, float param)
 {
-  return testGainExpoFunction(range, param);
+  return testGainExpoGeneric(range, param);
 }
 
 float testGainExpoReversed(float range, float param)
 {
-  return testGainExpoFunction(range, 1 - param);
+  return testGainExpoGeneric(range, 1 - param);
 }
 
 float testGainLinear(float start, float stop, float param)
 {
-  float q = quantize(param);
+  static float state;
+  float q = quantize(param, &state, paramSteps);
   return start + q*(stop - start);
 }
 
@@ -1839,6 +1841,11 @@ float s_Ku_ref, i_Ku_ref;
 
 const float minAlpha = (-2.0/360);
 const float origoAlpha = (-5.0/360);
+
+static float scaleByIAS(float k, float p)
+{
+  return k * powf(fmaxf(iasFilter.output(), vpParam.iasMin), p);
+}
 
 void configurationTask()
 {

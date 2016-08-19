@@ -54,6 +54,16 @@ float randomNum(float small, float large)
   return small + (large-small)*(float) ((rand()>>3) & 0xFFF) / 0x1000;
 }
 
+float quantize(float value, float *state, int numSteps)
+{
+  if((int) ((value-1.0/numSteps/2)*numSteps) > *state)
+    *state = (value-1.0/numSteps/2)*numSteps;
+  else if((int) ((value+1.0/numSteps/2)*numSteps) < *state)
+    *state = (value+1.0/numSteps/2)*numSteps;
+
+  return (float) *state / numSteps;
+}
+
 void Median3Filter::input(float v)
 {
   memory[ptr++] = v;
