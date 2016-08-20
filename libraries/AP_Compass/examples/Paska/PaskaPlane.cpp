@@ -1365,7 +1365,7 @@ void airspeedTask()
   }
 }
 
-DelayLine elevatorDelay;
+DelayLine elevatorDelay, aileronDelay;
 
 void receiverTask()
 {
@@ -1414,17 +1414,19 @@ void receiverTask()
   
   if(vpMode.rxFailSafe) {
     vpFeature.stabilizePitch = vpFeature.stabilizeBank
-      = vpFeature.pusher = vpFeature.alphaHold = vpMode.bankLimiter = true;
+      = vpFeature.alphaHold = vpMode.bankLimiter = true;
+    vpFeature.pusher = false;
 
     trimRateLimiter.setRate(1.5/360);
     elevTrim = elevFromAlpha(thresholdAlpha) - elevTrimSub;
   } else
     trimRateLimiter.setRate(1);
       
-  // Delay the elevator so we always detect the failsafe mode before
-  // doing anything with the raw elevator
+  // Delay the controls just to make sure we always detect the failsafe
+  // mode before doing anything abrupt
   
   elevStick = elevatorDelay.input(elevStick);
+  aileStick = aileronDelay.input(aileStick);
   
   //
   //
@@ -1498,9 +1500,9 @@ void sensorTaskFast()
   if(vpStatus.simulatorLink) {
     alpha = sensorData.alpha/360;
     iAS = sensorData.ias*KNOT;
-    rollRate = sensorData.rrate / 360;
-    pitchRate = sensorData.prate / 360;
-    yawRate = sensorData.yrate / 360;
+    rollRate = sensorData.rrate*RADIAN / 360;
+    pitchRate = sensorData.prate*RADIAN / 360;
+    yawRate = sensorData.yrate*RADIAN / 360;
     rollAngle = sensorData.roll;
     pitchAngle = sensorData.pitch;
     heading = sensorData.heading;
@@ -2135,7 +2137,8 @@ void configurationTask()
   if(!vpMode.rxFailSafe) {
     // Default
     
-    vpFeature.stabilizeBank = vpFeature.pusher = !vpMode.takeOff;
+    vpFeature.stabilizeBank = !vpMode.takeOff;
+    vpFeature.pusher = !vpMode.takeOff && !vpMode.slowFlight;
     vpFeature.stabilizePitch = vpFeature.alphaHold
       = vpMode.slowFlight && !vpMode.takeOff;
     vpFeature.pitchHold = vpFeature.autoBall = false;
@@ -2597,13 +2600,32 @@ void gpsTask()
   */
 }
 
-float levelTurnPitchRate(float bank, float target)
+float expectedPitchRate(float target)
 {
   const float alphaCL0 = vpParam.alphaZeroLift,
     ratio = (target - alphaCL0) / (vpParam.alphaMax - alphaCL0);
   
-  return square(square(sin(bank/RADIAN)))
+  //  return square(square(sin(bank/RADIAN)))
+  //    *ratio*iasFilter.output()*G/square(vpParam.iasMin)*RADIAN/360;
+
+  return G/iAS*(ratio*square(iAS/vpParam.iasMin)
+  		- cos(rollAngle/RADIAN)*cos(pitchAngle/RADIAN))*RADIAN/360;
+}
+
+float levelTurnPitchRate(float target)
+{
+  const float alphaCL0 = vpParam.alphaZeroLift,
+    ratio = (target - alphaCL0) / (vpParam.alphaMax - alphaCL0);
+  
+  return square(sin(rollAngle/RADIAN))
     *ratio*iasFilter.output()*G/square(vpParam.iasMin)*RADIAN/360;
+
+  //  return G/iAS*(ratio*square(iAS/vpParam.iasMin) - cos(bank/RADIAN)*cos(pitch/RADIAN))*RADIAN/360;
+  
+  //  return expectedPitchRate(target);
+
+  //  return ratio*iasFilter.output()*G/square(vpParam.iasMin)
+  //    *(1 - cos(rollAngle/RADIAN))*RADIAN/360;
 }
 
 void controlTask()
@@ -2637,14 +2659,8 @@ void controlTask()
     (clamp(alphaFromElev(elevOutput), -vpParam.alphaMax, effMaxAlpha),
      controlCycle);
 
-/*
-  if(vpMode.rxFailSafe)
-    targetAlpha = trimRateLimiter.input(targetAlpha, controlCycle);
-  else
-    trimRateLimiter.reset(targetAlpha);
-*/
   if(vpFeature.alphaHold)
-    targetPitchRate = levelTurnPitchRate(rollAngle, targetAlpha)
+    targetPitchRate = levelTurnPitchRate(targetAlpha)
       + (targetAlpha - effAlpha)*autoAlphaP*maxPitchRate;
   
   else if(vpFeature.pitchHold)
@@ -2676,11 +2692,16 @@ void controlTask()
   // Pusher
 
   if(vpFeature.pusher) {
-    pushCtrl.input(levelTurnPitchRate(rollAngle, effMaxAlpha)
-		   + (effMaxAlpha - effAlpha)*autoAlphaP*maxPitchRate - pitchRate,
-		   controlCycle);
+    float pusherTarget = expectedPitchRate(effMaxAlpha)
+      + (effMaxAlpha - effAlpha)*autoAlphaP*maxPitchRate;
 
-    elevOutput = fminf(elevOutput, pushCtrl.output());
+    pushCtrl.input(pusherTarget - pitchRate, controlCycle);
+
+    if(pushCtrl.output() < elevOutput)
+      elevOutput = pushCtrl.output();
+    else
+      pushCtrl.reset(elevOutput, pusherTarget - pitchRate);
+    //    elevOutput = fminf(elevOutput, pushCtrl.output());
   } else
     pushCtrl.reset(elevOutput, 0);
   
@@ -3083,6 +3104,7 @@ void setup() {
   // Elevator delay
 
   elevatorDelay.setDelay(1);
+  aileronDelay.setDelay(1);
   
   // Misc filters
 
