@@ -1500,7 +1500,7 @@ void sensorTaskFast()
   if(vpStatus.simulatorLink) {
     alpha = sensorData.alpha/360;
     iAS = sensorData.ias*KNOT;
-    rollRate = sensorData.rrate / 360;
+    rollRate = sensorData.rrate*RADIAN / 360;
     pitchRate = sensorData.prate*RADIAN / 360;
     yawRate = sensorData.yrate*RADIAN / 360;
     bankAngle = sensorData.roll;
@@ -2171,8 +2171,8 @@ void configurationTask()
   
   aileCtrl.setZieglerNicholsPID(s_Ku*scale, vpParam.s_Tu);
   elevCtrl.setZieglerNicholsPID(i_Ku*scale, vpParam.i_Tu);
-  pushCtrl.setZieglerNicholsPI(p_Ku*scale, vpParam.p_Tu);
-  pushCtrl.limit(0.5, 1);
+  pushCtrl.setZieglerNicholsPID(p_Ku*scale, vpParam.p_Tu);
+  pushCtrl.limit(0.3, 1);
 
   autoAlphaP = vpParam.o_P;
   maxAlpha = vpParam.alphaMax;
