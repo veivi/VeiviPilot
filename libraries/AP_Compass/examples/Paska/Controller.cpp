@@ -1,5 +1,10 @@
 #include "Controller.h"
 
+Controller::Controller() {
+  rangeMin = -1;
+  rangeMax = 1;
+}
+
 void Controller::setPID(float kP, float kI, float kD) {
     Kp = kP; 
     Ki = kI;
@@ -75,6 +80,11 @@ void Controller::reset(float value, float err) {
   I = value - Kp*err;
 }
 
+void Controller::limit(float a, float b) {
+  rangeMin = a;
+  rangeMax = b;
+}
+
 void Controller::input(float err, float d) {
   if(d < 1.0e-3) {
     warn = true;
@@ -91,7 +101,7 @@ void Controller::input(float err, float d) {
   if(Ki < 0.02)
     I = 0;
   else
-    I = clamp(I + Ki*err*delta, -1.0 - Kp*err, 1.0 - Kp*err);
+    I = clamp(I + Ki*err*delta, rangeMin - Kp*err, rangeMax - Kp*err);
 }
 
 float Controller::output(void) {
@@ -99,5 +109,5 @@ float Controller::output(void) {
   if(Kd != 0.0)
     // diffTerm = clamp(Kd*errorFilter.output()/delta, -diffLimit, diffLimit);
     diffTerm = clamp(Kd*D/delta, -diffLimit, diffLimit);
-  return clamp(Kp*prevErr + I + diffTerm, -1, 1);
+  return clamp(Kp*prevErr + I + diffTerm, rangeMin, rangeMax);
 }

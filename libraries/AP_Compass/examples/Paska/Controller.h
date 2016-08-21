@@ -4,6 +4,7 @@
 
 class Controller {
 public:
+  Controller();
   void setPID(float P, float I, float D);
   float getP(void);
   float getI(void);
@@ -15,12 +16,14 @@ public:
   void getZieglerNicholsPID(float *Ku, float *Tu);
   void reset(float value, float err);
   void input(float err, float d);
+  void limit(float, float);
 
   float output(void);
   
   bool warn;
 private:
   float I, D, delta, prevErr, Kp, Ki, Kd;
+  float rangeMin, rangeMax;
   Median3Filter errorFilter;
 };
 

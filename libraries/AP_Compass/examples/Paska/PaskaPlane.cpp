@@ -1855,7 +1855,7 @@ float testGainLinear(float start, float stop)
   return testGainLinear(start, stop, parameter);
 }
 
-float s_Ku_ref, i_Ku_ref;
+float s_Ku_ref, i_Ku_ref, p_Ku_ref;
 
 const float minAlpha = (-2.0/360);
 const float origoAlpha = (-5.0/360);
@@ -2167,12 +2167,12 @@ void configurationTask()
 
   float s_Ku = scaleByIAS(vpParam.s_Ku_C, stabilityAileExp1_c);
   float i_Ku = scaleByIAS(vpParam.i_Ku_C, stabilityElevExp1_c);
+  float p_Ku = scaleByIAS(vpParam.p_Ku, stabilityElevExp1_c);
   
   aileCtrl.setZieglerNicholsPID(s_Ku*scale, vpParam.s_Tu);
   elevCtrl.setZieglerNicholsPID(i_Ku*scale, vpParam.i_Tu);
-  pushCtrl.setZieglerNicholsPID(i_Ku*scale*3, vpParam.i_Tu);
-  
-  rudderCtrl.setZieglerNicholsPI(vpParam.r_Ku*scale, vpParam.r_Tu);
+  pushCtrl.setZieglerNicholsPI(p_Ku*scale, vpParam.p_Tu);
+  pushCtrl.limit(0.5, 1);
 
   autoAlphaP = vpParam.o_P;
   maxAlpha = vpParam.alphaMax;
@@ -2261,7 +2261,7 @@ void configurationTask()
     case 5:
       // Pusher gain
          
-      pushCtrl.setPID(testGain = testGainExpo(i_Ku_ref*3), 0, 0);
+      pushCtrl.setPID(testGain = testGainExpo(p_Ku_ref), 0, 0);
       break;
       
     case 6:
@@ -2273,8 +2273,8 @@ void configurationTask()
       rudderMix = 0;
       aileCtrl.
 	setZieglerNicholsPID(s_Ku*testGain, vpParam.s_Tu);
-      rudderCtrl.
-	setZieglerNicholsPI(vpParam.r_Ku*testGain, vpParam.r_Tu);
+      //      rudderCtrl.
+      //	setZieglerNicholsPI(vpParam.r_Ku*testGain, vpParam.r_Tu);
       break;
 
     case 7:
@@ -2283,15 +2283,15 @@ void configurationTask()
       vpFeature.stabilizeBank = vpMode.bankLimiter = vpMode.wingLeveler = true;
       vpFeature.autoBall = true;
       rudderMix = 0;
-      rudderCtrl.setPID(testGain = testGainExpo(vpParam.r_Ku), 0, 0);
+      //      rudderCtrl.setPID(testGain = testGainExpo(vpParam.r_Ku), 0, 0);
       break;
             
     case 8:
       // Auto ball empirical gain, PI
        
       vpFeature.autoBall = true;
-      rudderCtrl.setZieglerNicholsPI(testGain = testGainExpo(vpParam.r_Ku),
-				     vpParam.r_Tu);
+      //      rudderCtrl.setZieglerNicholsPI(testGain = testGainExpo(vpParam.r_Ku),
+      //				     vpParam.r_Tu);
       break;
        
     case 9:
@@ -2312,6 +2312,7 @@ void configurationTask()
     
     s_Ku_ref = s_Ku;
     i_Ku_ref = i_Ku;
+    p_Ku_ref = p_Ku;
   }
 
   //
@@ -2692,13 +2693,11 @@ void controlTask()
 
   // Pusher
 
-  if(vpFeature.pusher && (effAlpha > effMaxAlpha
-			  || pushCtrl.output() < elevOutput)) {
-    pushCtrl.input(effMaxAlpha - effAlpha, controlCycle);
-    
+  if(vpFeature.pusher) {
+    pushCtrl.input((effMaxAlpha - effAlpha)/effMaxAlpha, controlCycle);
     elevOutput = fminf(elevOutput, pushCtrl.output());
   } else
-    pushCtrl.reset(elevOutput, effMaxAlpha - effAlpha);
+    pushCtrl.reset(elevOutput, (effMaxAlpha - effAlpha)/effMaxAlpha);
   
   elevOutput = clamp(elevOutput, -1, 1);
   

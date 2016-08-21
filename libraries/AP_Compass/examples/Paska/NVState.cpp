@@ -33,7 +33,8 @@ const struct ParamRecord paramDefaults = {
   .alphaZeroLift = -2.0/360, .alphaMax = 12.0/360,
   .i_Ku_C = 100, .i_Tu = 0.25, .o_P = 0.3, 
   .s_Ku_C = 400, .s_Tu = 0.25, 
-  .r_Mix = 0.1, .r_Ku = 0.1, .r_Tu = 0.25,
+  .r_Mix = 0.1,
+  .p_Ku = 15, .p_Tu = 2.0,
   .ff_A = 0.0, .ff_B = 0.0,
   .wl_Limit = 0.0,
   .iasMin = 12,
@@ -143,7 +144,7 @@ void printParams()
   
   consoleNote_P(PSTR("  AS5048B ref = "));
   consolePrintLn(vpParam.alphaRef);
-  consoleNoteLn_P(PSTR("  Autostick/pusher"));
+  consoleNoteLn_P(PSTR("  Alpha Hold"));
   consoleNote_P(PSTR("    Inner Ku*IAS^1.5 = "));
   consolePrint(vpParam.i_Ku_C, 4);
   consolePrint_P(PSTR(" Tu = "));
@@ -160,6 +161,11 @@ void printParams()
   consolePrint_P(PSTR("..."));
   consolePrint(alphaFromElev(1.0)*360);
   consolePrintLn_P(PSTR(")"));
+  consoleNoteLn_P(PSTR("  Pusher"));
+  consoleNote_P(PSTR("    Ku = "));
+  consolePrint(vpParam.p_Ku, 4);
+  consolePrint_P(PSTR(" Tu = "));
+  consolePrintLn(vpParam.p_Tu, 4);
   consoleNoteLn_P(PSTR("  Stabilizer"));
   consoleNote_P(PSTR("    Ku*IAS^1.5 = "));
   consolePrint(vpParam.s_Ku_C, 4);
@@ -167,11 +173,6 @@ void printParams()
   consolePrintLn(vpParam.s_Tu, 4);
   consoleNote_P(PSTR("    Weak leveling limit angle = "));
   consolePrintLn(vpParam.wl_Limit, 4);
-  consoleNoteLn_P(PSTR("  Auto rudder"));
-  consoleNote_P(PSTR("    Ku = "));
-  consolePrint(vpParam.r_Ku, 4);
-  consolePrint_P(PSTR(" Tu = "));
-  consolePrintLn(vpParam.r_Tu, 4);
   consoleNote_P(PSTR("  Alpha (max) = "));
   consolePrint(vpParam.alphaMax*360);
   consolePrint_P(PSTR(" (CL0) = "));

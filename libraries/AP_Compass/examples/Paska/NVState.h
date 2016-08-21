@@ -23,7 +23,8 @@ struct ParamRecord {
   float alphaZeroLift, alphaMax;
   float i_Ku_C, i_Tu, o_P;
   float s_Ku_C, s_Tu;
-  float r_Mix, r_Ku, r_Tu;
+  float r_Mix;
+  float p_Ku, p_Tu;
   float ff_A, ff_B;
   float wl_Limit;
   float iasMin;
