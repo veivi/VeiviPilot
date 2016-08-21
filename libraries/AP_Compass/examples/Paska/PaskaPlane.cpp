@@ -217,7 +217,7 @@ uint32_t controlCycleEnded;
 float elevTrim, effTrim, elevTrimSub, targetAlpha;
 Controller elevCtrl, aileCtrl, pushCtrl, rudderCtrl;
 float autoAlphaP, maxAlpha, shakerAlpha, thresholdAlpha, rudderMix;
-float accX, accY, accZ, accTotal, altitude,  heading, rollAngle, pitchAngle, rollRate, pitchRate, targetPitchRate, yawRate, levelBank;
+float accX, accY, accZ, accTotal, altitude,  heading, bankAngle, pitchAngle, rollRate, pitchRate, targetPitchRate, yawRate, levelBank;
 float parameter;  
 NewI2C I2c = NewI2C();
 Damper ball(1.5*CONTROL_HZ), iasFilterSlow(3*CONTROL_HZ), iasFilter(2), accAvg(2*CONTROL_HZ), iasEntropyAcc(CONFIG_HZ), alphaEntropyAcc(CONFIG_HZ);
@@ -466,7 +466,7 @@ void logAttitude(void)
   logGeneric(lc_accx, accX);
   logGeneric(lc_accy, accY);
   logGeneric(lc_accz, accZ);
-  logGeneric(lc_roll, rollAngle);
+  logGeneric(lc_roll, bankAngle);
   logGeneric(lc_rollrate, rollRate*360);
   logGeneric(lc_pitch, pitchAngle);
   logGeneric(lc_pitchrate, pitchRate*360);
@@ -774,7 +774,7 @@ bool toc_test_pitot_block(bool reset)
 
 bool toc_test_attitude(bool reset)
 {
-  return fabsf(pitchAngle) < 10.0 && fabsf(rollAngle) < 5.0;
+  return fabsf(pitchAngle) < 10.0 && fabsf(bankAngle) < 5.0;
 }
 
 bool toc_test_turn(bool reset)
@@ -1476,7 +1476,7 @@ void sensorTaskFast()
   pitchRate = gyro.y * RADIAN / 360;
   yawRate = gyro.z * RADIAN / 360;
 
-  rollAngle = ahrs.roll * RADIAN;
+  bankAngle = ahrs.roll * RADIAN;
   pitchAngle = ahrs.pitch * RADIAN;
   heading = ahrs.yaw * RADIAN;
 
@@ -1500,10 +1500,10 @@ void sensorTaskFast()
   if(vpStatus.simulatorLink) {
     alpha = sensorData.alpha/360;
     iAS = sensorData.ias*KNOT;
-    rollRate = sensorData.rrate*RADIAN / 360;
+    rollRate = sensorData.rrate / 360;
     pitchRate = sensorData.prate*RADIAN / 360;
     yawRate = sensorData.yrate*RADIAN / 360;
-    rollAngle = sensorData.roll;
+    bankAngle = sensorData.roll;
     pitchAngle = sensorData.pitch;
     heading = sensorData.heading;
     accX = simulatorAccX.input(sensorData.accx*FOOT);
@@ -2354,15 +2354,17 @@ void gaugeTask()
 	break;
 
       case 2:
-	consolePrint_P(PSTR(" trim%(eff) = "));
-	consolePrint(elevTrim*100);
-	consolePrint("(");
-	consolePrint(effTrim*100);
-	consolePrint(")");
-	consolePrint_P(PSTR(" target = "));
+	consolePrint_P(PSTR(" alpha(target) = "));
+	consolePrint(alpha*360);
+	consolePrint_P(PSTR(" ("));
 	consolePrint(targetAlpha*360);
-	consolePrint_P(PSTR(" targetPR = "));
+	consolePrint_P(PSTR(")"));
+	consoleTab(20);
+	consolePrint_P(PSTR(" pitchRate(target) = "));
+	consolePrint(pitchRate*360, 1);
+	consolePrint_P(PSTR(" ("));
 	consolePrint(targetPitchRate*360);
+	consolePrintLn_P(PSTR(")"));
 	break;
 	
       case 3:
@@ -2375,8 +2377,8 @@ void gaugeTask()
 	break;
 	
       case 4:
-	consolePrint_P(PSTR(" roll = "));
-	consolePrint(rollAngle, 2);
+	consolePrint_P(PSTR(" bank = "));
+	consolePrint(bankAngle, 2);
 	consolePrint_P(PSTR(" pitch = "));
 	consolePrint(pitchAngle, 2);
 	consolePrint_P(PSTR(" heading = "));
@@ -2388,11 +2390,11 @@ void gaugeTask()
 	break;
 
       case 5:
-	consolePrint_P(PSTR(" rollR = "));
+	consolePrint_P(PSTR(" rollRate = "));
 	consolePrint(rollRate*360, 1);
-	consolePrint_P(PSTR(" pitchR = "));
+	consolePrint_P(PSTR(" pitchRate = "));
 	consolePrint(pitchRate*360, 1);
-	consolePrint_P(PSTR(" yawR = "));
+	consolePrint_P(PSTR(" yawRate = "));
 	consolePrint(yawRate*360, 1);
 	break;
 
@@ -2600,32 +2602,22 @@ void gpsTask()
   */
 }
 
-float expectedPitchRate(float target)
+float nominalPitchRate(float bank, float pitch, float target)
 {
   const float alphaCL0 = vpParam.alphaZeroLift,
     ratio = (target - alphaCL0) / (vpParam.alphaMax - alphaCL0);
   
-  //  return square(square(sin(bank/RADIAN)))
-  //    *ratio*iasFilter.output()*G/square(vpParam.iasMin)*RADIAN/360;
-
   return G/iAS*(ratio*square(iAS/vpParam.iasMin)
-  		- cos(rollAngle/RADIAN)*cos(pitchAngle/RADIAN))*RADIAN/360;
+  		- cos(bank/RADIAN))*RADIAN/360;
 }
 
-float levelTurnPitchRate(float target)
+float nominalPitchRate(float bank, float target)
 {
   const float alphaCL0 = vpParam.alphaZeroLift,
     ratio = (target - alphaCL0) / (vpParam.alphaMax - alphaCL0);
   
-  return square(sin(rollAngle/RADIAN))
+  return square(sin(bank/RADIAN))
     *ratio*iasFilter.output()*G/square(vpParam.iasMin)*RADIAN/360;
-
-  //  return G/iAS*(ratio*square(iAS/vpParam.iasMin) - cos(bank/RADIAN)*cos(pitch/RADIAN))*RADIAN/360;
-  
-  //  return expectedPitchRate(target);
-
-  //  return ratio*iasFilter.output()*G/square(vpParam.iasMin)
-  //    *(1 - cos(rollAngle/RADIAN))*RADIAN/360;
 }
 
 void controlTask()
@@ -2660,7 +2652,7 @@ void controlTask()
      controlCycle);
 
   if(vpFeature.alphaHold)
-    targetPitchRate = levelTurnPitchRate(targetAlpha)
+    targetPitchRate = nominalPitchRate(bankAngle, targetAlpha)
       + (targetAlpha - effAlpha)*autoAlphaP*maxPitchRate;
   
   else if(vpFeature.pitchHold)
@@ -2692,15 +2684,15 @@ void controlTask()
   // Pusher
 
   if(vpFeature.pusher) {
-    float pusherTarget = expectedPitchRate(effMaxAlpha)
+    targetPitchRate = nominalPitchRate(bankAngle, pitchAngle, effMaxAlpha)
       + (effMaxAlpha - effAlpha)*autoAlphaP*maxPitchRate;
 
-    pushCtrl.input(pusherTarget - pitchRate, controlCycle);
+    pushCtrl.input(targetPitchRate - pitchRate, controlCycle);
 
     if(pushCtrl.output() < elevOutput)
       elevOutput = pushCtrl.output();
     else
-      pushCtrl.reset(elevOutput, pusherTarget - pitchRate);
+      pushCtrl.reset(elevOutput, targetPitchRate - pitchRate);
     //    elevOutput = fminf(elevOutput, pushCtrl.output());
   } else
     pushCtrl.reset(elevOutput, 0);
@@ -2724,7 +2716,7 @@ void controlTask()
   if(!vpFeature.stabilizeBank) {
 
     if(vpMode.wingLeveler)
-      aileOutput = clamp(aileOutput - rollAngle/60, -1, 1);
+      aileOutput = clamp(aileOutput - bankAngle/60, -1, 1);
     
     aileCtrl.reset(aileOutput, 0);
     
@@ -2736,18 +2728,18 @@ void controlTask()
       // Strong leveler enabled
         
       targetRollRate =
-	clamp((levelBank + aileStick*maxBank - rollAngle)*factor_c,
+	clamp((levelBank + aileStick*maxBank - bankAngle)*factor_c,
 	      -maxRollRate, maxRollRate);
 
     else if(vpMode.bankLimiter) {
       // Bank limiter + weak leveling
 
       targetRollRate -=
-	factor_c*clamp(rollAngle, -vpParam.wl_Limit, vpParam.wl_Limit);
+	factor_c*clamp(bankAngle, -vpParam.wl_Limit, vpParam.wl_Limit);
       
       targetRollRate =
 	clamp(targetRollRate,
-	      (-maxBank - rollAngle)*factor_c, (maxBank - rollAngle)*factor_c);
+	      (-maxBank - bankAngle)*factor_c, (maxBank - bankAngle)*factor_c);
     }
       
     aileCtrl.input(targetRollRate - rollRate, controlCycle);
