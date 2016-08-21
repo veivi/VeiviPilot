@@ -1864,26 +1864,6 @@ static float scaleByIAS(float k, float p)
 void configurationTask()
 {
   //
-  // Are we armed yet or being armed now?
-  //
-  
-  if(!vpStatus.armed) {
-    if(leftUpButton.doublePulse() && aileStick < -0.90 && elevStick > 0.90) {
-      consoleNoteLn_P(PSTR("We're now ARMED"));
-      vpStatus.armed = true;
-      badBeep(1);
-      
-      if(!vpStatus.consoleLink)
-	vpStatus.silent = true;
-
-      leftDownButton.reset();
-      rightUpButton.reset();
-      rightDownButton.reset();
-    } else
-      return;
-  }
-  
-  //
   // Flight detection
   //
 
@@ -1947,8 +1927,27 @@ void configurationTask()
   //
   // Configuration control
   //
-  //   GEAR BUTTON
+  // Being armed?
+  //
+  
+  if(leftUpButton.doublePulse() && !vpStatus.armed
+     && aileStick < -0.90 && elevStick > 0.90) {
+    consoleNoteLn_P(PSTR("We're now ARMED"));
+    vpStatus.armed = true;
+    badBeep(1);
+      
+    if(!vpStatus.consoleLink)
+      vpStatus.silent = true;
 
+    leftDownButton.reset();
+    rightUpButton.reset();
+    rightDownButton.reset();
+  }
+
+  //
+  //   GEAR BUTTON
+  //
+  
   if(GEARBUTTON.doublePulse()) {
     //
     // DOUBLE PULSE: FAILSAFE MODE SELECT
