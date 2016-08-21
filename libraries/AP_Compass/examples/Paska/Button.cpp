@@ -19,7 +19,7 @@ void Button :: reset()
 
 void Button :: input(float inputValue)
 {
-  inputState = fabsf(inputValue - activeValue) < 0.075;
+  inputState = fabsf(inputValue - activeValue) < 0.05;
 
   if(!inputState)
     inertiaState = false;

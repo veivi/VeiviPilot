@@ -2170,7 +2170,7 @@ void configurationTask()
   
   aileCtrl.setZieglerNicholsPID(s_Ku*scale, vpParam.s_Tu);
   elevCtrl.setZieglerNicholsPID(i_Ku*scale, vpParam.i_Tu);
-  pushCtrl.setZieglerNicholsPID(i_Ku*scale, vpParam.i_Tu);
+  pushCtrl.setZieglerNicholsPID(i_Ku*scale*3, vpParam.i_Tu);
   
   rudderCtrl.setZieglerNicholsPI(vpParam.r_Ku*scale, vpParam.r_Tu);
 
@@ -2257,16 +2257,13 @@ void configurationTask()
       vpFeature.stabilizePitch = vpFeature.alphaHold = true;
       autoAlphaP = testGain = testGainExpo(vpParam.o_P);
       break;
-         
+               
     case 5:
-      // Auto ball gain
+      // Pusher gain
          
-      vpFeature.stabilizeBank = vpMode.bankLimiter = vpMode.wingLeveler = true;
-      vpFeature.autoBall = true;
-      rudderMix = 0;
-      rudderCtrl.setPID(testGain = testGainExpo(vpParam.r_Ku), 0, 0);
+      pushCtrl.setPID(testGain = testGainExpo(i_Ku_ref*3), 0, 0);
       break;
-            
+      
     case 6:
       // Aileron and rudder calibration, straight and level flight with
       // ball centered, reduced controller gain to increase stability
@@ -2281,6 +2278,15 @@ void configurationTask()
       break;
 
     case 7:
+      // Auto ball gain
+         
+      vpFeature.stabilizeBank = vpMode.bankLimiter = vpMode.wingLeveler = true;
+      vpFeature.autoBall = true;
+      rudderMix = 0;
+      rudderCtrl.setPID(testGain = testGainExpo(vpParam.r_Ku), 0, 0);
+      break;
+            
+    case 8:
       // Auto ball empirical gain, PI
        
       vpFeature.autoBall = true;
@@ -2359,12 +2365,12 @@ void gaugeTask()
 	consolePrint_P(PSTR(" ("));
 	consolePrint(targetAlpha*360);
 	consolePrint_P(PSTR(")"));
-	consoleTab(20);
+	consoleTab(25);
 	consolePrint_P(PSTR(" pitchRate(target) = "));
 	consolePrint(pitchRate*360, 1);
 	consolePrint_P(PSTR(" ("));
 	consolePrint(targetPitchRate*360);
-	consolePrintLn_P(PSTR(")"));
+	consolePrint_P(PSTR(")"));
 	break;
 	
       case 3:
@@ -2607,6 +2613,9 @@ float nominalPitchRate(float bank, float pitch, float target)
   const float alphaCL0 = vpParam.alphaZeroLift,
     ratio = (target - alphaCL0) / (vpParam.alphaMax - alphaCL0);
   
+  //  return square(square(sin(bank/RADIAN)))
+  //    *ratio*iasFilter.output()*G/square(vpParam.iasMin)*RADIAN/360;
+
   return G/iAS*(ratio*square(iAS/vpParam.iasMin)
   		- cos(bank/RADIAN))*RADIAN/360;
 }
@@ -2683,19 +2692,13 @@ void controlTask()
 
   // Pusher
 
-  if(vpFeature.pusher) {
-    targetPitchRate = nominalPitchRate(bankAngle, pitchAngle, effMaxAlpha)
-      + (effMaxAlpha - effAlpha)*autoAlphaP*maxPitchRate;
-
-    pushCtrl.input(targetPitchRate - pitchRate, controlCycle);
-
-    if(pushCtrl.output() < elevOutput)
-      elevOutput = pushCtrl.output();
-    else
-      pushCtrl.reset(elevOutput, targetPitchRate - pitchRate);
-    //    elevOutput = fminf(elevOutput, pushCtrl.output());
+  if(vpFeature.pusher && (effAlpha > effMaxAlpha
+			  || pushCtrl.output() < elevOutput)) {
+    pushCtrl.input(effMaxAlpha - effAlpha, controlCycle);
+    
+    elevOutput = fminf(elevOutput, pushCtrl.output());
   } else
-    pushCtrl.reset(elevOutput, 0);
+    pushCtrl.reset(elevOutput, effMaxAlpha - effAlpha);
   
   elevOutput = clamp(elevOutput, -1, 1);
   
