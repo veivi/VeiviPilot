@@ -38,7 +38,7 @@ const float stabilityElevExp2_c = 0.0;
 const float stabilityAileExp1_c = -1.5;
 const float stabilityAileExp2_c = 0.5;
 
-const float G = 9.81, RADIAN = 360/2/PI, FOOT = 12*25.4/1000, KNOT = 1852.0/60/60;
+const float G = 9.81, RADIAN = 360/2/PI, FOOT = 12*25.4/1000, KNOT = 1852.0/60/60, PSF = 47.880259;
 
 const float alphaWindow_c = 1.0/30;
 
@@ -1459,11 +1459,6 @@ void sensorTaskFast()
     
   dynPressure = pressureBuffer.output() * factor_c;
   
-  if(dynPressure > 0)
-    iAS = sqrtf(2*dynPressure);
-  else
-    iAS = 0;
-    
   // Attitude
 
   ins.wait_for_sample();
@@ -1499,24 +1494,27 @@ void sensorTaskFast()
   
   if(vpStatus.simulatorLink) {
     alpha = sensorData.alpha/360;
-    iAS = sensorData.ias*KNOT;
+    dynPressure = sensorData.qbar*PSF;
     rollRate = sensorData.rrate*RADIAN / 360;
     pitchRate = sensorData.prate*RADIAN / 360;
     yawRate = sensorData.yrate*RADIAN / 360;
-    bankAngle = sensorData.roll;
-    pitchAngle = sensorData.pitch;
-    heading = sensorData.heading;
+    bankAngle = sensorData.roll*RADIAN;
+    pitchAngle = sensorData.pitch*RADIAN;
+    heading = sensorData.heading*RADIAN;
     accX = simulatorAccX.input(sensorData.accx*FOOT);
     accY = simulatorAccY.input(sensorData.accy*FOOT);
     accZ = simulatorAccZ.input(sensorData.accz*FOOT);
-        
-    dynPressure = square(iAS)/2;
   }  
 
   //
-  // Filtering/constraining
+  // Derived values
   //
   
+  if(dynPressure > 0)
+    iAS = sqrtf(2*dynPressure);
+  else
+    iAS = 0;
+    
   effAlpha = clamp(alpha, -1.0/8, 1.0/8);
   iasFilter.input(iAS);
   iasFilterSlow.input(iAS);

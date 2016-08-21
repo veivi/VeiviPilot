@@ -22,7 +22,7 @@ extern int maxDatagramSize;
 extern uint8_t datagramRxStore[];
 
 struct SimLinkSensor {
-  float alpha, alt, ias;
+  float alpha, alt, qbar;
   float roll, pitch, heading;
   float rrate, prate, yrate;
   float accx, accy, accz;
