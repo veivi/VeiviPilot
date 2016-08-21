@@ -37,8 +37,9 @@ void pwmDisable(const struct PWMOutput *output)
 
 void pwmOutputInit(struct PWMOutput *output)
 {
-  configureInput(&output->pin, false);
-  pwmEnable(output);
+  pwmDisable(output);
+  setPinState(&output->pin, 0);
+  configureOutput(&output->pin);
   output->active = false;
 }
 
@@ -65,6 +66,7 @@ void pwmOutputWrite(struct PWMOutput *output, uint16_t value)
 
   if(!output->active) {
     configureOutput(&output->pin);
+    pwmEnable(output);
     output->active = true;
   }
 }

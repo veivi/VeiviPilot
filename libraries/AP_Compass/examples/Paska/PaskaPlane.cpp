@@ -1444,8 +1444,6 @@ void receiverTask()
     }
 }
 
-Damper simulatorAccX(50), simulatorAccY(50), simulatorAccZ(50);
-
 void sensorTaskFast()
 {
   // Alpha input
@@ -1501,9 +1499,9 @@ void sensorTaskFast()
     bankAngle = sensorData.roll*RADIAN;
     pitchAngle = sensorData.pitch*RADIAN;
     heading = sensorData.heading*RADIAN;
-    accX = simulatorAccX.input(sensorData.accx*FOOT);
-    accY = simulatorAccY.input(sensorData.accy*FOOT);
-    accZ = simulatorAccZ.input(sensorData.accz*FOOT);
+    accX = sensorData.accx*FOOT;
+    accY = sensorData.accy*FOOT;
+    accZ = sensorData.accz*FOOT;
   }  
 
   //
@@ -2419,13 +2417,22 @@ void gaugeTask()
 	consolePrint(aileStick);
 	consolePrint_P(PSTR(" elevStick = "));
 	consolePrint(elevStick);
-	consolePrint_P(PSTR(" throttleStick = "));
+	consolePrint_P(PSTR(" thrStick = "));
 	consolePrint(throttleStick);
 	consolePrint_P(PSTR(" rudderStick = "));
 	consolePrint(rudderStick);
 	break;
 
       case 8:
+	consolePrint_P(PSTR(" aileOut = "));
+	consolePrint(aileOutput);
+	consolePrint_P(PSTR(" elevOut = "));
+	consolePrint(elevOutput);
+	consolePrint_P(PSTR(" rudderOut = "));
+	consolePrint(rudderOutput);
+	break;
+
+      case 9:
 	consolePrint_P(PSTR(" acc(avg) = "));
 	consolePrint(accTotal);
 	consolePrint_P(PSTR("("));
@@ -2439,7 +2446,7 @@ void gaugeTask()
 	consolePrint_P(PSTR(")"));
 	break;
 
-      case 9:
+      case 10:
 	consoleNote_P(PSTR(" entropy(alpha,ias) = "));
 	consolePrint(alphaEntropyAcc.output());
 	consolePrint_P(PSTR(", "));
