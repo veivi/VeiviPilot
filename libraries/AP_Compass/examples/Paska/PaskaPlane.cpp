@@ -231,7 +231,7 @@ bool beepGood;
 const int maxParams = 8;
 int beepDuration, gaugeCount, gaugeVariable[maxParams];
 
-const int maxTests_c = 4;
+const int maxTests_c = 1;
 float autoTestIAS[maxTests_c], autoTestK[maxTests_c], autoTestT[maxTests_c], autoTestKxIAS[maxTests_c];
 int autoTestCount;
 
@@ -306,7 +306,7 @@ void pingTestRx(uint32_t value)
 
 #include "Serial.h"
 
-#define MAX_DG_SIZE  (1<<7)
+#define MAX_DG_SIZE  (1<<6)
 
 extern "C" {
 
@@ -437,8 +437,11 @@ void beepPrim(int hz, long millis)
 
 void beep(float dur, bool good)
 {
-  beepGood = good;
-  beepDuration = dur*BEEP_HZ;
+  if(!vpStatus.silent) {
+    beepGood = good;
+    beepDuration = dur*BEEP_HZ;
+  } else
+    beepDuration = 0;
 }
 
 void goodBeep(float dur)
@@ -721,7 +724,15 @@ bool toc_test_ppm(bool reset)
 
 bool toc_test_ram(bool reset)
 {
-  return hal.util->available_memory() > (1<<10);
+  uint32_t freeRam = hal.util->available_memory();
+  
+  if(freeRam < (1<<9)) {
+    consoleNote_P(PSTR("Low RAM : "));
+    consolePrintLn(freeRam);
+    return false;
+  }
+
+  return true;
 }
 
 bool toc_test_timing(bool reset)
@@ -1021,7 +1032,7 @@ void executeCommand(const char *buf)
 {
   int bufLen = strlen(buf);
   
-  consolePrint("// % ");
+  consolePrint_P(PSTR("// % "));
   consolePrint(buf, bufLen);
   consolePrintLn("");
 
@@ -1995,10 +2006,6 @@ void configurationTask()
     consoleNoteLn_P(PSTR("We're now ARMED"));
     vpStatus.armed = true;
     badBeep(1);
-      
-    if(!vpStatus.consoleLink)
-      vpStatus.silent = true;
-
     leftDownButton.reset();
     rightUpButton.reset();
     rightDownButton.reset();
@@ -2070,6 +2077,9 @@ void configurationTask()
 	if(tocTestStatus(true)) {
 	  consoleNoteLn_P(PSTR("T/o configuration is GOOD"));
 	  goodBeep(1);
+	  
+	  if(!vpStatus.consoleLink)
+	    vpStatus.silent = true;
 	} else {
 	  consoleNoteLn_P(PSTR("T/o configuration test FAILED"));
 	  badBeep(5);
@@ -3119,8 +3129,6 @@ void setup() {
   vpStatus.consoleLink = true;
   
   consoleNoteLn_P(PSTR("Project | Alpha"));   
-  consoleNote_P(PSTR("Init Free RAM: "));
-  consolePrintLn((unsigned long) hal.util->available_memory());
 
   // PWM output
 
@@ -3211,6 +3219,11 @@ void setup() {
 
   accAvg.reset(G);
 
+  // Free RAM
+  
+  consoleNote_P(PSTR("Free RAM: "));
+  consolePrintLn((unsigned long) hal.util->available_memory());
+  
   // Done
   
   consoleNoteLn_P(PSTR("Initialized"));
