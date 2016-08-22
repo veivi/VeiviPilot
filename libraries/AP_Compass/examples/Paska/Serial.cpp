@@ -10,6 +10,6 @@ void serialOut(uint8_t c)
 
 void serialFlush()
 {
-  hal.uartA->flush();
+  // hal.uartA->flush();
 }
 

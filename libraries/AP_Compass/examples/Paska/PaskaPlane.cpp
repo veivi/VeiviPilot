@@ -321,6 +321,12 @@ struct SimLinkSensor sensorData;
 uint16_t simFrames;
 int linkDownCount = 0, heartBeatCount = 0;
   
+void datagramRxError(const char *error)
+{
+  consoleNote_P(PSTR("DG RX ERROR : "));
+  consolePrintLn(error);
+}
+  
 void datagramInterpreter(uint8_t t, const uint8_t *data, int size)
 {
   uint32_t pingBuffer = 0;
@@ -366,6 +372,11 @@ void datagramInterpreter(uint8_t t, const uint8_t *data, int size)
 void datagramSerialOut(uint8_t c)
 {
   serialOut(c);
+}
+
+void datagramSerialFlush()
+{
+  serialFlush();
 }
 }
 
@@ -3199,7 +3210,7 @@ void setup() {
   // Misc filters
 
   accAvg.reset(G);
-  
+
   // Done
   
   consoleNoteLn_P(PSTR("Initialized"));

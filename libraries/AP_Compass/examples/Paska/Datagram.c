@@ -10,6 +10,7 @@ static void outputBreak()
 {
   datagramSerialOut((const uint8_t) 0x00);
   datagramSerialOut((const uint8_t) 0x00);
+  datagramSerialFlush();
 }
 
 void datagramTxOutByte(const uint8_t c)
@@ -61,8 +62,10 @@ static bool datagramRxEnd(void)
         if(success) {
             datagramsGood++;
 	    datagramInterpreter(datagramRxStore[0], &datagramRxStore[1], datagramSize-3);
-        }
-    }
+        } else
+	  datagramRxError("CRC FAIL");
+    } else
+      datagramRxError("TOO SHORT");
     
     datagramSize = 0;
     return success;
