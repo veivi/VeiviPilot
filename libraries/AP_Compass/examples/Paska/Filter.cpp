@@ -54,6 +54,14 @@ float randomNum(float small, float large)
   return small + (large-small)*(float) ((rand()>>3) & 0xFFF) / 0x1000;
 }
 
+uint32_t randomUInt32()
+{
+  uint32_t buffer = 0;
+  for(int i = 0; i < sizeof(buffer); i++)
+    buffer = (buffer<<8) | (uint32_t) randomNum(0, 1<<8);
+  return buffer;
+}
+
 float quantize(float value, float *state, int numSteps)
 {
   if((int) ((value-1.0/numSteps/2)*numSteps) > *state)

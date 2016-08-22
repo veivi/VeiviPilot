@@ -16,6 +16,7 @@ float clamp(float value, float a, float b);
 float mixValue(float mixRatio, float a, float b);
 uint8_t population(uint16_t a);
 float randomNum(float small, float large);
+uint32_t randomUInt32();
 float quantize(float value, float *state, int numSteps);
 
 class RunningAvgFilter {

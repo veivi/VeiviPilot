@@ -46,9 +46,6 @@ typedef enum {
   c_model,
   c_alpha,
   c_backup,
-  c_echo,
-  c_rpm,
-  c_baud,
   c_stabilizer_pid_zn,
   c_inner_pid_zn,
   c_outer_p,
@@ -75,7 +72,8 @@ typedef enum {
   c_servorate,
   c_calibrate,
   c_takeoff,
-  c_beep
+  c_beep,
+  c_ping
 } token_t;
 
 typedef enum
