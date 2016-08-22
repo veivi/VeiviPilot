@@ -4,6 +4,7 @@
 #include "Storage.h"
 #include "Command.h"
 #include "Status.h"
+#include "Filter.h"
 
 extern "C" {
 #include "CRC16.h"
@@ -30,7 +31,7 @@ const struct ParamRecord paramDefaults = {
   .rudderNeutral = 0, .rudderDefl = 45.0/90,
   .brakeNeutral = 0, .brakeDefl = 45.0/90,
   .servoAile = 0, .servoElev = 1, .servoRudder = 2, .servoFlap = -1, .servoFlap2 = -1, .servoGear = -1, .servoBrake = -1,
-  .alphaZeroLift = -2.0/360, .alphaMax = 12.0/360,
+  .alphaZeroLift = -2.0/RADIAN, .alphaMax = 12.0/RADIAN,
   .i_Ku_C = 100, .i_Tu = 0.25, .o_P = 0.3, 
   .s_Ku_C = 400, .s_Tu = 0.25, 
   .r_Mix = 0.1,
@@ -157,9 +158,9 @@ void printParams()
   consolePrint_P(PSTR(" + "));
   consolePrint(vpParam.ff_B, 5);
   consolePrint_P(PSTR(" x  (alpha range = "));
-  consolePrint(alphaFromElev(-1.0)*360);
+  consolePrint(alphaFromElev(-1.0)*RADIAN);
   consolePrint_P(PSTR("..."));
-  consolePrint(alphaFromElev(1.0)*360);
+  consolePrint(alphaFromElev(1.0)*RADIAN);
   consolePrintLn_P(PSTR(")"));
   consoleNoteLn_P(PSTR("  Pusher"));
   consoleNote_P(PSTR("    Ku = "));
@@ -172,11 +173,11 @@ void printParams()
   consolePrint_P(PSTR(" Tu = "));
   consolePrintLn(vpParam.s_Tu, 4);
   consoleNote_P(PSTR("    Weak leveling limit angle = "));
-  consolePrintLn(vpParam.wl_Limit, 4);
+  consolePrintLn(vpParam.wl_Limit*RADIAN, 4);
   consoleNote_P(PSTR("  Alpha (max) = "));
-  consolePrint(vpParam.alphaMax*360);
+  consolePrint(vpParam.alphaMax*RADIAN);
   consolePrint_P(PSTR(" (CL0) = "));
-  consolePrint(vpParam.alphaZeroLift*360);
+  consolePrint(vpParam.alphaZeroLift*RADIAN);
   consolePrint_P(PSTR(" IAS(alphaMax) = "));
   consolePrintLn(vpParam.iasMin);
   consoleNote_P(PSTR("  Roll rate K = "));
@@ -256,12 +257,12 @@ static void backupParamEntry(const Command *e)
       consolePrint(*((float*) e->var[i])*100);
       break;
 
-    case e_angle90:
-      consolePrint(*((float*) e->var[i])*90);
+    case e_angle:
+      consolePrint(*((float*) e->var[i])*RADIAN);
       break;
 
-    case e_angle360:
-      consolePrint(*((float*) e->var[i])*360);
+    case e_angle90:
+      consolePrint(*((float*) e->var[i])*90);
       break;
     }
   }
@@ -306,10 +307,10 @@ void backupParams()
 
 float elevFromAlpha(float x)
 {
-  return vpParam.ff_A + vpParam.ff_B*x*360;
+  return vpParam.ff_A + vpParam.ff_B*x*RADIAN;
 }
 
 float alphaFromElev(float x)
 {
-  return (x - vpParam.ff_A)/360/vpParam.ff_B;
+  return (x - vpParam.ff_A)/vpParam.ff_B/RADIAN;
 }

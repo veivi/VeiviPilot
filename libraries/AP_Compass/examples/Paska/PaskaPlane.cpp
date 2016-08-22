@@ -33,12 +33,9 @@ extern "C" {
 //
 //
 
-const float stabilityElevExp1_c = -1.5;
-const float stabilityElevExp2_c = 0.0;
+const float stabilityElevExp_c = -1.5;
 const float stabilityAileExp1_c = -1.5;
 const float stabilityAileExp2_c = 0.5;
-
-const float G = 9.81, RADIAN = 360/2/PI, FOOT = 12*25.4/1000, KNOT = 1852.0/60/60, PSF = 47.880259;
 
 const float alphaWindow_c = 1.0/30;
 
@@ -455,7 +452,7 @@ void badBeep(float dur)
 
 void logAlpha(void)
 {
-  logGeneric(lc_alpha, alpha*360);
+  logGeneric(lc_alpha, alpha*RADIAN);
 }
 
 void logConfig(void)
@@ -475,8 +472,8 @@ void logConfig(void)
       modeSum += 1.0/(2<<i);
   
   logGeneric(lc_mode, modeSum);
-  logGeneric(lc_target, targetAlpha*360);
-  logGeneric(lc_target_pr, targetPitchRate*360);
+  logGeneric(lc_target, targetAlpha*RADIAN);
+  logGeneric(lc_target_pr, targetPitchRate*RADIAN);
   logGeneric(lc_trim, effTrim*100);
 
   if(vpMode.test) {
@@ -516,11 +513,11 @@ void logAttitude(void)
   logGeneric(lc_accy, accY);
   logGeneric(lc_accz, accZ);
   logGeneric(lc_roll, bankAngle);
-  logGeneric(lc_rollrate, rollRate*360);
+  logGeneric(lc_rollrate, rollRate*RADIAN);
   logGeneric(lc_pitch, pitchAngle);
-  logGeneric(lc_pitchrate, pitchRate*360);
+  logGeneric(lc_pitchrate, pitchRate*RADIAN);
   logGeneric(lc_heading, heading);
-  logGeneric(lc_yawrate, yawRate*360);
+  logGeneric(lc_yawrate, yawRate*RADIAN);
 }
 
 float readParameter()
@@ -783,21 +780,21 @@ bool toc_test_alpha_range(bool reset)
     zeroAlpha = bigAlpha = bigAlphaAgain = false;
     lastNonZeroAlpha = lastSmallAlpha = currentTime;
   } else if(!bigAlpha) {
-    if(fabsf(alpha - 90.0/360) > 15.0/360) {
+    if(fabsf(alpha - 90/RADIAN) > 15/RADIAN) {
       lastSmallAlpha = currentTime;
     } else if(currentTime > lastSmallAlpha + 1.0e6) {
       consoleNoteLn_P(PSTR("Stable BIG ALPHA"));
       bigAlpha = true;
     }
   } else if(!zeroAlpha) {
-    if(fabs(alpha) > 1.5/360) {
+    if(fabs(alpha) > 1.5/RADIAN) {
       lastNonZeroAlpha = currentTime;
     } else if(currentTime > lastNonZeroAlpha + 1.0e6) {
       consoleNoteLn_P(PSTR("Stable ZERO ALPHA"));
       zeroAlpha = true;
     }
   } else if(!bigAlphaAgain) {
-    if(fabsf(alpha - 90.0/360) > 15.0/360) {
+    if(fabsf(alpha - 90/RADIAN) > 15/RADIAN) {
       lastSmallAlpha = currentTime;
     } else if(currentTime > lastSmallAlpha + 1.0e6) {
       consoleNoteLn_P(PSTR("Stable BIG ALPHA seen again"));
@@ -828,9 +825,9 @@ bool toc_test_attitude(bool reset)
 
 bool toc_test_turn(bool reset)
 {
-  return (fabsf(pitchRate) < 1.0/360
-	  && fabsf(rollRate) < 1.0/360
-	  && fabsf(yawRate) < 1.0/360);
+  return (fabsf(pitchRate) < 1.0/RADIAN
+	  && fabsf(rollRate) < 1.0/RADIAN
+	  && fabsf(yawRate) < 1.0/RADIAN);
 }
 
 struct TOCRangeTestState {
@@ -1117,12 +1114,12 @@ void executeCommand(const char *buf)
 	*((float*) command.var[i]) = param[i]/100;
 	break;
 
-      case e_angle90:
-	*((float*) command.var[i]) = param[i]/90;
+      case e_angle:
+	*((float*) command.var[i]) = param[i]/RADIAN;
 	break;
 
-      case e_angle360:
-	*((float*) command.var[i]) = param[i]/360;
+      case e_angle90:
+	*((float*) command.var[i]) = param[i]/90;
 	break;
       }
     }
@@ -1188,7 +1185,7 @@ void executeCommand(const char *buf)
     case c_rollrate:
       if(numParams > 0) {
 	vpParam.roll_C
-	  = param[0]/360/powf(vpParam.iasMin, stabilityAileExp2_c);
+	  = param[0]/RADIAN/powf(vpParam.iasMin, stabilityAileExp2_c);
 	consoleNote_P(PSTR("Roll rate K = "));
 	consolePrintLn(vpParam.roll_C);
 	storeNVState();
@@ -1197,8 +1194,7 @@ void executeCommand(const char *buf)
           
     case c_pitchrate:
       if(numParams > 0) {
-	vpParam.pitch_C
-	  = param[0]/360/powf(vpParam.iasMin, stabilityElevExp2_c);
+	vpParam.pitch_C = param[0]/RADIAN;
 	consoleNote_P(PSTR("Pitch rate K = "));
 	consolePrintLn(vpParam.pitch_C);
 	storeNVState();
@@ -1209,7 +1205,7 @@ void executeCommand(const char *buf)
       if(numParams > 0)
 	offset = param[0];
       
-      vpParam.alphaRef += (int16_t) ((1L<<16) * (alpha - offset / 360));
+      vpParam.alphaRef += (int16_t) ((1L<<16) * (alpha - offset / RADIAN));
       consoleNoteLn_P(PSTR("Alpha calibrated"));
       break;
 
@@ -1310,7 +1306,7 @@ void executeCommand(const char *buf)
       consoleNote_P(PSTR("Sim link frequency = "));
       consolePrintLn(simInputFreq);
       consoleNote_P(PSTR("Alpha = "));
-      consolePrint(360*alpha);
+      consolePrint(alpha*RADIAN);
       if(vpStatus.alphaFailed)
 	consolePrintLn_P(PSTR(" FAIL"));
       else
@@ -1398,7 +1394,7 @@ void alphaTask()
   static int16_t prev = 0;
   
   if(!handleFailure("alpha", !readAlpha_5048B(&raw), &vpStatus.alphaWarn, &vpStatus.alphaFailed, &failCount)) {
-    alphaFilter.input((float) raw / (1L<<(8*sizeof(raw))));
+    alphaFilter.input(2*PI*(float) raw / (1L<<(8*sizeof(raw))));
     alphaEntropy += population(raw ^ prev);
     sensorHash = crc16(sensorHash, (uint8_t*) &raw, sizeof(raw));
     prev = raw;
@@ -1471,7 +1467,7 @@ void receiverTask()
       = vpFeature.alphaHold = vpMode.bankLimiter = true;
     vpFeature.pusher = false;
 
-    trimRateLimiter.setRate(1.5/360);
+    trimRateLimiter.setRate(1.5/RADIAN);
     elevTrim = elevFromAlpha(thresholdAlpha) - elevTrimSub;
   } else
     trimRateLimiter.setRate(1);
@@ -1519,13 +1515,13 @@ void sensorTaskFast()
 
   Vector3f gyro = ins.get_gyro();
   
-  rollRate = gyro.x * RADIAN / 360;
-  pitchRate = gyro.y * RADIAN / 360;
-  yawRate = gyro.z * RADIAN / 360;
+  rollRate = gyro.x;
+  pitchRate = gyro.y;
+  yawRate = gyro.z;
 
-  bankAngle = ahrs.roll * RADIAN;
-  pitchAngle = ahrs.pitch * RADIAN;
-  heading = ahrs.yaw * RADIAN;
+  bankAngle = ahrs.roll;
+  pitchAngle = ahrs.pitch;
+  heading = ahrs.yaw;
 
   // Acceleration
   
@@ -1545,14 +1541,14 @@ void sensorTaskFast()
   // Simulator link overrides
   
   if(vpStatus.simulatorLink) {
-    alpha = sensorData.alpha/360;
+    alpha = sensorData.alpha/RADIAN;
     dynPressure = sensorData.qbar*PSF;
-    rollRate = sensorData.rrate*RADIAN / 360;
-    pitchRate = sensorData.prate*RADIAN / 360;
-    yawRate = sensorData.yrate*RADIAN / 360;
-    bankAngle = sensorData.roll*RADIAN;
-    pitchAngle = sensorData.pitch*RADIAN;
-    heading = sensorData.heading*RADIAN;
+    rollRate = sensorData.rrate;
+    pitchRate = sensorData.prate;
+    yawRate = sensorData.yrate;
+    bankAngle = sensorData.roll;
+    pitchAngle = sensorData.pitch;
+    heading = sensorData.heading;
     accX = sensorData.accx*FOOT;
     accY = sensorData.accy*FOOT;
     accZ = sensorData.accz*FOOT;
@@ -1567,7 +1563,7 @@ void sensorTaskFast()
   else
     iAS = 0;
     
-  effAlpha = clamp(alpha, -1.0/8, 1.0/8);
+  effAlpha = clamp(alpha, -RADIAN, RADIAN);
   iasFilter.input(iAS);
   iasFilterSlow.input(iAS);
 }
@@ -1746,7 +1742,7 @@ void testStateMachine()
       finalK = testGain;
       finalIAS = iAS;
       finalT = oscCycleMean/1e6;
-      finalKxIAS = finalK/powf(finalIAS, (analyzerInputCh == ac_aile ? stabilityAileExp1_c : stabilityElevExp1_c));
+      finalKxIAS = finalK/powf(finalIAS, (analyzerInputCh == ac_aile ? stabilityAileExp1_c : stabilityElevExp_c));
       
       consoleNote_P(PSTR("Test "));
       consolePrint(autoTestCount);
@@ -1907,8 +1903,8 @@ float testGainLinear(float start, float stop)
 
 float s_Ku_ref, i_Ku_ref, p_Ku_ref;
 
-const float minAlpha = (-2.0/360);
-const float origoAlpha = (-5.0/360);
+const float minAlpha = -2.0/RADIAN;
+const float origoAlpha = -5.0/RADIAN;
 
 static float scaleByIAS(float k, float p)
 {
@@ -1950,7 +1946,7 @@ void configurationTask()
 
   float turnRate = sqrt(square(rollRate) + square(pitchRate) + square(yawRate));
   
-  bool motionDetected = vpStatus.positiveIAS || turnRate > 5.0/360
+  bool motionDetected = vpStatus.positiveIAS || turnRate > 5.0/RADIAN
     || fabsf(accTotal - accAvg.output()) > 0.3;
   
   static uint32_t lastMotion;
@@ -2223,8 +2219,8 @@ void configurationTask()
   // Default controller settings
 
   float s_Ku = scaleByIAS(vpParam.s_Ku_C, stabilityAileExp1_c);
-  float i_Ku = scaleByIAS(vpParam.i_Ku_C, stabilityElevExp1_c);
-  float p_Ku = scaleByIAS(vpParam.p_Ku, stabilityElevExp1_c);
+  float i_Ku = scaleByIAS(vpParam.i_Ku_C, stabilityElevExp_c);
+  float p_Ku = scaleByIAS(vpParam.p_Ku, stabilityElevExp_c);
   
   aileCtrl.setZieglerNicholsPID(s_Ku*scale, vpParam.s_Tu);
   elevCtrl.setZieglerNicholsPID(i_Ku*scale, vpParam.i_Tu);
@@ -2333,7 +2329,7 @@ void configurationTask()
       // Max alpha
 
       vpFeature.stabilizeBank = vpMode.bankLimiter = vpMode.wingLeveler = true;
-      maxAlpha = testGain = testGainLinear(20.0/360, 10.0/360);
+      maxAlpha = testGain = testGainLinear(20/RADIAN, 10/RADIAN);
       break;         
 
     case 10:
@@ -2376,7 +2372,7 @@ void gaugeTask()
       switch(gaugeVariable[g]) {
       case 1:
 	consolePrint_P(PSTR(" alpha = "));
-	consolePrint(alpha*360, 1);
+	consolePrint(alpha*RADIAN, 1);
 	consoleTab(15);
 	consolePrint_P(PSTR(" KIAS = "));
 	consolePrint((int) (iAS/KNOT));
@@ -2397,15 +2393,15 @@ void gaugeTask()
 
       case 2:
 	consolePrint_P(PSTR(" alpha(target) = "));
-	consolePrint(alpha*360);
+	consolePrint(alpha*RADIAN);
 	consolePrint_P(PSTR(" ("));
-	consolePrint(targetAlpha*360);
+	consolePrint(targetAlpha*RADIAN);
 	consolePrint_P(PSTR(")"));
 	consoleTab(25);
 	consolePrint_P(PSTR(" pitchRate(target) = "));
-	consolePrint(pitchRate*360, 1);
+	consolePrint(pitchRate*RADIAN, 1);
 	consolePrint_P(PSTR(" ("));
-	consolePrint(targetPitchRate*360);
+	consolePrint(targetPitchRate*RADIAN);
 	consolePrint_P(PSTR(")"));
 	break;
 	
@@ -2433,11 +2429,11 @@ void gaugeTask()
 
       case 5:
 	consolePrint_P(PSTR(" rollRate = "));
-	consolePrint(rollRate*360, 1);
+	consolePrint(rollRate*RADIAN, 1);
 	consolePrint_P(PSTR(" pitchRate = "));
-	consolePrint(pitchRate*360, 1);
+	consolePrint(pitchRate*RADIAN, 1);
 	consolePrint_P(PSTR(" yawRate = "));
-	consolePrint(yawRate*360, 1);
+	consolePrint(yawRate*RADIAN, 1);
 	break;
 
       case 6:
@@ -2653,25 +2649,27 @@ void gpsTask()
   */
 }
 
-float nominalPitchRate(float bank, float pitch, float target)
-{
-  const float alphaCL0 = vpParam.alphaZeroLift,
-    ratio = (target - alphaCL0) / (vpParam.alphaMax - alphaCL0);
-  
-  //  return square(square(sin(bank/RADIAN)))
-  //    *ratio*iasFilter.output()*G/square(vpParam.iasMin)*RADIAN/360;
-
-  return G/iAS*(ratio*square(iAS/vpParam.iasMin)
-  		- cos(bank/RADIAN))*RADIAN/360;
-}
-
 float nominalPitchRate(float bank, float target)
 {
   const float alphaCL0 = vpParam.alphaZeroLift,
     ratio = (target - alphaCL0) / (vpParam.alphaMax - alphaCL0);
   
-  return square(sin(bank/RADIAN))
-    *ratio*iasFilter.output()*G/square(vpParam.iasMin)*RADIAN/360;
+  return square(sin(bank))*ratio*iasFilter.output()*G/square(vpParam.iasMin);
+}
+
+//
+// More complex version with both bank and pitch, not really what we need
+// for level flight so won't happen for now.
+//
+
+float nominalPitchRate(float bank, float pitch, float target)
+{
+  const float alphaCL0 = vpParam.alphaZeroLift,
+    ratio = (target - alphaCL0) / (vpParam.alphaMax - alphaCL0);
+
+  const float theta = 0; // the angle between the plane's "up" and earh "up"
+    
+  return G/iAS*(ratio*square(iAS/vpParam.iasMin) - cos(theta));
 }
 
 void controlTask()
@@ -2689,8 +2687,7 @@ void controlTask()
   // Elevator control
   //
 
-  const float maxPitchRate
-    = scaleByIAS(vpParam.pitch_C, stabilityElevExp2_c);  
+  const float maxPitchRate = vpParam.pitch_C;
   const float shakerLimit = (float) 2/3;
   const float effStick = vpMode.rxFailSafe ? shakerLimit : elevStick;
   const float stickStrength = fmaxf(effStick-shakerLimit, 0)/(1-shakerLimit);
@@ -2710,7 +2707,7 @@ void controlTask()
       + (targetAlpha - effAlpha)*autoAlphaP*maxPitchRate;
   
   else if(vpFeature.pitchHold)
-    targetPitchRate = (5 + effStick*30 - pitchAngle)/90 * maxPitchRate;
+    targetPitchRate = (0.1 + effStick/2 - pitchAngle)*maxPitchRate;
 
   else
     targetPitchRate = effStick * maxPitchRate;
@@ -2718,7 +2715,7 @@ void controlTask()
   elevOutputFeedForward = elevFromAlpha(targetAlpha);
 
   if(vpFeature.stabilizePitch) {
-    elevCtrl.input(targetPitchRate - pitchRate, controlCycle);
+    elevCtrl.input((targetPitchRate - pitchRate)*RADIAN/360, controlCycle);
     
     elevOutput = elevCtrl.output();
 
@@ -2750,10 +2747,10 @@ void controlTask()
   aileOutput = aileStick;
     
   const float maxRollRate = scaleByIAS(vpParam.roll_C, stabilityAileExp2_c);
-  float maxBank = 45.0;
+  float maxBank = 45/RADIAN;
 
   if(vpMode.rxFailSafe)
-    maxBank = 10.0;
+    maxBank = 10/RADIAN;
   else if(vpFeature.alphaHold)
     maxBank /= 1 + alphaFromElev(effTrim) / thresholdAlpha / 2;
   
@@ -2762,33 +2759,32 @@ void controlTask()
   if(!vpFeature.stabilizeBank) {
 
     if(vpMode.wingLeveler)
-      aileOutput = clamp(aileOutput - bankAngle/60, -1, 1);
+      aileOutput = clamp(aileOutput - bankAngle, -1, 1);
     
     aileCtrl.reset(aileOutput, 0);
     
   } else {
     
-    const float factor_c = maxRollRate/60;
-
     if(vpMode.wingLeveler)
       // Strong leveler enabled
         
       targetRollRate =
-	clamp((levelBank + aileStick*maxBank - bankAngle)*factor_c,
+	clamp((levelBank + aileStick*maxBank - bankAngle)*maxRollRate,
 	      -maxRollRate, maxRollRate);
 
     else if(vpMode.bankLimiter) {
       // Bank limiter + weak leveling
 
       targetRollRate -=
-	factor_c*clamp(bankAngle, -vpParam.wl_Limit, vpParam.wl_Limit);
+	maxRollRate*clamp(bankAngle, -vpParam.wl_Limit, vpParam.wl_Limit);
       
       targetRollRate =
 	clamp(targetRollRate,
-	      (-maxBank - bankAngle)*factor_c, (maxBank - bankAngle)*factor_c);
+	      (-maxBank - bankAngle)*maxRollRate,
+	      (maxBank - bankAngle)*maxRollRate);
     }
       
-    aileCtrl.input(targetRollRate - rollRate, controlCycle);
+    aileCtrl.input((targetRollRate - rollRate)*RADIAN/360, controlCycle);
     aileOutput = aileCtrl.output();
   }
 
@@ -3071,7 +3067,15 @@ int scheduler()
   return 0;
 }
 
-void setup() {
+void setup()
+{
+  // PWM output
+
+  // consoleNoteLn_P(PSTR("Initializing PWM output"));
+
+  pwmTimerInit(hwTimers, sizeof(hwTimers)/sizeof(struct HWTimer*));
+  pwmOutputInitList(pwmOutput, sizeof(pwmOutput)/sizeof(struct PWMOutput));
+
   // HAL
 
   hal.init(0, NULL);
@@ -3083,13 +3087,6 @@ void setup() {
   vpStatus.consoleLink = true;
   
   consoleNoteLn_P(PSTR("Project | Alpha"));   
-
-  // PWM output
-
-  consoleNoteLn_P(PSTR("Initializing PWM output"));
-
-  pwmTimerInit(hwTimers, sizeof(hwTimers)/sizeof(struct HWTimer*));
-  pwmOutputInitList(pwmOutput, sizeof(pwmOutput)/sizeof(struct PWMOutput));
 
   // I2C
   
@@ -3173,14 +3170,11 @@ void setup() {
 
   accAvg.reset(G);
 
-  // Free RAM
-  
-  consoleNote_P(PSTR("Free RAM: "));
-  consolePrintLn((unsigned long) hal.util->available_memory());
-  
   // Done
   
-  consoleNoteLn_P(PSTR("Initialized"));
+  consoleNote_P(PSTR("Initialized, "));
+  consolePrint((unsigned long) hal.util->available_memory());
+  consolePrintLn_P(PSTR(" bytes free."));
   goodBeep(0.5);
   
   datagramTxStart(DG_INITIALIZED);

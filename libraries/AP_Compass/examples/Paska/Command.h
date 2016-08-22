@@ -77,7 +77,7 @@ typedef enum {
 } token_t;
 
 typedef enum
-  { e_int8, e_uint16, e_angle90, e_angle360, e_percent, e_float, e_string } varType_t;
+  { e_int8, e_uint16, e_angle, e_angle90, e_percent, e_float, e_string } varType_t;
 
 struct Command {
   char name[MAX_NAME_LEN];

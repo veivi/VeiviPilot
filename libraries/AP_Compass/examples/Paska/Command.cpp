@@ -4,8 +4,8 @@
 
 const struct Command commands[] PROGMEM = {
   { "name", c_name, e_string, &vpParam.name },
-  { "max", c_max, e_angle360, &vpParam.alphaMax },
-  { "zl", c_zl, e_angle360, &vpParam.alphaZeroLift },
+  { "max", c_max, e_angle, &vpParam.alphaMax },
+  { "zl", c_zl, e_angle, &vpParam.alphaZeroLift },
   { "5048b_ref", c_5048b_ref, e_uint16, &vpParam.alphaRef },
   { "inner_pid_zn", c_inner_pid_zn,
     e_float, &vpParam.i_Ku_C, &vpParam.i_Tu },
@@ -15,7 +15,7 @@ const struct Command commands[] PROGMEM = {
     e_float, &vpParam.s_Ku_C, &vpParam.s_Tu },
   { "pusher_pid_zn", c_pusher_pid_zn,
     e_float, &vpParam.p_Ku, &vpParam.p_Tu },
-  { "wl", c_wl, e_float, &vpParam.wl_Limit },
+  { "wl", c_wl, e_angle, &vpParam.wl_Limit },
   { "rmix", c_rmix, e_float, &vpParam.r_Mix },
   { "edefl", c_edefl, e_angle90, &vpParam.elevDefl },
   { "eneutral", c_eneutral, e_angle90, &vpParam.elevNeutral },

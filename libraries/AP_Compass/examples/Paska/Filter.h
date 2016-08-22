@@ -11,6 +11,8 @@
 
 const int windowLenMax = 1<<5;
 
+const float G = 9.81, RADIAN = 360/2/PI, FOOT = 12*25.4/1000, KNOT = 1852.0/60/60, PSF = 47.880259;
+
 float sign(float x);
 float clamp(float value, float a, float b);
 float mixValue(float mixRatio, float a, float b);
