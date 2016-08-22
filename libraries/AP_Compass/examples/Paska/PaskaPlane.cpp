@@ -1861,6 +1861,14 @@ static float scaleByIAS(float k, float p)
   return k * powf(fmaxf(iasFilter.output(), vpParam.iasMin), p);
 }
 
+static void failsafeDisable()
+{
+  if(vpMode.alphaFailSafe || vpMode.sensorFailSafe) {
+    consoleNoteLn_P(PSTR("Alpha/Sensor failsafe DISABLED"));
+    vpMode.alphaFailSafe = vpMode.sensorFailSafe = false;
+  }
+}
+
 void configurationTask()
 {
   //
@@ -1993,9 +2001,8 @@ void configurationTask()
     //
   
     if(vpMode.alphaFailSafe || vpMode.sensorFailSafe) {
-      consoleNoteLn_P(PSTR("Alpha/Sensor failsafe DISABLED"));
-      vpMode.alphaFailSafe = vpMode.sensorFailSafe = false;
-            
+      failsafeDisable();
+      
     } else {
       if(!vpMode.takeOff && iasFilter.output() < vpParam.iasMin*2/3) {
 	consoleNoteLn_P(PSTR("TakeOff mode ENABLED"));
@@ -2026,6 +2033,8 @@ void configurationTask()
     // CONTINUOUS : LEVEL WINGS
     //
   
+    failsafeDisable();
+      
     if(!vpMode.bankLimiter) {
       consoleNoteLn_P(PSTR("Bank limiter ENABLED"));
       vpMode.bankLimiter = true;
