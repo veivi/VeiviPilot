@@ -57,7 +57,7 @@ float randomNum(float small, float large)
 uint32_t randomUInt32()
 {
   uint32_t buffer = 0;
-  for(int i = 0; i < sizeof(buffer); i++)
+  for(unsigned int i = 0; i < sizeof(buffer); i++)
     buffer = (buffer<<8) | (uint32_t) randomNum(0, 1<<8);
   return buffer;
 }

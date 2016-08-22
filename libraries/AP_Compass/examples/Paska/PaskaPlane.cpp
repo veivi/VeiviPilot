@@ -190,7 +190,6 @@ struct FeatureRecord {
   bool pitchHold;
   bool alphaHold;
   bool pusher;
-  bool autoBall;
 };
 
 struct GPSFix {
@@ -215,7 +214,7 @@ float iAS, dynPressure, alpha, effAlpha, aileStick, elevStick, throttleStick, ru
 bool ailePilotInput, elevPilotInput, rudderPilotInput;
 uint32_t controlCycleEnded;
 float elevTrim, effTrim, elevTrimSub, targetAlpha;
-Controller elevCtrl, aileCtrl, pushCtrl, rudderCtrl;
+Controller elevCtrl, aileCtrl, pushCtrl;
 float autoAlphaP, maxAlpha, shakerAlpha, thresholdAlpha, rudderMix;
 float accX, accY, accZ, accTotal, altitude,  heading, bankAngle, pitchAngle, rollRate, pitchRate, targetPitchRate, yawRate, levelBank;
 float parameter;  
@@ -724,15 +723,7 @@ bool toc_test_ppm(bool reset)
 
 bool toc_test_ram(bool reset)
 {
-  uint32_t freeRam = hal.util->available_memory();
-  
-  if(freeRam < (1<<9)) {
-    consoleNote_P(PSTR("Low RAM : "));
-    consolePrintLn(freeRam);
-    return false;
-  }
-
-  return true;
+  return hal.util->available_memory() > (1<<9);
 }
 
 bool toc_test_timing(bool reset)
@@ -2207,7 +2198,7 @@ void configurationTask()
     vpFeature.pusher = !vpMode.takeOff && !vpMode.slowFlight;
     vpFeature.stabilizePitch = vpFeature.alphaHold
       = vpMode.slowFlight && !vpMode.takeOff;
-    vpFeature.pitchHold = vpFeature.autoBall = false;
+    vpFeature.pitchHold = false;
   
     // Failsafe mode interpretation
 
@@ -2335,31 +2326,9 @@ void configurationTask()
       // ball centered, reduced controller gain to increase stability
          
       vpFeature.stabilizeBank = vpMode.bankLimiter = vpMode.wingLeveler = true;
-      vpFeature.autoBall = true;
       rudderMix = 0;
-      aileCtrl.
-	setZieglerNicholsPID(s_Ku*testGain, vpParam.s_Tu);
-      //      rudderCtrl.
-      //	setZieglerNicholsPI(vpParam.r_Ku*testGain, vpParam.r_Tu);
       break;
 
-    case 7:
-      // Auto ball gain
-         
-      vpFeature.stabilizeBank = vpMode.bankLimiter = vpMode.wingLeveler = true;
-      vpFeature.autoBall = true;
-      rudderMix = 0;
-      //      rudderCtrl.setPID(testGain = testGainExpo(vpParam.r_Ku), 0, 0);
-      break;
-            
-    case 8:
-      // Auto ball empirical gain, PI
-       
-      vpFeature.autoBall = true;
-      //      rudderCtrl.setZieglerNicholsPI(testGain = testGainExpo(vpParam.r_Ku),
-      //				     vpParam.r_Tu);
-      break;
-       
     case 9:
       // Max alpha
 
@@ -2827,23 +2796,8 @@ void controlTask()
     
   // Rudder
     
-  rudderOutput = rudderStick;
-    
-  if(vpFeature.autoBall) {
-    const float factor_c = 1/9.81/4;
-
-    if(!rudderPilotInput)
-      rudderCtrl.input(-ball.output()*factor_c, controlCycle);
-    
-    rudderOutput += rudderCtrl.output();
-  } else
-    rudderCtrl.reset(rudderOutput, 0);
-
-  // Aileron/rudder mix
-  
-  rudderOutput += aileRateLimiter.output()*rudderMix;
-
-  rudderOutput = clamp(rudderOutput, -1, 1);
+  rudderOutput =
+    clamp(rudderStick + aileRateLimiter.output()*rudderMix, -1, 1);
 
   // Flaps
   
