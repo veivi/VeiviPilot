@@ -1025,6 +1025,10 @@ const prog_char_t *applyParamUpdate()
   vpParam.o_P /= 2*PI;
   return PSTR("i_Ku, s_Ku, p_Ku, o_P scaled by 1/2/PI");
   */
+  /*  
+  vpParam.ff_B *= RADIAN;
+  return PSTR("ff_B scaled by RADIAN");
+  */
   return NULL;
 }
 

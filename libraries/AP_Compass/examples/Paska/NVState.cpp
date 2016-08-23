@@ -313,10 +313,10 @@ void backupParams()
 
 float elevFromAlpha(float x)
 {
-  return vpParam.ff_A + vpParam.ff_B*x*RADIAN;
+  return vpParam.ff_A + vpParam.ff_B*x;
 }
 
 float alphaFromElev(float x)
 {
-  return (x - vpParam.ff_A)/vpParam.ff_B/RADIAN;
+  return (x - vpParam.ff_A)/vpParam.ff_B;
 }
