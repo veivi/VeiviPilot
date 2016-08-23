@@ -1513,15 +1513,17 @@ void sensorTaskFast()
   
   ahrs.update();
 
+  bankAngle = ahrs.roll;
+  pitchAngle = ahrs.pitch;
+  heading = ahrs.yaw;
+
+  // Angular velocities
+  
   Vector3f gyro = ins.get_gyro();
   
   rollRate = gyro.x;
   pitchRate = gyro.y;
   yawRate = gyro.z;
-
-  bankAngle = ahrs.roll;
-  pitchAngle = ahrs.pitch;
-  heading = ahrs.yaw;
 
   // Acceleration
   
