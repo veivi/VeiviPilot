@@ -319,7 +319,7 @@ int linkDownCount = 0, heartBeatCount = 0;
   
 void datagramRxError(const char *error)
 {
-  consoleNote_P(PSTR("DG RX ERROR : "));
+  consoleNote_P(PSTR("DG "));
   consolePrintLn(error);
 }
   
@@ -1577,26 +1577,25 @@ void sensorTaskFast()
   
   if(vpStatus.simulatorLink) {
     alpha = sensorData.alpha/RADIAN;
-    dynPressure = sensorData.qbar*PSF;
+    iAS = sensorData.ias*1852/60/60;
+    dynPressure = 1/2*square(iAS);
     rollRate = sensorData.rrate;
     pitchRate = sensorData.prate;
     yawRate = sensorData.yrate;
-    bankAngle = sensorData.roll;
-    pitchAngle = sensorData.pitch;
-    heading = sensorData.heading;
+    bankAngle = sensorData.roll/RADIAN;
+    pitchAngle = sensorData.pitch/RADIAN;
+    heading = sensorData.heading/RADIAN;
     accX = sensorData.accx*FOOT;
     accY = sensorData.accy*FOOT;
     accZ = sensorData.accz*FOOT;
-  }  
+  } else if(dynPressure > 0)
+    iAS = sqrtf(2*dynPressure);
+  else
+    iAS = 0;
 
   //
   // Derived values
   //
-  
-  if(dynPressure > 0)
-    iAS = sqrtf(2*dynPressure);
-  else
-    iAS = 0;
     
   effAlpha = clamp(alpha, -RADIAN, RADIAN);
   iasFilter.input(iAS);
@@ -2403,7 +2402,7 @@ void gaugeTask()
 	consolePrint((int) (iAS/KNOT));
 	consoleTab(30);
 	consolePrint_P(PSTR(" hdg = "));
-	consolePrint((int) heading);
+	consolePrint((int) (heading*RADIAN));
 	consoleTab(45);
 	consolePrint_P(PSTR(" alt = "));
 
@@ -2441,11 +2440,11 @@ void gaugeTask()
 	
       case 4:
 	consolePrint_P(PSTR(" bank = "));
-	consolePrint(bankAngle, 2);
+	consolePrint(bankAngle*RADIAN, 2);
 	consolePrint_P(PSTR(" pitch = "));
-	consolePrint(pitchAngle, 2);
+	consolePrint(pitchAngle*RADIAN, 2);
 	consolePrint_P(PSTR(" heading = "));
-	consolePrint(heading);
+	consolePrint(heading*RADIAN);
 	consolePrint_P(PSTR(" alt = "));
 	consolePrint(altitude);
 	consolePrint_P(PSTR(" ball = "));
