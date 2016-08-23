@@ -1578,7 +1578,6 @@ void sensorTaskFast()
   if(vpStatus.simulatorLink) {
     alpha = sensorData.alpha/RADIAN;
     iAS = sensorData.ias*1852/60/60;
-    dynPressure = 1/2*square(iAS);
     rollRate = sensorData.rrate;
     pitchRate = sensorData.prate;
     yawRate = sensorData.yrate;
@@ -1588,7 +1587,10 @@ void sensorTaskFast()
     accX = sensorData.accx*FOOT;
     accY = sensorData.accy*FOOT;
     accZ = sensorData.accz*FOOT;
-  } else if(dynPressure > 0)
+
+    dynPressure = 1/2*square(iAS);
+    
+  } else if(dynPressure > 0)    
     iAS = sqrtf(2*dynPressure);
   else
     iAS = 0;
@@ -2801,10 +2803,9 @@ void controlTask()
       targetRollRate -=
 	maxRollRate*clamp(bankAngle, -vpParam.wl_Limit, vpParam.wl_Limit);
       
-      targetRollRate =
-	clamp(targetRollRate,
-	      (-maxBank - bankAngle)*maxRollRate,
-	      (maxBank - bankAngle)*maxRollRate);
+      targetRollRate = clamp(targetRollRate,
+			     (-maxBank - bankAngle)*maxRollRate,
+			     (maxBank - bankAngle)*maxRollRate);
     }
       
     aileCtrl.input(targetRollRate - rollRate, controlCycle);
