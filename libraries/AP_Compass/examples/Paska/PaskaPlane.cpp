@@ -2220,7 +2220,7 @@ void configurationTask()
 
   float s_Ku = scaleByIAS(vpParam.s_Ku_C, stabilityAileExp1_c);
   float i_Ku = scaleByIAS(vpParam.i_Ku_C, stabilityElevExp_c);
-  float p_Ku = scaleByIAS(vpParam.p_Ku, stabilityElevExp_c);
+  float p_Ku = scaleByIAS(vpParam.p_Ku_C, stabilityElevExp_c);
   
   aileCtrl.setZieglerNicholsPID(s_Ku*scale, vpParam.s_Tu);
   elevCtrl.setZieglerNicholsPID(i_Ku*scale, vpParam.i_Tu);

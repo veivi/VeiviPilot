@@ -14,7 +14,7 @@ const struct Command commands[] PROGMEM = {
   { "stabilizer_pid_zn", c_stabilizer_pid_zn,
     e_float, &vpParam.s_Ku_C, &vpParam.s_Tu },
   { "pusher_pid_zn", c_pusher_pid_zn,
-    e_float, &vpParam.p_Ku, &vpParam.p_Tu },
+    e_float, &vpParam.p_Ku_C, &vpParam.p_Tu },
   { "wl", c_wl, e_angle, &vpParam.wl_Limit },
   { "rmix", c_rmix, e_float, &vpParam.r_Mix },
   { "edefl", c_edefl, e_angle90, &vpParam.elevDefl },

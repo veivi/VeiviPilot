@@ -35,7 +35,7 @@ const struct ParamRecord paramDefaults = {
   .i_Ku_C = 100, .i_Tu = 0.25, .o_P = 0.3, 
   .s_Ku_C = 400, .s_Tu = 0.25, 
   .r_Mix = 0.1,
-  .p_Ku = 15, .p_Tu = 2.0,
+  .p_Ku_C = 100, .p_Tu = 1.0,
   .ff_A = 0.0, .ff_B = 0.0,
   .wl_Limit = 0.0,
   .iasMin = 12,
@@ -163,8 +163,8 @@ void printParams()
   consolePrint(alphaFromElev(1.0)*RADIAN);
   consolePrintLn_P(PSTR(")"));
   consoleNoteLn_P(PSTR("  Pusher"));
-  consoleNote_P(PSTR("    Ku = "));
-  consolePrint(vpParam.p_Ku, 4);
+  consoleNote_P(PSTR("    Ku*IAS^1.5 = "));
+  consolePrint(vpParam.p_Ku_C, 4);
   consolePrint_P(PSTR(" Tu = "));
   consolePrintLn(vpParam.p_Tu, 4);
   consoleNoteLn_P(PSTR("  Stabilizer"));
