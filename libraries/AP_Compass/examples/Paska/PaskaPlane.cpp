@@ -2260,7 +2260,6 @@ void configurationTask()
   aileCtrl.setZieglerNicholsPID(s_Ku*scale, vpParam.s_Tu);
   elevCtrl.setZieglerNicholsPID(i_Ku*scale, vpParam.i_Tu);
   pushCtrl.setZieglerNicholsPID(p_Ku*scale, vpParam.p_Tu);
-  pushCtrl.limit(0.3, 1);
 
   autoAlphaP = vpParam.o_P;
   maxAlpha = vpParam.alphaMax;
@@ -2268,7 +2267,6 @@ void configurationTask()
   levelBank = 0;
   
   aileRateLimiter.setRate(vpParam.servoRate/(90.0/2)/vpParam.aileDefl);
-  flapRateLimiter.setRate(0.5);
   
   // Then apply test modes
   
@@ -2350,14 +2348,6 @@ void configurationTask()
       // Pusher gain
          
       pushCtrl.setPID(testGain = testGainExpo(p_Ku_ref), 0, 0);
-      break;
-      
-    case 6:
-      // Aileron and rudder calibration, straight and level flight with
-      // ball centered, reduced controller gain to increase stability
-         
-      vpFeature.stabilizeBank = vpMode.bankLimiter = vpMode.wingLeveler = true;
-      rudderMix = 0;
       break;
 
     case 9:
@@ -2772,7 +2762,7 @@ void controlTask()
     pushCtrl.input(effMaxAlpha - effAlpha, controlCycle);
     elevOutput = fminf(elevOutput, pushCtrl.output());
   } else
-    pushCtrl.reset(elevOutput, (effMaxAlpha - effAlpha)/effMaxAlpha);
+    pushCtrl.reset(elevOutput, effMaxAlpha - effAlpha);
   
   elevOutput = clamp(elevOutput, -1, 1);
   
@@ -3187,7 +3177,6 @@ void setup()
 
   // Piezo element
   
-  pwmDisable(&PIEZO);
   setPinState(&PIEZO.pin, 0);
   configureOutput(&PIEZO.pin);
 
@@ -3199,6 +3188,11 @@ void setup()
 
   elevatorDelay.setDelay(1);
   aileronDelay.setDelay(1);
+
+  // Static controller settings
+  
+  pushCtrl.limit(0.3, 1);
+  flapRateLimiter.setRate(0.5);
   
   // Misc filters
 

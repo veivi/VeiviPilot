@@ -92,10 +92,10 @@ void Controller::input(float err, float d) {
     return;
   }
 
+  prevD = d;
   D = err - prevErr;
   prevErr = err;
   
-  errorFilter.input(D);
   delta = d;
   
   if(Ki < 0.02)
@@ -105,9 +105,7 @@ void Controller::input(float err, float d) {
 }
 
 float Controller::output(void) {
-  float diffTerm = 0.0, diffLimit = 0.15;
-  if(Kd != 0.0)
-    // diffTerm = clamp(Kd*errorFilter.output()/delta, -diffLimit, diffLimit);
-    diffTerm = clamp(Kd*D/delta, -diffLimit, diffLimit);
+  const float diffLimit = 0.5,
+    diffTerm = clamp(Kd*(D+prevD)/2/delta, -diffLimit, diffLimit);
   return clamp(Kp*prevErr + I + diffTerm, rangeMin, rangeMax);
 }

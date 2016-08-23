@@ -22,9 +22,8 @@ public:
   
   bool warn;
 private:
-  float I, D, delta, prevErr, Kp, Ki, Kd;
+  float I, D, prevD, delta, prevErr, Kp, Ki, Kd;
   float rangeMin, rangeMax;
-  Median3Filter errorFilter;
 };
 
 float znGain(float kP, float kI, float kD);
