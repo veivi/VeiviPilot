@@ -2220,16 +2220,16 @@ void configurationTask()
   
   // Default controller settings
 
-  float s_Ku = scaleByIAS(vpParam.s_Ku_C, stabilityAileExp1_c);
-  float i_Ku = scaleByIAS(vpParam.i_Ku_C, stabilityElevExp_c);
-  float p_Ku = scaleByIAS(vpParam.p_Ku_C, stabilityElevExp_c);
+  float s_Ku = scaleByIAS(vpParam.s_Ku_C/2/PI, stabilityAileExp1_c);
+  float i_Ku = scaleByIAS(vpParam.i_Ku_C/2/PI, stabilityElevExp_c);
+  float p_Ku = scaleByIAS(vpParam.p_Ku_C/2/PI, stabilityElevExp_c);
   
   aileCtrl.setZieglerNicholsPID(s_Ku*scale, vpParam.s_Tu);
   elevCtrl.setZieglerNicholsPID(i_Ku*scale, vpParam.i_Tu);
   pushCtrl.setZieglerNicholsPID(p_Ku*scale, vpParam.p_Tu);
   pushCtrl.limit(0.3, 1);
 
-  autoAlphaP = vpParam.o_P;
+  autoAlphaP = vpParam.o_P/2/PI;
   maxAlpha = vpParam.alphaMax;
   rudderMix = vpParam.r_Mix;
   levelBank = 0;
@@ -2310,7 +2310,7 @@ void configurationTask()
       // Auto alpha outer loop gain
          
       vpFeature.stabilizePitch = vpFeature.alphaHold = true;
-      autoAlphaP = testGain = testGainExpo(vpParam.o_P);
+      autoAlphaP = testGain = testGainExpo(vpParam.o_P/2/PI);
       break;
                
     case 5:
@@ -2705,7 +2705,7 @@ void controlTask()
 
   if(vpFeature.alphaHold)
     targetPitchRate = nominalPitchRate(bankAngle, targetAlpha)
-      + (targetAlpha - effAlpha)/360*RADIAN*autoAlphaP*maxPitchRate;
+      + (targetAlpha - effAlpha)*autoAlphaP*maxPitchRate;
   
   else if(vpFeature.pitchHold)
     targetPitchRate = (0.1 + effStick/2 - pitchAngle)*maxPitchRate;
@@ -2716,7 +2716,7 @@ void controlTask()
   elevOutputFeedForward = elevFromAlpha(targetAlpha);
 
   if(vpFeature.stabilizePitch) {
-    elevCtrl.input((targetPitchRate - pitchRate)*RADIAN/360, controlCycle);
+    elevCtrl.input(targetPitchRate - pitchRate, controlCycle);
     
     elevOutput = elevCtrl.output();
 
@@ -2736,7 +2736,7 @@ void controlTask()
   // Pusher
 
   if(vpFeature.pusher) {
-    pushCtrl.input((effMaxAlpha - effAlpha)/effMaxAlpha, controlCycle);
+    pushCtrl.input(effMaxAlpha - effAlpha, controlCycle);
     elevOutput = fminf(elevOutput, pushCtrl.output());
   } else
     pushCtrl.reset(elevOutput, (effMaxAlpha - effAlpha)/effMaxAlpha);
@@ -2785,7 +2785,7 @@ void controlTask()
 	      (maxBank - bankAngle)*maxRollRate);
     }
       
-    aileCtrl.input((targetRollRate - rollRate)*RADIAN/360, controlCycle);
+    aileCtrl.input(targetRollRate - rollRate, controlCycle);
     aileOutput = aileCtrl.output();
   }
 
