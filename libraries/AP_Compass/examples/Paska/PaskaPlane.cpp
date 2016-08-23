@@ -1470,7 +1470,7 @@ void receiverTask()
     trimRateLimiter.setRate(1.5/RADIAN);
     elevTrim = elevFromAlpha(thresholdAlpha) - elevTrimSub;
   } else
-    trimRateLimiter.setRate(1);
+    trimRateLimiter.setRate(2*PI);
       
   // Delay the controls just to make sure we always detect the failsafe
   // mode before doing anything abrupt
@@ -2693,20 +2693,19 @@ void controlTask()
   const float shakerLimit = (float) 2/3;
   const float effStick = vpMode.rxFailSafe ? shakerLimit : elevStick;
   const float stickStrength = fmaxf(effStick-shakerLimit, 0)/(1-shakerLimit);
-
+  const float effMaxAlpha = mixValue(stickStrength, shakerAlpha, maxAlpha);
+    
   effTrim = vpFeature.alphaHold ? elevTrim + elevTrimSub : elevTrim;
 
   elevOutput = effStick + effTrim;
   
-  const float effMaxAlpha = mixValue(stickStrength, shakerAlpha, maxAlpha);
-    
   targetAlpha = trimRateLimiter.input
     (clamp(alphaFromElev(elevOutput), -vpParam.alphaMax, effMaxAlpha),
      controlCycle);
 
   if(vpFeature.alphaHold)
     targetPitchRate = nominalPitchRate(bankAngle, targetAlpha)
-      + (targetAlpha - effAlpha)*autoAlphaP*maxPitchRate;
+      + (targetAlpha - effAlpha)/360*RADIAN*autoAlphaP*maxPitchRate;
   
   else if(vpFeature.pitchHold)
     targetPitchRate = (0.1 + effStick/2 - pitchAngle)*maxPitchRate;
