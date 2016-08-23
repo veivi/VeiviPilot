@@ -302,7 +302,7 @@ void pingTestRx(uint32_t value)
 
 #include "Serial.h"
 
-#define MAX_DG_SIZE  (1<<6)
+#define MAX_DG_SIZE  (1<<7)
 
 extern "C" {
 
@@ -512,11 +512,11 @@ void logAttitude(void)
   logGeneric(lc_accx, accX);
   logGeneric(lc_accy, accY);
   logGeneric(lc_accz, accZ);
-  logGeneric(lc_roll, bankAngle);
+  logGeneric(lc_roll, bankAngle*RADIAN);
   logGeneric(lc_rollrate, rollRate*RADIAN);
-  logGeneric(lc_pitch, pitchAngle);
+  logGeneric(lc_pitch, pitchAngle*RADIAN);
   logGeneric(lc_pitchrate, pitchRate*RADIAN);
-  logGeneric(lc_heading, heading);
+  logGeneric(lc_heading, heading*RADIAN);
   logGeneric(lc_yawrate, yawRate*RADIAN);
 }
 
