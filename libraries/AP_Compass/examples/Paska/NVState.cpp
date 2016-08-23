@@ -270,6 +270,8 @@ static void backupParamEntry(const Command *e)
   consolePrintLn("");
 } 
 
+const prog_char_t *updateDescription = NULL;
+
 void backupParams()
 {
   datagramTxStart(DG_PARAMS);
@@ -278,6 +280,10 @@ void backupParams()
   
   consoleNoteLn_P(PSTR("Param backup"));
   consoleNoteLn("");
+  if(updateDescription) {
+    consoleNote("  APPLIED UPDATE : ");
+    consolePrintLn_P(updateDescription);
+  }
   consoleNote_P(PSTR("MODEL "));
   consolePrint(nvState.model);
   consolePrint_P(PSTR(" "));

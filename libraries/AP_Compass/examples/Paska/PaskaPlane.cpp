@@ -1016,6 +1016,18 @@ int indexOf(const char *s, const char c)
   return indexOf(s, c, 0);
 }
 
+const prog_char_t *applyParamUpdate()
+{
+  /*
+  vpParam.i_Ku_C /= 2*PI;
+  vpParam.s_Ku_C /= 2*PI;
+  vpParam.p_Ku_C /= 2*PI;
+  vpParam.o_P /= 2*PI;
+  return PSTR("i_Ku, s_Ku, p_Ku, o_P scaled by 1/2/PI");
+  */
+  return NULL;
+}
+
 void executeCommand(const char *buf)
 {
   int bufLen = strlen(buf);
@@ -1230,7 +1242,6 @@ void executeCommand(const char *buf)
     case c_defaults:
       consoleNoteLn_P(PSTR("Default params restored"));
       defaultParams();
-      storeNVState();
       break;
 
     case c_dump:
@@ -1245,6 +1256,24 @@ void executeCommand(const char *buf)
       setModel(currentModel);
       break;
 
+    case c_update:
+      if(!updateDescription) {
+	for(int i = 0; i < maxModels(); i++) {
+	  if(setModel(i)) {
+	    updateDescription = applyParamUpdate();
+	    storeParams();
+	  }
+	}
+	
+	setModel(currentModel);
+	
+	if(updateDescription) {
+	  consoleNote_P(PSTR("Param update applied : "));
+	  consolePrintLn_P(updateDescription);
+	}
+      }
+      break;
+      
     case c_stamp:
       if(numParams > 0) {
 	nvState.logStamp = param[0];
@@ -2220,16 +2249,16 @@ void configurationTask()
   
   // Default controller settings
 
-  float s_Ku = scaleByIAS(vpParam.s_Ku_C/2/PI, stabilityAileExp1_c);
-  float i_Ku = scaleByIAS(vpParam.i_Ku_C/2/PI, stabilityElevExp_c);
-  float p_Ku = scaleByIAS(vpParam.p_Ku_C/2/PI, stabilityElevExp_c);
+  float s_Ku = scaleByIAS(vpParam.s_Ku_C, stabilityAileExp1_c);
+  float i_Ku = scaleByIAS(vpParam.i_Ku_C, stabilityElevExp_c);
+  float p_Ku = scaleByIAS(vpParam.p_Ku_C, stabilityElevExp_c);
   
   aileCtrl.setZieglerNicholsPID(s_Ku*scale, vpParam.s_Tu);
   elevCtrl.setZieglerNicholsPID(i_Ku*scale, vpParam.i_Tu);
   pushCtrl.setZieglerNicholsPID(p_Ku*scale, vpParam.p_Tu);
   pushCtrl.limit(0.3, 1);
 
-  autoAlphaP = vpParam.o_P/2/PI;
+  autoAlphaP = vpParam.o_P;
   maxAlpha = vpParam.alphaMax;
   rudderMix = vpParam.r_Mix;
   levelBank = 0;
@@ -2310,7 +2339,7 @@ void configurationTask()
       // Auto alpha outer loop gain
          
       vpFeature.stabilizePitch = vpFeature.alphaHold = true;
-      autoAlphaP = testGain = testGainExpo(vpParam.o_P/2/PI);
+      autoAlphaP = testGain = testGainExpo(vpParam.o_P);
       break;
                
     case 5:
