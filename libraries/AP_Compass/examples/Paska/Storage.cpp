@@ -10,15 +10,15 @@ extern const AP_HAL::HAL& hal;
 #define EEPROM_I2C_ADDR 80
 
 extern NewI2C I2c;
+extern I2CDevice eepromDevice;
 
-static int eepromFailCount = 0;
 static uint32_t lastWriteTime;
 uint8_t cacheData[CACHE_PAGE];
 bool cacheFlag[CACHE_PAGE];
 bool cacheValid, cacheModified;
 uint32_t cacheTag;
 uint32_t writeBytesCum;
-
+			
 void waitEEPROM(uint32_t addr);
 void writeEEPROM(uint32_t addr, const uint8_t *data, int bytes);
 bool readEEPROM(uint32_t addr, uint8_t *data, int size);
@@ -34,36 +34,34 @@ void waitEEPROM(uint32_t addr)
     
   // Write latency not met, wait for acknowledge
 
-  handleFailure("EEPROM wait",
-     I2c.wait((uint8_t) (EEPROM_I2C_ADDR
-     			+ (uint8_t) ((addr>>16) & 0x7))) != 0, 
-                  	&vpStatus.eepromWarn, &vpStatus.eepromFailed, &eepromFailCount);
+  eepromDevice.handleStatus
+    (I2c.wait((uint8_t) (EEPROM_I2C_ADDR
+			 + (uint8_t) ((addr>>16) & 0x7))) != 0);
 }
 
 void writeEEPROM(uint32_t addr, const uint8_t *data, int bytes) 
 {
-  if(vpStatus.eepromFailed)
+  if(eepromDevice.hasFailed())
     return;
     
   waitEEPROM(addr);
-  bool fail = I2c.write(  (uint8_t) EEPROM_I2C_ADDR + (uint8_t) ((addr>>16) & 0x7), 
-                             (uint16_t) (addr & 0xFFFFL), 
-                             data, bytes) != 0;
-  handleFailure("EEPROM write", fail, &vpStatus.eepromWarn, &vpStatus.eepromFailed, &eepromFailCount);
+  eepromDevice.handleStatus
+    (I2c.write(  (uint8_t) EEPROM_I2C_ADDR + (uint8_t) ((addr>>16) & 0x7), 
+		 (uint16_t) (addr & 0xFFFFL), 
+		 data, bytes) != 0);
+
   lastWriteTime = hal.scheduler->micros();
 }
  
 bool readEEPROM(uint32_t addr, uint8_t *data, int size) 
 {
-  if(vpStatus.eepromFailed)
+  if(eepromDevice.hasFailed())
     return true;
     
   waitEEPROM(addr);
 
-  bool fail = I2c.read((uint8_t) EEPROM_I2C_ADDR + (uint8_t) ((addr>>16) & 0x7), (uint16_t) (addr & 0xFFFFL), data, size) != 0;
-  
-  return handleFailure("EEPROM read", fail, &vpStatus.eepromWarn, &vpStatus.eepromFailed, &eepromFailCount);
-
+  return eepromDevice.handleStatus
+    (I2c.read((uint8_t) EEPROM_I2C_ADDR + (uint8_t) ((addr>>16) & 0x7), (uint16_t) (addr & 0xFFFFL), data, size) != 0);
 }
 
 void cacheFlush(void)

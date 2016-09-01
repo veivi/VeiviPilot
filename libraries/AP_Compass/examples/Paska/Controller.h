@@ -19,8 +19,6 @@ public:
   void limit(float, float);
 
   float output(void);
-  
-  bool warn;
 private:
   float I, D, prevD, delta, prevErr, Kp, Ki, Kd;
   float rangeMin, rangeMax;

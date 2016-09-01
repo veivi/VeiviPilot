@@ -33,6 +33,22 @@ class NewI2C
     static uint16_t timeOutDelay;
 };
 
+class I2CDevice {
+ public:
+  I2CDevice(NewI2C *interface, uint8_t addr, const char *name);
+  bool handleStatus(bool);
+  bool hasFailed();
+  bool status();
+
+ private:
+  bool warn, failed;
+  int failCount;
+  uint32_t failedAt;
+  const char *name;
+  //  NewI2C *interface;
+  //  uint8_t addr;
+};
+
 #endif
 
 

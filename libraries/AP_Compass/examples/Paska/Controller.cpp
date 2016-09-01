@@ -86,12 +86,6 @@ void Controller::limit(float a, float b) {
 }
 
 void Controller::input(float err, float d) {
-  if(d < 1.0e-3) {
-    warn = true;
-    consoleNoteLn_P(PSTR("Controller delta less than 1 ms, iteration ignored"));
-    return;
-  }
-
   prevD = d;
   D = err - prevErr;
   prevErr = err;

@@ -29,29 +29,44 @@ static uint32_t millis()
   return hal.scheduler->millis();
 }
 
-bool handleFailure(const char *name, bool fail, bool *warn, bool *failed, int *count)
+I2CDevice::I2CDevice(NewI2C *interface, uint8_t addr, const char *dname)
 {
-  if(*failed)
-    return true;
-    
+  name = dname;
+}
+
+bool I2CDevice::hasFailed()
+{
+  return failed && currentTime < failedAt+1e6;
+}
+
+bool I2CDevice::status()
+{
+  return warn || failed;
+}
+
+bool I2CDevice::handleStatus(bool fail)
+{
   if(fail) {
-    *warn = true;
+    warn = true;
     
     consoleNote_P(PSTR("Bad "));
     consolePrintLn(name);
-    
-    if(++(*count) > 10) {
+
+    if(!failed && ++failCount > 10) {
       consoleNote("");
       consolePrint(name);
       consolePrintLn_P(PSTR(" failed"));
-      *failed = true;
+      failed = true;
     }
+    
+    failedAt = currentTime;
   } else {    
-    if(*count > 0) {
+    if(failCount > 0) {
       consoleNote("");
       consolePrint(name);
       consolePrintLn_P(PSTR(" recovered"));
-      *count = 0;
+      failCount = 0;
+      failed = warn = false;
     }
   }
   

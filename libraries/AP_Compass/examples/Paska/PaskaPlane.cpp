@@ -226,6 +226,8 @@ uint16_t iasEntropy, alphaEntropy, sensorHash = 0xFFFF;
 bool beepGood;
 const int maxParams = 8;
 int beepDuration, gaugeCount, gaugeVariable[maxParams];
+I2CDevice alphaDevice(&I2c, 0, "alpha"), pitotDevice(&I2c, 0, "pitot");
+I2CDevice eepromDevice(&I2c, 0, "EEPROM");
 
 const int maxTests_c = 1;
 float autoTestIAS[maxTests_c], autoTestK[maxTests_c], autoTestT[maxTests_c], autoTestKxIAS[maxTests_c];
@@ -541,11 +543,6 @@ float readParameter()
 bool readAlpha_5048B(int16_t *result) {
   uint16_t raw = 0;
   
-  if(vpStatus.alphaFailed)
-    // Stop trying
-    
-    return false;
-  
   if(!read5048B_word14(AS5048B_ANGLMSB_REG, &raw))
     // Failed
     return false;
@@ -564,10 +561,6 @@ bool readPressure(int16_t *result)
   static int accCount;
   static bool done = false;
   const int log2CalibWindow = 8;
-  
-  if(vpStatus.iasFailed)
-    // Stop trying
-    return false;
   
   uint16_t raw = 0;
 
@@ -702,19 +695,25 @@ const float toc_margin_c = 0.02;
 
 bool toc_test_mode(bool reset)
 {
-  return !vpMode.test && vpMode.wingLeveler;
+  if(reset)
+    return true;
+  else
+    return !vpMode.test && vpMode.wingLeveler;
 }
 
 bool toc_test_trim(bool reset)
 {
-  return fabsf(elevTrim - vpParam.takeoffTrim) < toc_margin_c;
+  if(reset)
+    return true;
+  else
+    return fabsf(elevTrim - vpParam.takeoffTrim) < toc_margin_c;
 }
 
 bool toc_test_ppm(bool reset)
 {
   if(reset)
     ppmWarnShort = ppmWarnSlow = false;
-
+  
   return !ppmWarnShort && !ppmWarnSlow;
 }
 
@@ -730,6 +729,7 @@ bool toc_test_timing(bool reset)
   
   if(reset) {
     result = measured = started = false;
+    return true;
 
   } else if(!started) {
     if(!beepDuration) {
@@ -757,18 +757,12 @@ bool toc_test_load(bool reset)
 
 bool toc_test_eeprom(bool reset)
 {
-  if(reset)
-    vpStatus.eepromWarn = vpStatus.eepromFailed = false;
-
-  return !vpStatus.eepromWarn && !vpStatus.eepromFailed;
+  return !eepromDevice.status();
 }
 
 bool toc_test_alpha_sensor(bool reset)
 {
-  if(reset)
-    vpStatus.alphaWarn = vpStatus.alphaFailed = false;
-  return (!vpStatus.alphaWarn && !vpStatus.alphaFailed
-	  && alphaEntropyAcc.output() > 10);
+  return !alphaDevice.status() && alphaEntropyAcc.output() > 10;
 }
 
 bool toc_test_alpha_range(bool reset)
@@ -779,6 +773,8 @@ bool toc_test_alpha_range(bool reset)
   if(reset) {
     zeroAlpha = bigAlpha = bigAlphaAgain = false;
     lastNonZeroAlpha = lastSmallAlpha = currentTime;
+    return true;
+    
   } else if(!bigAlpha) {
     if(fabsf(alpha - 90/RADIAN) > 15/RADIAN) {
       lastSmallAlpha = currentTime;
@@ -807,10 +803,7 @@ bool toc_test_alpha_range(bool reset)
 
 bool toc_test_pitot_sensor(bool reset)
 {
-  if(reset)
-    vpStatus.iasWarn = vpStatus.iasFailed = false;
-  return (!vpStatus.iasWarn && !vpStatus.iasFailed
-	  && alphaEntropyAcc.output() > 10);
+  return !pitotDevice.status() && iasEntropyAcc.output() > 10;
 }
 
 bool toc_test_pitot_block(bool reset)
@@ -820,14 +813,20 @@ bool toc_test_pitot_block(bool reset)
 
 bool toc_test_attitude(bool reset)
 {
-  return fabsf(pitchAngle) < 10.0 && fabsf(bankAngle) < 5.0;
+  if(reset)
+    return true;
+  else
+    return fabsf(pitchAngle) < 10.0 && fabsf(bankAngle) < 5.0;
 }
 
 bool toc_test_turn(bool reset)
 {
-  return (fabsf(pitchRate) < 1.0/RADIAN
-	  && fabsf(rollRate) < 1.0/RADIAN
-	  && fabsf(yawRate) < 1.0/RADIAN);
+  if(reset)
+    return true;
+  else
+    return (fabsf(pitchRate) < 1.0/RADIAN
+	    && fabsf(rollRate) < 1.0/RADIAN
+	    && fabsf(yawRate) < 1.0/RADIAN);
 }
 
 struct TOCRangeTestState {
@@ -838,9 +837,10 @@ bool toc_test_range_generic(struct TOCRangeTestState *state, bool reset, struct 
 {
   const float value = inputValue(input);
   
-  if(reset)
+  if(reset) {
     state->valueMin = state->valueMax = value;
-  else {
+    return true;
+  } else {
     state->valueMin = fminf(state->valueMin, value);
     state->valueMax = fmaxf(state->valueMax, value);
   }
@@ -908,9 +908,11 @@ bool toc_test_button(bool reset)
 {
   static bool leftUp, leftDown, rightUp, rightDown;
 
-  if(reset)
+  if(reset) {
     leftUp = leftDown = rightUp = rightDown = false;
-  else {
+    return true;
+    
+  } else {
     leftUp |= leftUpButton.state();
     leftDown |= leftDownButton.state();
     rightUp |= rightUpButton.state();
@@ -968,8 +970,9 @@ bool tocTestInvoke(bool reset, bool challenge, bool verbose)
 	consolePrint(cache.description);
 	consolePrint(" ");
       }
-      
-      (*cache.function)(true); // Reset the failed test
+
+      if(!reset)
+	(*cache.function)(true); // Reset the failed test anyway
       fail = true;
     }
   }
@@ -980,9 +983,9 @@ bool tocTestInvoke(bool reset, bool challenge, bool verbose)
   return !fail;
 }
 
-void tocTestReset()
+bool tocTestReset()
 {
-  tocTestInvoke(true, false, false);
+  return tocTestInvoke(true, true, true);
 }
 
 void tocTestUpdate()
@@ -1340,7 +1343,7 @@ void executeCommand(const char *buf)
       consolePrintLn(simInputFreq);
       consoleNote_P(PSTR("Alpha = "));
       consolePrint(alpha*RADIAN);
-      if(vpStatus.alphaFailed)
+      if(alphaDevice.status())
 	consolePrintLn_P(PSTR(" FAIL"));
       else
 	consolePrintLn_P(PSTR(" OK"));
@@ -1363,26 +1366,14 @@ void executeCommand(const char *buf)
       consoleNote_P(PSTR("Warning flags :"));
       if(pciWarn)
 	consolePrint_P(PSTR(" SPURIOUS_PCINT"));
-      if(vpStatus.alphaWarn)
-	consolePrint_P(PSTR(" ALPHA_SENSOR"));
       if(ppmWarnShort)
 	consolePrint_P(PSTR(" PPM_SHORT"));
       if(ppmWarnSlow)
 	consolePrint_P(PSTR(" PPM_SLOW"));
-      if(vpStatus.eepromWarn)
-	consolePrint_P(PSTR(" EEPROM"));
-      if(vpStatus.eepromFailed)
+      if(eepromDevice.status())
 	consolePrint_P(PSTR(" EEPROM_FAILED"));
-      if(vpStatus.iasWarn)
-	consolePrint_P(PSTR(" IAS_WARN"));
-      if(vpStatus.iasFailed)
+      if(pitotDevice.status())
 	consolePrint_P(PSTR(" IAS_FAILED"));
-      if(pushCtrl.warn)
-	consolePrint_P(PSTR(" PUSHER"));
-      if(elevCtrl.warn)
-	consolePrint_P(PSTR(" AUTOSTICK"));
-      if(aileCtrl.warn)
-	consolePrint_P(PSTR(" STABILIZER"));
       
       consolePrintLn("");
 
@@ -1395,9 +1386,7 @@ void executeCommand(const char *buf)
       break;
 
     case c_reset:
-      pciWarn = vpStatus.alphaWarn = vpStatus.alphaFailed = pushCtrl.warn = elevCtrl.warn
-	= vpStatus.eepromWarn = vpStatus.eepromFailed = ppmWarnShort
-	= ppmWarnSlow = aileCtrl.warn = false;
+      pciWarn = ppmWarnShort = ppmWarnSlow = false;
       consoleNoteLn_P(PSTR("Warning flags reset"));
       cycleTimeMonitorReset();
       break;
@@ -1423,10 +1412,10 @@ void cacheTask()
 void alphaTask()
 {
   int16_t raw = 0;
-  static int failCount = 0;
   static int16_t prev = 0;
   
-  if(!handleFailure("alpha", !readAlpha_5048B(&raw), &vpStatus.alphaWarn, &vpStatus.alphaFailed, &failCount)) {
+  if(!alphaDevice.hasFailed()
+     && !alphaDevice.handleStatus(!readAlpha_5048B(&raw))) {
     alphaFilter.input(2*PI*(float) raw / (1L<<(8*sizeof(raw))));
     alphaEntropy += population(raw ^ prev);
     sensorHash = crc16(sensorHash, (uint8_t*) &raw, sizeof(raw));
@@ -1437,10 +1426,10 @@ void alphaTask()
 void airspeedTask()
 {
   int16_t raw = 0;
-  static int failCount = 0;
   static int16_t prev = 0;
   
-  if(!handleFailure("airspeed", !readPressure(&raw), &vpStatus.iasWarn, &vpStatus.iasFailed, &failCount)) {
+  if(!pitotDevice.hasFailed()
+     && !pitotDevice.handleStatus(!readPressure(&raw))) {
     pressureBuffer.input((float) raw);
     iasEntropy += population(raw ^ prev);
     sensorHash = crc16(sensorHash, (uint8_t*) &raw, sizeof(raw));
@@ -1944,7 +1933,13 @@ const float origoAlpha = -5.0/RADIAN;
 
 static float scaleByIAS(float k, float p)
 {
-  return k * powf(fmaxf(iasFilter.output(), vpParam.iasMin), p);
+  float effIAS = fmaxf(iasFilter.output(), vpParam.iasMin);
+  
+  if(pitotDevice.status() || vpStatus.pitotBlocked)
+    // Failsafe value chosen to be ... on the safe side
+    effIAS = p > 0 ? vpParam.iasMin : vpParam.iasMin * 3/2;
+  
+  return k * powf(effIAS, p);
 }
 
 static void failsafeDisable()
@@ -2087,15 +2082,17 @@ void configurationTask()
       
     } else {
       if(!vpMode.takeOff && iasFilter.output() < vpParam.iasMin*2/3) {
-	consoleNoteLn_P(PSTR("TakeOff mode ENABLED"));
-	goodBeep(0.5);
+	if(tocTestReset()) {
+	  consoleNoteLn_P(PSTR("TakeOff mode ENABLED"));
+	  goodBeep(0.5);
 	
-	vpMode.takeOff = true;
-	vpMode.slowFlight = false;
-	elevTrim = vpParam.takeoffTrim;
-	
-	tocTestReset();
-	
+	  vpMode.takeOff = true;
+	  vpMode.slowFlight = false;
+	  elevTrim = vpParam.takeoffTrim;
+	} else {
+	  consoleNoteLn_P(PSTR("T/o/c test reset FAILED"));
+	  badBeep(1);
+	}	
       } else if(vpMode.takeOff) {
 	if(tocTestStatus(true)) {
 	  consoleNoteLn_P(PSTR("T/o configuration is GOOD"));
@@ -2213,8 +2210,8 @@ void configurationTask()
 
   // TakeOff mode disabled when airspeed detected (or fails)
 
-  if(vpMode.takeOff && (vpStatus.iasFailed
-			|| iasFilter.output() > vpParam.iasMin*2/3)) {
+  if(vpMode.takeOff
+     && (pitotDevice.status() || iasFilter.output() > vpParam.iasMin*2/3)) {
     consoleNoteLn_P(PSTR("TakeOff mode DISABLED"));
     vpMode.takeOff = false;
   }
@@ -2227,9 +2224,10 @@ void configurationTask()
     // Default
     
     vpFeature.stabilizeBank = !vpMode.takeOff;
-    vpFeature.pusher = !vpMode.takeOff && !vpMode.slowFlight;
+    vpFeature.pusher
+      = !alphaDevice.status() && !vpMode.takeOff && !vpMode.slowFlight;
     vpFeature.stabilizePitch = vpFeature.alphaHold
-      = vpMode.slowFlight && !vpMode.takeOff;
+      = !alphaDevice.status() && vpMode.slowFlight && !vpMode.takeOff;
     vpFeature.pitchHold = false;
   
     // Failsafe mode interpretation
@@ -2250,7 +2248,7 @@ void configurationTask()
   float scale = 1.0;
   
   if(vpMode.test && nvState.testNum == 0)
-    scale = testGainLinear(1.0/3, 1.0);
+    scale = testGainLinear(1.0/5, 1.0);
   
   // Default controller settings
 

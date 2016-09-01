@@ -43,3 +43,5 @@ void consolevPrintf(const char *s, va_list argp);
 void consolePrintf(const char *s, ...);
 void consolePrintfLn(const char *s, ...);
 #endif
+
+extern uint32_t currentTime;
