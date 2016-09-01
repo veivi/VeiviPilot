@@ -667,11 +667,10 @@ typedef enum {
   toc_trim,
   toc_eeprom,
   toc_attitude,
-  toc_turn,
+  toc_gyro,
   toc_alpha_sensor,
   toc_alpha_range,
-  toc_pitot_sensor,
-  toc_pitot_block,
+  toc_pitot,
   toc_button,
   toc_aile_neutral,
   toc_aile_range,
@@ -801,14 +800,10 @@ bool toc_test_alpha_range(bool reset)
   return bigAlpha && zeroAlpha && bigAlphaAgain;
 }
 
-bool toc_test_pitot_sensor(bool reset)
+bool toc_test_pitot(bool reset)
 {
-  return !pitotDevice.status() && iasEntropyAcc.output() > 10;
-}
-
-bool toc_test_pitot_block(bool reset)
-{
-  return !vpStatus.pitotBlocked;
+  return !pitotDevice.status() && iasEntropyAcc.output() > 10
+    && !vpStatus.pitotBlocked;
 }
 
 bool toc_test_attitude(bool reset)
@@ -816,10 +811,10 @@ bool toc_test_attitude(bool reset)
   if(reset)
     return true;
   else
-    return fabsf(pitchAngle) < 10.0 && fabsf(bankAngle) < 5.0;
+    return fabsf(pitchAngle) < 10.0/RADIAN && fabsf(bankAngle) < 5.0/RADIAN;
 }
 
-bool toc_test_turn(bool reset)
+bool toc_test_gyro(bool reset)
 {
   if(reset)
     return true;
@@ -933,11 +928,10 @@ const struct TakeoffTest tocTest[] PROGMEM =
     [toc_trim] = { "TRIM", toc_test_trim },
     [toc_eeprom] = { "EEPROM", toc_test_eeprom },
     [toc_attitude] = { "ATTI", toc_test_attitude },
-    [toc_turn] = { "TURN", toc_test_turn },
+    [toc_gyro] = { "GYRO", toc_test_gyro },
     [toc_alpha_sensor] = { "ALPHA_S", toc_test_alpha_sensor },
     [toc_alpha_range] = { "ALPHA_R", toc_test_alpha_range },
-    [toc_pitot_sensor] = { "PITOT_S", toc_test_pitot_sensor },
-    [toc_pitot_block] = { "PITOT_B", toc_test_pitot_block },
+    [toc_pitot] = { "PITOT", toc_test_pitot },
     [toc_button] = { "BUTTON", toc_test_button },
     [toc_aile_neutral] = { "AILE_N", toc_test_aile_neutral },
     [toc_aile_range] = { "AILE_R", toc_test_aile_range },
