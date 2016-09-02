@@ -379,45 +379,6 @@ void datagramSerialFlush()
 }
 }
 
-const uint8_t addr5048B_c = 0x40;
-const uint8_t addr4525_c = 0x28;
-
-bool read5048B(uint8_t addr, uint8_t *storage, int bytes) 
-{
-  return I2c.read(addr5048B_c, addr, storage, bytes) == 0;
-}
-
-bool read5048B_word14(uint8_t addr, uint16_t *result)
-{
-  uint8_t buf[sizeof(uint16_t)];
-  bool success = false;
-  
-  success = read5048B(addr, buf, sizeof(buf));
-  
-  if(success)
-    *result = ((((uint16_t) buf[0]) << 6) + (buf[1] & 0x3F))<<2;
-
-  return success;
-}
-
-bool read4525DO(uint8_t *storage, int bytes) 
-{
-  return I2c.read(addr4525_c, NULL, 0, storage, bytes) == 0;
-}
-
-bool read4525DO_word14(uint16_t *result)
-{
-  uint8_t buf[sizeof(uint16_t)];
-  bool success = false;
-  
-  success = read4525DO(buf, sizeof(buf));
-  
-  if(success)
-    *result = (((uint16_t) (buf[0] & 0x3F)) << 8) + buf[1];
-
-  return success && (buf[0]>>6) == 0;
-}
-
 void delayMicros(int x)
 {
   uint32_t current = hal.scheduler->micros();
@@ -452,6 +413,10 @@ void badBeep(float dur)
 {
   beep(dur, false);
 }
+
+//
+// Log interface
+//
 
 void logAlpha(void)
 {
@@ -528,6 +493,53 @@ float readParameter()
   return tuningKnob/0.95 - (1/0.95 - 1);
 }
 
+//
+// Sensor low level interface
+//
+
+const uint8_t addr5048B_c = 0x40;
+const uint8_t addr4525_c = 0x28;
+
+bool AS5048B_read(uint8_t addr, uint8_t *storage, uint8_t bytes) 
+{
+  return I2c.read(addr5048B_c, addr, storage, bytes) == 0;
+}
+
+bool AS5048B_read(uint8_t addr, uint16_t *result)
+{
+  uint8_t buf[sizeof(uint16_t)];
+  bool success = false;
+  
+  success = AS5048B_read(addr, buf, sizeof(buf));
+  
+  if(success)
+    *result = ((((uint16_t) buf[0]) << 6) + (buf[1] & 0x3F))<<2;
+
+  return success;
+}
+
+bool MS4525DO_read(uint8_t *storage, uint8_t bytes) 
+{
+  return I2c.read(addr4525_c, NULL, 0, storage, bytes) == 0;
+}
+
+bool MS4525DO_read(uint16_t *result)
+{
+  uint8_t buf[sizeof(uint16_t)];
+  bool success = false;
+  
+  success = MS4525DO_read(buf, sizeof(buf));
+  
+  if(success)
+    *result = (((uint16_t) (buf[0] & 0x3F)) << 8) + buf[1];
+
+  return success && (buf[0]>>6) == 0;
+}
+
+//
+// AS5048B (alpha) sensor interface
+//
+
 #define AS5048_ADDRESS 0x40 
 #define AS5048B_PROG_REG 0x03
 #define AS5048B_ADDR_REG 0x15
@@ -539,12 +551,11 @@ float readParameter()
 #define AS5048B_MAGNLSB_REG 0xFD //bits 0..5
 #define AS5048B_ANGLMSB_REG 0xFE //bits 0..7
 #define AS5048B_ANGLLSB_REG 0xFF //bits 0..5
-#define AS5048B_RESOLUTION ((float) (1<<14))
 
-bool readAlpha_5048B(int16_t *result) {
+bool AS5048B_alpha(int16_t *result) {
   uint16_t raw = 0;
   
-  if(!read5048B_word14(AS5048B_ANGLMSB_REG, &raw))
+  if(!AS5048B_read(AS5048B_ANGLMSB_REG, &raw))
     // Failed
     return false;
 
@@ -556,7 +567,11 @@ bool readAlpha_5048B(int16_t *result) {
   return true;
 }
 
-bool readPressure(int16_t *result) 
+//
+// MS4525DO (dynamic pressure) sensor interface
+//
+
+bool MS4525DO_pressure(int16_t *result) 
 {
   static uint32_t acc;
   static int accCount;
@@ -565,7 +580,7 @@ bool readPressure(int16_t *result)
   
   uint16_t raw = 0;
 
-  if(!read4525DO_word14(&raw))
+  if(!MS4525DO_read(&raw))
     return false;
 
   if(accCount < 1<<log2CalibWindow) {
@@ -585,7 +600,7 @@ bool readPressure(int16_t *result)
 }
 
 //
-//
+// Cycle time monitoring
 //
 
 const int cycleTimeSampleWindow_c = CONTROL_HZ;
@@ -1411,7 +1426,7 @@ void alphaTask()
   static int16_t prev = 0;
   
   if(!alphaDevice.hasFailed()
-     && !alphaDevice.handleStatus(!readAlpha_5048B(&raw))) {
+     && !alphaDevice.handleStatus(!AS5048B_alpha(&raw))) {
     alphaFilter.input(CIRCLE*(float) raw / (1L<<(8*sizeof(raw))));
     alphaEntropy += population(raw ^ prev);
     sensorHash = crc16(sensorHash, (uint8_t*) &raw, sizeof(raw));
@@ -1425,7 +1440,7 @@ void airspeedTask()
   static int16_t prev = 0;
   
   if(!pitotDevice.hasFailed()
-     && !pitotDevice.handleStatus(!readPressure(&raw))) {
+     && !pitotDevice.handleStatus(!MS4525DO_pressure(&raw))) {
     pressureBuffer.input((float) raw);
     iasEntropy += population(raw ^ prev);
     sensorHash = crc16(sensorHash, (uint8_t*) &raw, sizeof(raw));
@@ -1568,12 +1583,12 @@ void sensorTaskFast()
     yawRate = sensorData.yrate;
     bankAngle = sensorData.roll/RADIAN;
     pitchAngle = sensorData.pitch/RADIAN;
-    heading = sensorData.heading;
+    heading = (int) (sensorData.heading + 0.5);
     accX = sensorData.accx*FOOT;
     accY = sensorData.accy*FOOT;
     accZ = sensorData.accz*FOOT;
 
-    dynPressure = 1/2*square(iAS);
+    dynPressure = square(iAS) / 2;
     
   } else if(dynPressure > 0)    
     iAS = sqrtf(2*dynPressure);
