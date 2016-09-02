@@ -215,7 +215,6 @@ Controller elevCtrl, aileCtrl, pushCtrl;
 float autoAlphaP, maxAlpha, shakerAlpha, thresholdAlpha, rudderMix;
 float accX, accY, accZ, accTotal, altitude,  bankAngle, pitchAngle, rollRate, pitchRate, targetPitchRate, yawRate, levelBank;
 uint16_t heading;
-float parameter;  
 NewI2C I2c = NewI2C();
 Damper ball(1.5*CONTROL_HZ), iasFilterSlow(3*CONTROL_HZ), iasFilter(2), accAvg(2*CONTROL_HZ), iasEntropyAcc(CONFIG_HZ), alphaEntropyAcc(CONFIG_HZ);
 AlphaBuffer pressureBuffer;
@@ -1454,7 +1453,7 @@ void receiverTask()
     elevStick = applyNullZone(inputValue(&elevInput), &elevPilotInput);
     
   if(inputValid(&tuningKnobInput))
-    tuningKnob = inputValue(&tuningKnobInput);
+    tuningKnob = inputValue(&tuningKnobInput)*1.05 - 0.05;
     
   if(inputValid(&throttleInput))
     throttleStick = inputValue(&throttleInput);
@@ -1897,36 +1896,21 @@ static float testGainExpoGeneric(float range, float param)
   return exp(log(4)*(2*quantize(param, &state, paramSteps)-1))*range;
 }
 
-float testGainExpo(float range, float param)
-{
-  return testGainExpoGeneric(range, param);
-}
-
-float testGainExpoReversed(float range, float param)
-{
-  return testGainExpoGeneric(range, 1 - param);
-}
-
-float testGainLinear(float start, float stop, float param)
-{
-  static float state;
-  float q = quantize(param, &state, paramSteps);
-  return start + q*(stop - start);
-}
-
 float testGainExpo(float range)
 {
-  return testGainExpo(range, parameter);
+  return testGainExpoGeneric(range, tuningKnob);
 }
 
 float testGainExpoReversed(float range)
 {
-  return testGainExpoReversed(range, parameter);
+  return testGainExpoGeneric(range, 1 - tuningKnob);
 }
 
 float testGainLinear(float start, float stop)
 {
-  return testGainLinear(start, stop, parameter);
+  static float state;
+  float q = quantize(tuningKnob, &state, paramSteps);
+  return start + q*(stop - start);
 }
 
 float s_Ku_ref, i_Ku_ref, p_Ku_ref;
@@ -2154,11 +2138,11 @@ void configurationTask()
     logMark();
   }
 
-  // Test parameter
+  //
+  // Test mode control
+  //
 
-  parameter = tuningKnob/0.95 - (1/0.95 - 1);
-
-  if(!vpMode.test && parameter > 0.5) {
+  if(!vpMode.test && tuningKnob > 0.5) {
     vpMode.test = true;
     consoleNoteLn_P(PSTR("Test mode ENABLED"));
 
@@ -2178,7 +2162,7 @@ void configurationTask()
       //      if(alphaTrim > shakerAlpha)
       //	alphaTrim -= shakerAlpha - minAlpha;
     }
-  } else if(vpMode.test && parameter < 0) {
+  } else if(vpMode.test && tuningKnob < 0) {
     vpMode.test = vpMode.autoTest = false;
     consoleNoteLn_P(PSTR("Test mode DISABLED"));
 
@@ -2483,6 +2467,8 @@ void gaugeTask()
 	consolePrint(throttleStick);
 	consolePrint_P(PSTR(" rudderStick = "));
 	consolePrint(rudderStick);
+	consolePrint_P(PSTR(" knob = "));
+	consolePrint(tuningKnob);
 	break;
 
       case 8:
