@@ -488,54 +488,6 @@ void logAttitude(void)
   logGeneric(lc_yawrate, yawRate*RADIAN);
 }
 
-float readParameter()
-{
-  return tuningKnob/0.95 - (1/0.95 - 1);
-}
-
-//
-// Sensor low level interface
-//
-
-const uint8_t addr5048B_c = 0x40;
-const uint8_t addr4525_c = 0x28;
-
-bool AS5048B_read(uint8_t addr, uint8_t *storage, uint8_t bytes) 
-{
-  return I2c.read(addr5048B_c, addr, storage, bytes) == 0;
-}
-
-bool AS5048B_read(uint8_t addr, uint16_t *result)
-{
-  uint8_t buf[sizeof(uint16_t)];
-  bool success = false;
-  
-  success = AS5048B_read(addr, buf, sizeof(buf));
-  
-  if(success)
-    *result = ((((uint16_t) buf[0]) << 6) + (buf[1] & 0x3F))<<2;
-
-  return success;
-}
-
-bool MS4525DO_read(uint8_t *storage, uint8_t bytes) 
-{
-  return I2c.read(addr4525_c, NULL, 0, storage, bytes) == 0;
-}
-
-bool MS4525DO_read(uint16_t *result)
-{
-  uint8_t buf[sizeof(uint16_t)];
-  bool success = false;
-  
-  success = MS4525DO_read(buf, sizeof(buf));
-  
-  if(success)
-    *result = (((uint16_t) (buf[0] & 0x3F)) << 8) + buf[1];
-
-  return success && (buf[0]>>6) == 0;
-}
-
 //
 // AS5048B (alpha) sensor interface
 //
@@ -551,6 +503,24 @@ bool MS4525DO_read(uint16_t *result)
 #define AS5048B_MAGNLSB_REG 0xFD //bits 0..5
 #define AS5048B_ANGLMSB_REG 0xFE //bits 0..7
 #define AS5048B_ANGLLSB_REG 0xFF //bits 0..5
+
+bool AS5048B_read(uint8_t addr, uint8_t *storage, uint8_t bytes) 
+{
+  return I2c.read(AS5048_ADDRESS, addr, storage, bytes) == 0;
+}
+
+bool AS5048B_read(uint8_t addr, uint16_t *result)
+{
+  uint8_t buf[sizeof(uint16_t)];
+  bool success = false;
+  
+  success = AS5048B_read(addr, buf, sizeof(buf));
+  
+  if(success)
+    *result = ((((uint16_t) buf[0]) << 6) + (buf[1] & 0x3F))<<2;
+
+  return success;
+}
 
 bool AS5048B_alpha(int16_t *result) {
   uint16_t raw = 0;
@@ -570,6 +540,26 @@ bool AS5048B_alpha(int16_t *result) {
 //
 // MS4525DO (dynamic pressure) sensor interface
 //
+
+bool MS4525DO_read(uint8_t *storage, uint8_t bytes) 
+{
+  const uint8_t addr_c = 0x28;
+ 
+  return I2c.read(addr_c, NULL, 0, storage, bytes) == 0;
+}
+
+bool MS4525DO_read(uint16_t *result)
+{
+  uint8_t buf[sizeof(uint16_t)];
+  bool success = false;
+  
+  success = MS4525DO_read(buf, sizeof(buf));
+  
+  if(success)
+    *result = (((uint16_t) (buf[0] & 0x3F)) << 8) + buf[1];
+
+  return success && (buf[0]>>6) == 0;
+}
 
 bool MS4525DO_pressure(int16_t *result) 
 {
@@ -982,7 +972,9 @@ bool tocTestInvoke(bool reset, bool challenge, bool verbose)
       }
 
       if(!reset)
-	(*cache.function)(true); // Reset the failed test anyway
+	// Reset the failed test if not done already
+	(*cache.function)(true);
+      
       fail = true;
     }
   }
@@ -2164,7 +2156,7 @@ void configurationTask()
 
   // Test parameter
 
-  parameter = readParameter();
+  parameter = tuningKnob/0.95 - (1/0.95 - 1);
 
   if(!vpMode.test && parameter > 0.5) {
     vpMode.test = true;
