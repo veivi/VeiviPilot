@@ -213,7 +213,8 @@ uint32_t controlCycleEnded;
 float elevTrim, effTrim, elevTrimSub, targetAlpha;
 Controller elevCtrl, aileCtrl, pushCtrl;
 float autoAlphaP, maxAlpha, shakerAlpha, thresholdAlpha, rudderMix;
-float accX, accY, accZ, accTotal, altitude,  heading, bankAngle, pitchAngle, rollRate, pitchRate, targetPitchRate, yawRate, levelBank;
+float accX, accY, accZ, accTotal, altitude,  bankAngle, pitchAngle, rollRate, pitchRate, targetPitchRate, yawRate, levelBank;
+uint16_t heading;
 float parameter;  
 NewI2C I2c = NewI2C();
 Damper ball(1.5*CONTROL_HZ), iasFilterSlow(3*CONTROL_HZ), iasFilter(2), accAvg(2*CONTROL_HZ), iasEntropyAcc(CONFIG_HZ), alphaEntropyAcc(CONFIG_HZ);
@@ -518,7 +519,7 @@ void logAttitude(void)
   logGeneric(lc_rollrate, rollRate*RADIAN);
   logGeneric(lc_pitch, pitchAngle*RADIAN);
   logGeneric(lc_pitchrate, pitchRate*RADIAN);
-  logGeneric(lc_heading, heading*RADIAN);
+  logGeneric(lc_heading, heading);
   logGeneric(lc_yawrate, yawRate*RADIAN);
 }
 
@@ -1218,7 +1219,8 @@ void executeCommand(const char *buf)
       if(numParams > 0)
 	offset = param[0];
       
-      vpParam.alphaRef += (int16_t) ((1L<<16) * (alpha - offset / RADIAN));
+      vpParam.alphaRef +=
+	(int16_t) ((1L<<16) * (alpha - offset / RADIAN) / CIRCLE);
       consoleNoteLn_P(PSTR("Alpha calibrated"));
       break;
 
@@ -1410,7 +1412,7 @@ void alphaTask()
   
   if(!alphaDevice.hasFailed()
      && !alphaDevice.handleStatus(!readAlpha_5048B(&raw))) {
-    alphaFilter.input(2*PI*(float) raw / (1L<<(8*sizeof(raw))));
+    alphaFilter.input(CIRCLE*(float) raw / (1L<<(8*sizeof(raw))));
     alphaEntropy += population(raw ^ prev);
     sensorHash = crc16(sensorHash, (uint8_t*) &raw, sizeof(raw));
     prev = raw;
@@ -1486,7 +1488,7 @@ void receiverTask()
     trimRateLimiter.setRate(1.5/RADIAN);
     elevTrim = elevFromAlpha(thresholdAlpha) - elevTrimSub;
   } else
-    trimRateLimiter.setRate(2*PI);
+    trimRateLimiter.setRate(CIRCLE);
       
   // Delay the controls just to make sure we always detect the failsafe
   // mode before doing anything abrupt
@@ -1531,8 +1533,8 @@ void sensorTaskFast()
 
   bankAngle = ahrs.roll;
   pitchAngle = ahrs.pitch;
-  heading = ahrs.yaw;
-
+  heading = (int) (360 + ahrs.yaw*RADIAN) % 360;
+  
   // Angular velocities
   
   Vector3f gyro = ins.get_gyro();
@@ -1566,7 +1568,7 @@ void sensorTaskFast()
     yawRate = sensorData.yrate;
     bankAngle = sensorData.roll/RADIAN;
     pitchAngle = sensorData.pitch/RADIAN;
-    heading = sensorData.heading/RADIAN;
+    heading = sensorData.heading;
     accX = sensorData.accx*FOOT;
     accY = sensorData.accy*FOOT;
     accZ = sensorData.accz*FOOT;
@@ -2396,7 +2398,7 @@ void gaugeTask()
 	consolePrint((int) (iAS/KNOT));
 	consoleTab(30);
 	consolePrint_P(PSTR(" hdg = "));
-	consolePrint((int) (heading*RADIAN));
+	consolePrint(heading);
 	consoleTab(45);
 	consolePrint_P(PSTR(" alt = "));
 
@@ -2438,7 +2440,7 @@ void gaugeTask()
 	consolePrint_P(PSTR(" pitch = "));
 	consolePrint(pitchAngle*RADIAN, 2);
 	consolePrint_P(PSTR(" heading = "));
-	consolePrint(heading*RADIAN);
+	consolePrint(heading);
 	consolePrint_P(PSTR(" alt = "));
 	consolePrint(altitude);
 	consolePrint_P(PSTR(" ball = "));
