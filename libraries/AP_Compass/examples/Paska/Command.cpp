@@ -37,7 +37,6 @@ const struct Command commands[] PROGMEM = {
   { "bservo", c_bservo, e_int8, &vpParam.servoBrake },
   { "gservo", c_gservo, e_int8, &vpParam.servoGear },  
   { "ias", c_ias, e_float, &vpParam.iasMin },
-  { "pitch_k", c_pitch_k, e_float, &vpParam.pitch_C },
   { "roll_k", c_roll_k, e_float, &vpParam.roll_C },
   { "servorate", c_servorate, e_float, &vpParam.servoRate },
   { "update", c_update },

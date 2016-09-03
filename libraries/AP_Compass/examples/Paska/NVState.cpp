@@ -40,7 +40,7 @@ const struct ParamRecord paramDefaults = {
   .wl_Limit = 0.0,
   .iasMin = 12,
   .roll_C = 0.1,
-  .pitch_C = 0.1,
+  .dummy_0 = 0,
   .servoRate = 60/0.09,
   .takeoffTrim = 0.25
 };
@@ -182,8 +182,6 @@ void printParams()
   consolePrintLn(vpParam.iasMin);
   consoleNote_P(PSTR("  Roll rate K = "));
   consolePrintLn(vpParam.roll_C);
-  consoleNote_P(PSTR("  Pitch rate K = "));
-  consolePrintLn(vpParam.pitch_C);
   consoleNoteLn_P(PSTR("  Elevator"));
   consoleNote_P(PSTR("    deflection = "));
   consolePrint(vpParam.elevDefl*90);

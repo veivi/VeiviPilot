@@ -1212,15 +1212,6 @@ void executeCommand(const char *buf)
       }
       break;
           
-    case c_pitchrate:
-      if(numParams > 0) {
-	vpParam.pitch_C = param[0]/RADIAN;
-	consoleNote_P(PSTR("Pitch rate K = "));
-	consolePrintLn(vpParam.pitch_C);
-	storeNVState();
-      }
-      break;
-          
     case c_alpha:
       if(numParams > 0)
 	offset = param[0];
@@ -2702,7 +2693,6 @@ void controlTask()
   // Elevator control
   //
 
-  const float maxPitchRate = vpParam.pitch_C;
   const float shakerLimit = (float) 2/3;
   const float effStick = vpMode.rxFailSafe ? shakerLimit : elevStick;
   const float stickStrength = fmaxf(effStick-shakerLimit, 0)/(1-shakerLimit);
@@ -2718,13 +2708,13 @@ void controlTask()
 
   if(vpFeature.alphaHold)
     targetPitchRate = nominalPitchRate(bankAngle, targetAlpha)
-      + (targetAlpha - effAlpha)*autoAlphaP*maxPitchRate;
+      + (targetAlpha - effAlpha)*autoAlphaP;
   
   else if(vpFeature.pitchHold)
-    targetPitchRate = (0.1 + effStick/2 - pitchAngle)*maxPitchRate;
+    targetPitchRate = (0.1 + effStick/2 - pitchAngle)*autoAlphaP;
 
   else
-    targetPitchRate = effStick * maxPitchRate;
+    targetPitchRate = effStick*PI/2;
 
   elevOutputFeedForward = elevFromAlpha(targetAlpha);
 
