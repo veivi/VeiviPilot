@@ -881,27 +881,27 @@ bool toc_test_tuning_range(bool reset)
 
 bool toc_test_aile_neutral(bool reset)
 {
-  return fabsf(inputValue(&aileInput)) < toc_margin_c/2;
+  return reset || fabsf(inputValue(&aileInput)) < toc_margin_c/2;
 }
 
 bool toc_test_elev_neutral(bool reset)
 {
-  return fabsf(inputValue(&elevInput)) < toc_margin_c/2;
+  return reset || fabsf(inputValue(&elevInput)) < toc_margin_c/2;
 }
 
 bool toc_test_rudder_neutral(bool reset)
 {
-  return fabsf(inputValue(&rudderInput)) < toc_margin_c/2;
+  return reset || fabsf(inputValue(&rudderInput)) < toc_margin_c/2;
 }
 
 bool toc_test_throttle_zero(bool reset)
 {
-  return fabsf(inputValue(&throttleInput)) < toc_margin_c/2;
+  return reset || fabsf(inputValue(&throttleInput)) < toc_margin_c/2;
 }
 
 bool toc_test_tuning_zero(bool reset)
 {
-  return fabsf(inputValue(&tuningKnobInput)) < toc_margin_c/2;
+  return reset || fabsf(inputValue(&tuningKnobInput)) < toc_margin_c/2;
 }
 
 bool toc_test_button(bool reset)
@@ -971,7 +971,7 @@ bool tocTestInvoke(bool reset, bool challenge, bool verbose)
       }
 
       if(!reset)
-	// Reset the failed test if not done already
+	// Reset the failed test (unless we already did that)
 	(*cache.function)(true);
       
       fail = true;
@@ -2253,8 +2253,10 @@ void configurationTask()
   levelBank = 0;
   
   aileRateLimiter.setRate(vpParam.servoRate/(90.0/2)/vpParam.aileDefl);
-  
-  // Then apply test modes
+
+  //
+  // Apply test mode
+  //
   
   if(vpMode.test && !vpMode.takeOff) {
     switch(nvState.testNum) {
