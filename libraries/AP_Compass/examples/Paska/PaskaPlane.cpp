@@ -1968,11 +1968,32 @@ void configurationTask()
     
     lastMotion = currentTime;
 
-  } else if(currentTime - lastMotion > 10.0e6 && !vpStatus.fullStop) {
+  } else if(currentTime - lastMotion > 5.0e6 && !vpStatus.fullStop) {
     consoleNoteLn_P(PSTR("We have FULLY STOPPED"));
     vpStatus.fullStop = true;
   }
 
+  //
+  // Configuration control
+  //
+  // Being armed?
+  //
+  
+  if(leftUpButton.doublePulse() && !vpStatus.armed
+     && aileStick < -0.90 && elevStick > 0.90) {
+    consoleNoteLn_P(PSTR("We're now ARMED"));
+    vpStatus.armed = true;
+    badBeep(1);
+    leftDownButton.reset();
+    rightUpButton.reset();
+    rightDownButton.reset();
+  }
+
+  // We skip the rest unless we're armed
+
+  if(!vpStatus.armed)
+    return;
+  
   //
   // Logging control
   //
@@ -1990,22 +2011,6 @@ void configurationTask()
 
   if(vpMode.takeOff)
     tocTestUpdate();
-
-  //
-  // Configuration control
-  //
-  // Being armed?
-  //
-  
-  if(leftUpButton.doublePulse() && !vpStatus.armed
-     && aileStick < -0.90 && elevStick > 0.90) {
-    consoleNoteLn_P(PSTR("We're now ARMED"));
-    vpStatus.armed = true;
-    badBeep(1);
-    leftDownButton.reset();
-    rightUpButton.reset();
-    rightDownButton.reset();
-  }
 
   //
   //   GEAR BUTTON
@@ -2061,6 +2066,8 @@ void configurationTask()
     } else {
       if(!vpMode.takeOff && iasFilter.output() < vpParam.iasMin*2/3) {
 	if(tocTestReset()) {
+	  vpStatus.silent = false;
+	  
 	  consoleNoteLn_P(PSTR("TakeOff mode ENABLED"));
 	  goodBeep(0.5);
 	
@@ -2075,9 +2082,6 @@ void configurationTask()
 	if(tocTestStatus(true)) {
 	  consoleNoteLn_P(PSTR("T/o configuration is GOOD"));
 	  goodBeep(1);
-	  
-	  if(!vpStatus.consoleLink)
-	    vpStatus.silent = true;
 	} else {
 	  consoleNoteLn_P(PSTR("T/o configuration test FAILED"));
 	  badBeep(5);
@@ -2190,6 +2194,9 @@ void configurationTask()
 
   if(vpMode.takeOff
      && (pitotDevice.status() || iasFilter.output() > vpParam.iasMin*2/3)) {
+    if(!vpStatus.consoleLink)
+      vpStatus.silent = true;
+    
     consoleNoteLn_P(PSTR("TakeOff mode DISABLED"));
     vpMode.takeOff = false;
   }
@@ -2325,8 +2332,9 @@ void configurationTask()
                
     case 5:
       // Pusher gain
-         
+
       pushCtrl.setPID(testGain = testGainExpo(p_Ku_ref), 0, 0);
+      maxAlpha = vpParam.alphaMax * 0.8;
       break;
 
     case 9:
@@ -2724,13 +2732,13 @@ void controlTask()
     elevOutput = elevCtrl.output();
 
     static float elevTestBias = 0;
-
+    /*
     if((vpMode.test && (nvState.testNum == 2 || nvState.testNum == 3))
     || (testActive() && analyzerInputCh == ac_elev))
       elevOutput += elevTestBias;
     else
       elevTestBias = elevOutput;
-      
+    */      
     if(vpFeature.alphaHold)
       elevOutput += elevOutputFeedForward;
   } else
