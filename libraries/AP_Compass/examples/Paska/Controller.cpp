@@ -92,10 +92,7 @@ void Controller::input(float err, float d) {
   
   delta = d;
   
-  if(Ki < 0.02)
-    I = 0;
-  else
-    I = clamp(I + Ki*err*delta, rangeMin - Kp*err, rangeMax - Kp*err);
+  I = clamp(I + Ki*err*delta, rangeMin - Kp*err, rangeMax - Kp*err);
 }
 
 float Controller::output(void) {

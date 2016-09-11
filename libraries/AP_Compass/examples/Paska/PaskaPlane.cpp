@@ -51,7 +51,7 @@ AP_AHRS_DCM ahrs {ins,  barometer, gps};
 // Threshold speed margin (IAS)
 //
 
-const float thresholdMargin_c = 15/100.0;
+const float thresholdMargin_c = 20/100.0;
 
 //
 // HW timer declarations
@@ -2334,7 +2334,7 @@ void configurationTask()
       // Pusher gain
 
       pushCtrl.setPID(testGain = testGainExpo(p_Ku_ref), 0, 0);
-      maxAlpha = vpParam.alphaMax * 0.8;
+      maxAlpha = 0.8*vpParam.alphaMax;
       break;
 
     case 9:
@@ -2731,14 +2731,6 @@ void controlTask()
     
     elevOutput = elevCtrl.output();
 
-    static float elevTestBias = 0;
-    /*
-    if((vpMode.test && (nvState.testNum == 2 || nvState.testNum == 3))
-    || (testActive() && analyzerInputCh == ac_elev))
-      elevOutput += elevTestBias;
-    else
-      elevTestBias = elevOutput;
-    */      
     if(vpFeature.alphaHold)
       elevOutput += elevOutputFeedForward;
   } else
