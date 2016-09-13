@@ -83,20 +83,20 @@ const struct PinDescriptor led[] = {{ PortA, 3 }, { PortA, 4 }, { PortA, 5 }};
 
 struct PinDescriptor ppmInputPin = { PortL, 1 }; 
 struct RxInputRecord aileInput, elevInput, throttleInput, rudderInput,
-  modeSwitchInput, tuningKnobInput, flapInput, auxInput;
+  buttonInput, tuningKnobInput, flapInput, modeInput;
 struct RxInputRecord *ppmInputs[] = 
-  { &aileInput, &elevInput, &throttleInput, &rudderInput, &modeSwitchInput, &tuningKnobInput, &flapInput, &auxInput };
+  { &aileInput, &elevInput, &throttleInput, &rudderInput, &buttonInput, &tuningKnobInput, &flapInput, &modeInput };
 
-ButtonInputChannel buttonInput;
+ButtonInputChannel buttonInputFilter;
 Button rightDownButton(-0.60), rightUpButton(0.26),
   leftDownButton(-0.13), leftUpButton(0.66);
+struct SwitchRecord flapSwitch = { &flapInput }, modeSelector = { &modeInput };
+int8_t flapSwitchValue, modeSelectorValue;
 
 #define AILEMODEBUTTON rightUpButton
 #define ELEVMODEBUTTON rightDownButton
 #define TRIMBUTTON leftUpButton
 #define GEARBUTTON leftDownButton
-
-int8_t flapSwitchValue;
 
 //
 // Servo PWM output
@@ -1449,20 +1449,22 @@ void receiverTask()
   if(inputValid(&throttleInput))
     throttleStick = inputValue(&throttleInput);
 
-  flapSwitchValue = inputValue(&flapInput);
+  flapSwitchValue = readSwitch(&flapSwitch);
+  modeSelectorValue = readSwitch(&modeSelector);
   
-  buttonInput.input(inputValue(&modeSwitchInput));  
+  buttonInputFilter.input(inputValue(&buttonInput));  
 
-  AILEMODEBUTTON.input(buttonInput.value());
-  ELEVMODEBUTTON.input(buttonInput.value());
-  TRIMBUTTON.input(buttonInput.value());
-  GEARBUTTON.input(buttonInput.value());
+  AILEMODEBUTTON.input(buttonInputFilter.value());
+  ELEVMODEBUTTON.input(buttonInputFilter.value());
+  TRIMBUTTON.input(buttonInputFilter.value());
+  GEARBUTTON.input(buttonInputFilter.value());
 
   //
   // Receiver fail detection
   //
   
-  if(buttonInput.value() > 0.90 && aileStick < -0.90 && elevStick > 0.90) {
+  if(buttonInputFilter.value() > 0.90
+     && aileStick < -0.90 && elevStick > 0.90) {
     if(!vpMode.rxFailSafe) {
       consoleNoteLn_P(PSTR("Receiver failsafe mode ENABLED"));
       vpMode.rxFailSafe = true;
@@ -2134,6 +2136,39 @@ void configurationTask()
   }
 
   //
+  // Direct mode selector input
+  //
+  /*
+  if(modeSelectorValue == -1) {
+    if(!vpMode.slowFlight) {
+      consoleNoteLn_P(PSTR("Slow flight mode ENABLED"));
+      vpMode.slowFlight = vpMode.bankLimiter = true;
+      logMark();
+    }
+  } else if(vpMode.slowFlight) {
+    consoleNoteLn_P(PSTR("Slow flight mode DISABLED"));
+    vpMode.slowFlight = false;
+    logMark();
+  }
+
+  if(modeSelectorValue == 0) {
+    if(vpMode.bankLimiter)
+      consoleNoteLn_P(PSTR("Bank limiter DISABLED"));
+    
+    vpMode.bankLimiter = vpMode.wingLeveler = false;
+    
+  } else if(!vpMode.bankLimiter) {
+      consoleNoteLn_P(PSTR("Bank limiter ENABLED"));
+      vpMode.bankLimiter = true;
+
+      if(!ailePilotInput) {
+	consoleNoteLn_P(PSTR("Wing leveler ENABLED"));
+	vpMode.wingLeveler = true;
+      }
+  }
+  */
+  
+  //
   // Test mode control
   //
 
@@ -2214,6 +2249,11 @@ void configurationTask()
     vpFeature.stabilizePitch = vpFeature.alphaHold
       = !alphaDevice.status() && vpMode.slowFlight && !vpMode.takeOff;
     vpFeature.pitchHold = false;
+
+    // Slow flight implies bank limiter
+
+    if(vpMode.slowFlight)
+      vpMode.bankLimiter = true;
   
     // Failsafe mode interpretation
 

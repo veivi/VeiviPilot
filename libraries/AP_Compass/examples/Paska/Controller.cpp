@@ -5,28 +5,15 @@ Controller::Controller() {
   rangeMax = 1;
 }
 
-void Controller::setPID(float kP, float kI, float kD) {
-    Kp = kP; 
-    Ki = kI;
-    Kd = kD;
-  }
-
-float Controller::getP(void)
+void Controller::setPID(float kP, float kI, float kD)
 {
-  return Kp;
-}
-
-float Controller::getI(void)
-{
-  return Ki;
-}
-
-float Controller::getD(void)
-{
-  return Kd;
+  Kp = kP; 
+  Ki = kI;
+  Kd = kD;
 }
 
 void Controller::setZieglerNicholsPID(float Ku, float Tu) {
+  Ku *= gainTweak_c;
   Kp = 0.6*Ku; 
   Ki = 2*Kp/Tu; 
   Kd = Kp*Tu/8;
@@ -34,47 +21,12 @@ void Controller::setZieglerNicholsPID(float Ku, float Tu) {
 
 void Controller::setZieglerNicholsPI(float Ku, float Tu)
 {
+  Ku *= gainTweak_c;
   Kp = 0.45*Ku; 
   Ki = 1.2*Kp/Tu; 
   Kd = 0;
 }
 
-float Controller::getKu(void)
-{
-  float k = 0;
-  
-  if(Kd != 0.0)
-    k = Kp/0.6; 
-  else
-    k = Kp/0.45;
-
-  return k;
-}
-
-float Controller::getTu(void)
-{
-  if(Kd != 0.0)
-    return 2*Kp/Ki;
-  else
-    return 1.2*Kp/Ki; 
-}
-
-void Controller::getZieglerNicholsPID(float *Ku, float *Tu)
-{
-  if(Ku)
-    *Ku = getKu();
-  if(Tu)
-    *Tu = getTu();
-}
-
-float znGain(float kP, float kI, float kD)
-{
-  if(kD != 0.0)
-    return kP/0.6; 
-  else
-    return kP/0.45; 
-}
-  
 void Controller::reset(float value, float err) {
   prevErr = err;
   I = value - Kp*err;
