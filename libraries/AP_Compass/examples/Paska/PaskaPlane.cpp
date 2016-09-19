@@ -88,8 +88,8 @@ struct RxInputRecord *ppmInputs[] =
   { &aileInput, &elevInput, &throttleInput, &rudderInput, &buttonInput, &tuningKnobInput, &flapInput, &modeInput };
 
 ButtonInputChannel buttonInputFilter;
-Button rightDownButton(-0.60), rightUpButton(0.26),
-  leftDownButton(-0.13), leftUpButton(0.66);
+Button rightDownButton(-1.0), rightUpButton(0.33),
+  leftDownButton(-0.3), leftUpButton(1);
 struct SwitchRecord flapSwitch = { &flapInput }, modeSelector = { &modeInput };
 int8_t flapSwitchValue, modeSelectorValue;
 
@@ -521,19 +521,15 @@ bool AS5048B_read(uint8_t addr, uint16_t *result)
   return success;
 }
 
-bool AS5048B_alpha(int16_t *result) {
+bool AS5048B_alpha(int16_t *result)
+{
   uint16_t raw = 0;
+  bool success = AS5048B_read(AS5048B_ANGLMSB_REG, &raw);
   
-  if(!AS5048B_read(AS5048B_ANGLMSB_REG, &raw))
-    // Failed
-    return false;
-
-  // The value is good, use it
-
-  if(result)
+  if(success && result)
     *result = (int16_t) (raw - vpParam.alphaRef);
   
-  return true;
+  return success;
 }
 
 //
@@ -2803,7 +2799,7 @@ void controlTask()
   if(!vpFeature.stabilizeBank) {
 
     if(vpMode.wingLeveler)
-      aileOutput = clamp(aileOutput - bankAngle, -1, 1);
+      aileOutput = clamp((aileStick - bankAngle) / (PI/4), -1, 1);
     
     aileCtrl.reset(aileOutput, 0);
     
