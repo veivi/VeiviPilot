@@ -2052,7 +2052,7 @@ void configurationTask()
   //
   // AILE MODE BUTTON
   //
-  
+
   if(AILEMODEBUTTON.singlePulse()) {
     //
     // PULSE : DISABLE BANK LIMITER
@@ -2134,7 +2134,7 @@ void configurationTask()
   //
   // Direct mode selector input
   //
-  /*
+
   if(modeSelectorValue == -1) {
     if(!vpMode.slowFlight) {
       consoleNoteLn_P(PSTR("Slow flight mode ENABLED"));
@@ -2162,7 +2162,6 @@ void configurationTask()
 	vpMode.wingLeveler = true;
       }
   }
-  */
   
   //
   // Test mode control
