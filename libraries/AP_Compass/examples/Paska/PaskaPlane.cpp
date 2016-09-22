@@ -1459,7 +1459,7 @@ void receiverTask()
   // Receiver fail detection
   //
   
-  if(buttonInputFilter.value() > 0.90
+  if(buttonInputFilter.value() < -0.90
      && aileStick < -0.90 && elevStick > 0.90) {
     if(!vpMode.rxFailSafe) {
       consoleNoteLn_P(PSTR("Receiver failsafe mode ENABLED"));
@@ -1506,6 +1506,8 @@ void receiverTask()
       break;
     }
 }
+
+const float simulatedAttitudeErr_c = 1.3/RADIAN;
 
 void sensorTaskFast()
 {
@@ -1556,13 +1558,13 @@ void sensorTaskFast()
   // Simulator link overrides
   
   if(vpStatus.simulatorLink) {
-    alpha = sensorData.alpha/RADIAN;
+    alpha = sensorData.alpha/RADIAN + simulatedAttitudeErr_c/2;
     iAS = sensorData.ias*1852/60/60;
     rollRate = sensorData.rrate;
     pitchRate = sensorData.prate;
     yawRate = sensorData.yrate;
-    bankAngle = sensorData.roll/RADIAN;
-    pitchAngle = sensorData.pitch/RADIAN;
+    bankAngle = sensorData.roll/RADIAN + simulatedAttitudeErr_c;
+    pitchAngle = sensorData.pitch/RADIAN + simulatedAttitudeErr_c;
     heading = (int) (sensorData.heading + 0.5);
     accX = sensorData.accx*FOOT;
     accY = sensorData.accy*FOOT;
@@ -2230,7 +2232,7 @@ void configurationTask()
   // TakeOff mode disabled when airspeed detected (or fails)
 
   if(vpMode.takeOff
-     && (pitotDevice.status() || iasFilter.output() > vpParam.iasMin*2/3)) {
+     && (pitotDevice.status() || iasFilter.output() > vpParam.iasMin)) {
     if(!vpStatus.consoleLink)
       vpStatus.silent = true;
     
