@@ -691,14 +691,14 @@ struct TakeoffTest {
   bool (*function)(bool);
 };
 
-const float toc_margin_c = 0.02;
+const float toc_margin_c = 0.03;
 
 bool toc_test_mode(bool reset)
 {
   if(reset)
     return true;
   else
-    return !vpMode.test && vpMode.wingLeveler;
+    return !vpMode.test && vpMode.wingLeveler && vpMode.takeOff && vpMode.bankLimiter && !vpMode.slowFlight;
 }
 
 bool toc_test_trim(bool reset)
@@ -752,7 +752,7 @@ bool toc_test_timing(bool reset)
 
 bool toc_test_load(bool reset)
 {
-  return idleAvg > 0.2;
+  return idleAvg > 0.15;
 }
 
 bool toc_test_eeprom(bool reset)
@@ -1649,8 +1649,10 @@ void measurementTask()
   static uint32_t prevMeasurement;
  
   // Idle measurement
+
+  if(!beepDuration)
+    idleAvg = 7*idleAvg/8 + (float) idleMicros/1e6/8;
   
-  idleAvg = 7*idleAvg/8 + (float) idleMicros/1e6/8;
   idleMicros = 0;
 
   // PPM monitoring
@@ -2154,14 +2156,19 @@ void configurationTask()
     vpMode.bankLimiter = vpMode.wingLeveler = false;
     
   } else if(!vpMode.bankLimiter) {
-      consoleNoteLn_P(PSTR("Bank limiter ENABLED"));
-      vpMode.bankLimiter = true;
-
-      if(!ailePilotInput) {
-	consoleNoteLn_P(PSTR("Wing leveler ENABLED"));
-	vpMode.wingLeveler = true;
-      }
+    consoleNoteLn_P(PSTR("Bank limiter ENABLED"));
+    vpMode.bankLimiter = true;
   }
+
+  static int prev;
+  
+  if(modeSelectorValue == 1 && prev != 1
+     && !ailePilotInput && !vpMode.wingLeveler) {
+    consoleNoteLn_P(PSTR("Wing leveler ENABLED"));
+    vpMode.wingLeveler = true;
+  }
+
+  prev = modeSelectorValue;
   
   //
   // Test mode control
