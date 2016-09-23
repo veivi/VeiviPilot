@@ -173,15 +173,16 @@ struct ModeRecord {
   bool alphaFailSafe;
   bool sensorFailSafe;
   bool rxFailSafe;
-  bool wingLeveler;
   bool bankLimiter;
   bool takeOff;
+  bool wingLeveler;
   bool slowFlight;
   bool autoTest;
   bool alwaysLog;
 };
 
 struct FeatureRecord {
+  bool keepLevel;
   bool stabilizeBank;
   bool stabilizePitch;
   bool pitchHold;
@@ -2088,11 +2089,11 @@ void configurationTask()
 	  consoleNoteLn_P(PSTR("T/o configuration test FAILED"));
 	  badBeep(5);
 	}
-      } else if(vpMode.bankLimiter) {
+      } /*else if(vpMode.bankLimiter) {
 	consoleNoteLn_P(PSTR("Bank limiter DISABLED"));
 	vpMode.wingLeveler = vpMode.bankLimiter = false;
 	logMark();
-      }
+	}*/
     }
   } else if(AILEMODEBUTTON.depressed()) {
     //
@@ -2100,18 +2101,18 @@ void configurationTask()
     //
   
     failsafeDisable();
-      
+    /*      
     if(!vpMode.bankLimiter) {
       consoleNoteLn_P(PSTR("Bank limiter ENABLED"));
       vpMode.bankLimiter = true;
     }
-	
+    */	
     if(!vpMode.wingLeveler) {
       consoleNoteLn_P(PSTR("Wing leveler ENABLED"));
       vpMode.wingLeveler = true;
     } 
   }
-
+  /*
   //
   // ELEV MODE BUTTON
   //
@@ -2134,7 +2135,7 @@ void configurationTask()
     vpMode.slowFlight = true;
     logMark();
   }
-
+  */
   //
   // Direct mode selector input
   //
@@ -2155,23 +2156,13 @@ void configurationTask()
     if(vpMode.bankLimiter)
       consoleNoteLn_P(PSTR("Bank limiter DISABLED"));
     
-    vpMode.bankLimiter = vpMode.wingLeveler = false;
+    vpMode.bankLimiter = false;
     
   } else if(!vpMode.bankLimiter) {
     consoleNoteLn_P(PSTR("Bank limiter ENABLED"));
     vpMode.bankLimiter = true;
   }
 
-  static int prev;
-  
-  if(modeSelectorValue == 1 && prev != 1
-     && !ailePilotInput && !vpMode.wingLeveler) {
-    consoleNoteLn_P(PSTR("Wing leveler ENABLED"));
-    vpMode.wingLeveler = true;
-  }
-
-  prev = modeSelectorValue;
-  
   //
   // Test mode control
   //
@@ -2246,8 +2237,11 @@ void configurationTask()
 
   if(!vpMode.rxFailSafe) {
     // Default
-    
-    vpFeature.stabilizeBank = !vpMode.takeOff;
+
+    vpFeature.stabilizeBank
+      = !vpMode.takeOff && (gearOutput == 1);
+    vpFeature.keepLevel
+      = vpMode.wingLeveler || vpMode.takeOff || gearOutput == 0;
     vpFeature.pusher
       = !alphaDevice.status() && !vpMode.takeOff && !vpMode.slowFlight;
     vpFeature.stabilizePitch = vpFeature.alphaHold
@@ -2264,7 +2258,7 @@ void configurationTask()
     if(vpMode.sensorFailSafe) {
       vpFeature.stabilizePitch = vpFeature.stabilizeBank
 	= vpFeature.pitchHold = vpFeature.alphaHold = vpFeature.pusher
-	= vpMode.bankLimiter = vpMode.wingLeveler = vpMode.takeOff
+	= vpMode.bankLimiter = vpFeature.keepLevel = vpMode.takeOff
 	= vpMode.slowFlight = false;
 
     } else if(vpMode.alphaFailSafe)
@@ -2305,7 +2299,7 @@ void configurationTask()
     case 1:
       // Wing stabilizer gain
          
-      vpFeature.stabilizeBank = vpMode.bankLimiter = vpMode.wingLeveler = true;
+      vpFeature.stabilizeBank = vpMode.bankLimiter = vpFeature.keepLevel = true;
       aileCtrl.setPID(testGain = testGainExpo(s_Ku_ref), 0, 0);
       break;
             
@@ -2313,7 +2307,7 @@ void configurationTask()
       // Wing stabilizer gain autotest
 
       analyzerInputCh = ac_aile;
-      vpFeature.stabilizeBank = vpMode.bankLimiter = vpMode.wingLeveler = true;
+      vpFeature.stabilizeBank = vpMode.bankLimiter = vpFeature.keepLevel = true;
 	
       if(!vpMode.autoTest) {
 	vpMode.autoTest = true;
@@ -2384,7 +2378,7 @@ void configurationTask()
     case 9:
       // Max alpha
 
-      vpFeature.stabilizeBank = vpMode.bankLimiter = vpMode.wingLeveler = true;
+      vpFeature.stabilizeBank = vpMode.bankLimiter = vpFeature.keepLevel = true;
       maxAlpha = testGain = testGainLinear(20/RADIAN, 10/RADIAN);
       break;         
 
@@ -2806,14 +2800,14 @@ void controlTask()
 
   if(!vpFeature.stabilizeBank) {
 
-    if(vpMode.wingLeveler)
+    if(vpFeature.keepLevel)
       aileOutput = clamp((aileStick - bankAngle) / (PI/4), -1, 1);
     
     aileCtrl.reset(aileOutput, 0);
     
   } else {
     
-    if(vpMode.wingLeveler)
+    if(vpFeature.keepLevel)
       // Strong leveler enabled
         
       targetRollRate =
