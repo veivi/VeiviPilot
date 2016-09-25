@@ -2239,7 +2239,7 @@ void configurationTask()
     // Default
 
     vpFeature.stabilizeBank
-      = !vpMode.takeOff && (gearOutput == 1);
+      = !(vpMode.takeOff || gearOutput == 0);
     vpFeature.keepLevel
       = vpMode.wingLeveler || vpMode.takeOff || gearOutput == 0;
     vpFeature.pusher
