@@ -2701,12 +2701,24 @@ void gpsTask()
   */
 }
 
-float nominalPitchRate(float bank, float target)
+const float peakWidth_c = 1.0/2.5;
+
+float coeffOfLift(float aoa)
 {
   const float alphaCL0 = vpParam.alphaZeroLift,
-    ratio = (target - alphaCL0) / (vpParam.alphaMax - alphaCL0);
-  
-  return square(sin(bank))*ratio*iasFilter.output()*G/square(vpParam.iasMin);
+    ratio = (aoa - alphaCL0) / (vpParam.alphaMax - alphaCL0);
+
+  if(ratio < 1 - peakWidth_c)
+    return ratio*PI/2;
+  else
+    return (1 - peakWidth_c)*PI/2
+      + peakWidth_c*sin((ratio - 1 + peakWidth_c)/peakWidth_c*PI/2)/(PI/2);
+}
+
+float nominalPitchRate(float bank, float target)
+{
+  return square(sin(bank))*coeffOfLift(target)
+    *iasFilter.output()*G/square(vpParam.iasMin);
 }
 
 //
@@ -2719,7 +2731,7 @@ float nominalPitchRate(float bank, float pitch, float target)
   const float alphaCL0 = vpParam.alphaZeroLift,
     ratio = (target - alphaCL0) / (vpParam.alphaMax - alphaCL0);
 
-  const float theta = 0; // the angle between the plane's "up" and earh "up"
+  const float theta = 0; // the angle between local "up" and earh "up"
     
   return G/iAS*(ratio*square(iAS/vpParam.iasMin) - cos(theta));
 }
@@ -2993,10 +3005,10 @@ void beepTask()
 
   if(beepDuration > 0) {
     if(beepGood)
-      beepPrim(800, 1e3/BEEP_HZ);
+      beepPrim(1800, 1e3/BEEP_HZ);
     else {
       if(phase < 2) {
-	beepPrim(phase < 1 ? 1000 : 750, 1e3/BEEP_HZ);
+	beepPrim(phase < 1 ? 2000 : 1750, 1e3/BEEP_HZ);
 	phase++;
       } else
 	phase = 0;
@@ -3214,6 +3226,19 @@ void setup()
   // Misc filters
 
   accAvg.reset(G);
+
+  // CoL curve
+
+  consoleNoteLn_P(PSTR("Coefficient of lift curve"));
+  
+  for(int i = 0; i <= 16; i++) {
+    consoleNote("");
+    consolePrint(vpParam.alphaMax*RADIAN*i/16);
+    consoleTab(10);
+    consolePrint("|");
+    consoleTab(10+coeffOfLift(vpParam.alphaMax*i/16)*60);
+    consolePrintLn("*");
+  }
 
   // Done
   
