@@ -2701,7 +2701,7 @@ void gpsTask()
   */
 }
 
-const float peakWidth_c = 1.0/2.5;
+const float peakWidth_c = 1.0/4;
 
 float coeffOfLift(float aoa)
 {
@@ -2709,9 +2709,9 @@ float coeffOfLift(float aoa)
     ratio = (aoa - alphaCL0) / (vpParam.alphaMax - alphaCL0);
 
   if(ratio < 1 - peakWidth_c)
-    return ratio*PI/2;
+    return ratio*(1 + peakWidth_c*(PI/2 - 1));
   else
-    return (1 - peakWidth_c)*PI/2
+    return (1 - peakWidth_c)*(1 + peakWidth_c*(PI/2 - 1))
       + peakWidth_c*sin((ratio - 1 + peakWidth_c)/peakWidth_c*PI/2)/(PI/2);
 }
 
@@ -3229,14 +3229,16 @@ void setup()
 
   // CoL curve
 
-  consoleNoteLn_P(PSTR("Coefficient of lift curve"));
+  consoleNote_P(PSTR("Coefficient of lift curve"));
+  consoleTab(10+60);
+  consolePrintLn("|");
   
-  for(int i = 0; i <= 16; i++) {
+  for(float r = 0.0; r <= 1.2; r += 0.075) {
     consoleNote("");
-    consolePrint(vpParam.alphaMax*RADIAN*i/16);
+    consolePrint(vpParam.alphaMax*RADIAN*r);
     consoleTab(10);
     consolePrint("|");
-    consoleTab(10+coeffOfLift(vpParam.alphaMax*i/16)*60);
+    consoleTab(10+coeffOfLift(vpParam.alphaMax*r)*60);
     consolePrintLn("*");
   }
 
