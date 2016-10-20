@@ -51,7 +51,7 @@ AP_AHRS_DCM ahrs {ins,  barometer, gps};
 // Threshold speed margin (IAS)
 //
 
-const float thresholdMargin_c = 20/100.0;
+const float thresholdMargin_c = 15/100.0;
 
 //
 // HW timer declarations
@@ -122,7 +122,7 @@ struct PWMOutput pwmOutput[] = {
 
 // const struct PinDescriptor piezo =  { PortE, 3 };
 
-#define PIEZO pwmOutput[3]
+#define PIEZO pwmOutput[4]
 
 //
 // Function to servo output mapping
@@ -2701,20 +2701,6 @@ void gpsTask()
   */
 }
 
-const float peakWidth_c = 1.0/4;
-
-float coeffOfLift(float aoa)
-{
-  const float alphaCL0 = vpParam.alphaZeroLift,
-    ratio = (aoa - alphaCL0) / (vpParam.alphaMax - alphaCL0);
-
-  if(ratio < 1 - peakWidth_c)
-    return ratio*(1 + peakWidth_c*(PI/2 - 1));
-  else
-    return (1 - peakWidth_c)*(1 + peakWidth_c*(PI/2 - 1))
-      + peakWidth_c*sin((ratio - 1 + peakWidth_c)/peakWidth_c*PI/2)/(PI/2);
-}
-
 float nominalPitchRate(float bank, float target)
 {
   return square(sin(bank))*coeffOfLift(target)
@@ -3226,21 +3212,6 @@ void setup()
   // Misc filters
 
   accAvg.reset(G);
-
-  // CoL curve
-
-  consoleNote_P(PSTR("Coefficient of lift curve"));
-  consoleTab(10+60);
-  consolePrintLn("|");
-  
-  for(float r = 0.0; r <= 1.2; r += 0.075) {
-    consoleNote("");
-    consolePrint(vpParam.alphaMax*RADIAN*r);
-    consoleTab(10);
-    consolePrint("|");
-    consoleTab(10+coeffOfLift(vpParam.alphaMax*r)*60);
-    consolePrintLn("*");
-  }
 
   // Done
   

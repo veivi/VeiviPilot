@@ -40,7 +40,7 @@ const struct ParamRecord paramDefaults = {
   .wl_Limit = 0.0,
   .iasMin = 12,
   .roll_C = 0.1,
-  .dummy_0 = 0,
+  .col_Peak = 0.2,
   .servoRate = 60/0.09,
   .takeoffTrim = 0.25
 };
@@ -226,6 +226,41 @@ void printParams()
   consolePrintLn(vpParam.servoBrake);
   consoleNote_P(PSTR("  Servo rate = "));
   consolePrintLn(vpParam.servoRate);
+
+  consoleNoteLn_P(PSTR("CoL(norm) curve"));
+  
+  for(float aR = -0.2; aR <= 1.2; aR += 0.075) {
+    consoleNote("");
+    consolePrint(vpParam.alphaMax*RADIAN*aR);
+    consoleTab(10);
+
+    const int col0 = 20, col1 = 78;
+    int x = (col1-col0) * coeffOfLift(vpParam.alphaMax*aR);
+
+    if(x < 0) {
+      consoleTab(col0+x);
+      consolePrint("*");
+      consoleTab(col0);
+      consolePrint("|");
+      consoleTab(col1);
+      consolePrintLn("|");
+    } else if(x > 0) {
+      consoleTab(col0);
+      consolePrint("|");
+      consoleTab(col0+x);
+      if(x < (col1-col0)) {
+	consolePrint("*");
+	consoleTab(col1);
+	consolePrintLn("|");
+      } else
+	consolePrintLn("*");
+    } else {
+      consoleTab(col0);
+      consolePrint("*");
+      consoleTab(col1);
+      consolePrintLn("|");
+    }
+  }
 }
 
 static void backupParamEntry(const Command *e)

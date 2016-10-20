@@ -20,6 +20,7 @@ uint8_t population(uint16_t a);
 float randomNum(float small, float large);
 uint32_t randomUInt32();
 float quantize(float value, float *state, int numSteps);
+float coeffOfLift(float aoa);
 
 class RunningAvgFilter {
  public:

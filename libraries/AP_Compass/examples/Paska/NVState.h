@@ -29,7 +29,8 @@ struct ParamRecord {
   float ff_A, ff_B;
   float wl_Limit;
   float iasMin;
-  float roll_C, dummy_0;
+  float roll_C;
+  float col_Peak;
   float servoRate;
   float takeoffTrim;
   };

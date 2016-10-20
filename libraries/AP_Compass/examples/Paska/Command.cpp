@@ -39,6 +39,7 @@ const struct Command commands[] PROGMEM = {
   { "ias", c_ias, e_float, &vpParam.iasMin },
   { "roll_k", c_roll_k, e_float, &vpParam.roll_C },
   { "servorate", c_servorate, e_float, &vpParam.servoRate },
+  { "peak", c_peak, e_float, &vpParam.col_Peak },
   { "update", c_update },
   { "beep", c_beep },
   { "ping", c_ping },
