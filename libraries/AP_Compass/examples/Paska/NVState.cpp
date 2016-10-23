@@ -235,20 +235,20 @@ void printParams()
     consoleTab(10);
 
     const int col0 = 20, col1 = 78;
-    int x = (col1-col0) * coeffOfLift(vpParam.alphaMax*aR);
+    int x = col0 + (col1-col0) * coeffOfLift(vpParam.alphaMax*aR);
 
-    if(x < 0) {
-      consoleTab(col0+x);
+    if(x < col0) {
+      consoleTab(x);
       consolePrint("*");
       consoleTab(col0);
       consolePrint("|");
       consoleTab(col1);
       consolePrintLn("|");
-    } else if(x > 0) {
+    } else if(x > col0) {
       consoleTab(col0);
       consolePrint("|");
-      consoleTab(col0+x);
-      if(x < (col1-col0)) {
+      consoleTab(x);
+      if(x < col1) {
 	consolePrint("*");
 	consoleTab(col1);
 	consolePrintLn("|");

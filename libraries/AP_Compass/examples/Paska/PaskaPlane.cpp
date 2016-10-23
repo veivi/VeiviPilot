@@ -203,7 +203,7 @@ struct FeatureRecord vpFeature;
 struct StatusRecord vpStatus;
 // struct GPSFix gpsFix;
 
-uint32_t currentTime;
+uint32_t currentTime, lastPPMWarn;
 float controlCycle = 10.0e-3;
 uint32_t idleMicros;
 float idleAvg, logBandWidth, ppmFreq, simInputFreq;
@@ -696,26 +696,18 @@ const float toc_margin_c = 0.03;
 
 bool toc_test_mode(bool reset)
 {
-  if(reset)
-    return true;
-  else
-    return !vpMode.test && vpMode.wingLeveler && vpMode.takeOff && vpMode.bankLimiter && !vpMode.slowFlight;
+  return !vpMode.test && vpMode.takeOff
+    && vpMode.wingLeveler && vpMode.bankLimiter && !vpMode.slowFlight;
 }
 
 bool toc_test_trim(bool reset)
 {
-  if(reset)
-    return true;
-  else
     return fabsf(elevTrim - vpParam.takeoffTrim) < toc_margin_c;
 }
-
+  
 bool toc_test_ppm(bool reset)
 {
-  if(reset)
-    ppmWarnShort = ppmWarnSlow = false;
-  
-  return !ppmWarnShort && !ppmWarnSlow;
+  return currentTime - lastPPMWarn > 10e6;
 }
 
 bool toc_test_ram(bool reset)
@@ -730,7 +722,6 @@ bool toc_test_timing(bool reset)
   
   if(reset) {
     result = measured = started = false;
-    return true;
 
   } else if(!started) {
     if(!beepDuration) {
@@ -768,21 +759,13 @@ bool toc_test_alpha_sensor(bool reset)
 
 bool toc_test_alpha_range(bool reset)
 {
-  static bool bigAlpha, zeroAlpha, bigAlphaAgain;
+  static bool bigAlpha, zeroAlpha;
   static uint32_t lastNonZeroAlpha, lastSmallAlpha;
 
   if(reset) {
-    zeroAlpha = bigAlpha = bigAlphaAgain = false;
+    zeroAlpha = bigAlpha = false;
     lastNonZeroAlpha = lastSmallAlpha = currentTime;
-    return true;
     
-  } else if(!bigAlpha) {
-    if(fabsf(alpha - 90/RADIAN) > 15/RADIAN) {
-      lastSmallAlpha = currentTime;
-    } else if(currentTime > lastSmallAlpha + 1.0e6) {
-      consoleNoteLn_P(PSTR("Stable BIG ALPHA"));
-      bigAlpha = true;
-    }
   } else if(!zeroAlpha) {
     if(fabs(alpha) > 1.5/RADIAN) {
       lastNonZeroAlpha = currentTime;
@@ -790,40 +773,41 @@ bool toc_test_alpha_range(bool reset)
       consoleNoteLn_P(PSTR("Stable ZERO ALPHA"));
       zeroAlpha = true;
     }
-  } else if(!bigAlphaAgain) {
-    if(fabsf(alpha - 90/RADIAN) > 15/RADIAN) {
+  } else if(!bigAlpha) {
+    if(fabsf(alpha - 90/RADIAN) > 30/RADIAN) {
       lastSmallAlpha = currentTime;
     } else if(currentTime > lastSmallAlpha + 1.0e6) {
-      consoleNoteLn_P(PSTR("Stable BIG ALPHA seen again"));
-      bigAlphaAgain = true;
+      consoleNoteLn_P(PSTR("Stable BIG ALPHA"));
+      bigAlpha = true;
     }
   }
   
-  return bigAlpha && zeroAlpha && bigAlphaAgain;
+  return bigAlpha && zeroAlpha;
 }
 
 bool toc_test_pitot(bool reset)
 {
+  static bool positiveIAS;
+  
+  if(reset)
+    positiveIAS = false;
+  else if(vpStatus.positiveIAS)
+    positiveIAS = true;
+  
   return !pitotDevice.status() && iasEntropyAcc.output() > 10
-    && !vpStatus.pitotBlocked;
+    && !vpStatus.pitotBlocked && positiveIAS;
 }
 
 bool toc_test_attitude(bool reset)
 {
-  if(reset)
-    return true;
-  else
-    return fabsf(pitchAngle) < 10.0/RADIAN && fabsf(bankAngle) < 5.0/RADIAN;
+  return fabsf(pitchAngle) < 10.0/RADIAN && fabsf(bankAngle) < 5.0/RADIAN;
 }
 
 bool toc_test_gyro(bool reset)
 {
-  if(reset)
-    return true;
-  else
-    return (fabsf(pitchRate) < 1.0/RADIAN
-	    && fabsf(rollRate) < 1.0/RADIAN
-	    && fabsf(yawRate) < 1.0/RADIAN);
+  return (fabsf(pitchRate) < 1.0/RADIAN
+	  && fabsf(rollRate) < 1.0/RADIAN
+	  && fabsf(yawRate) < 1.0/RADIAN);
 }
 
 struct TOCRangeTestState {
@@ -832,6 +816,8 @@ struct TOCRangeTestState {
 
 bool toc_test_range_generic(struct TOCRangeTestState *state, bool reset, struct RxInputRecord *input, float expectedMin, float expectedMax)
 {
+  return true;
+  /*
   const float value = inputValue(input);
   
   if(reset) {
@@ -844,6 +830,7 @@ bool toc_test_range_generic(struct TOCRangeTestState *state, bool reset, struct 
   
   return (fabsf(state->valueMin - expectedMin) < toc_margin_c
 	  && fabsf(state->valueMax - expectedMax) < toc_margin_c);
+  */
 }
 
 bool toc_test_elev_range(bool reset)
@@ -901,13 +888,12 @@ bool toc_test_tuning_zero(bool reset)
   return reset || fabsf(inputValue(&tuningKnobInput)) < toc_margin_c/2;
 }
 
-bool toc_test_button(bool reset)
+bool toc_test_button_range(bool reset)
 {
   static bool leftUp, leftDown, rightUp, rightDown;
 
   if(reset) {
     leftUp = leftDown = rightUp = rightDown = false;
-    return true;
     
   } else {
     leftUp |= leftUpButton.state();
@@ -916,9 +902,13 @@ bool toc_test_button(bool reset)
     rightDown |= rightDownButton.state();
   }
 
-  return (leftUp && leftDown && rightUp && rightDown
-	  && !leftUpButton.state() && !leftDownButton.state()
-	  && !rightUpButton.state() && !rightDownButton.state());
+  return leftUp && leftDown && rightUp && rightDown;
+}
+
+bool toc_test_button_neutral(bool reset)
+{
+  return !leftUpButton.state() && !leftDownButton.state()
+    && !rightUpButton.state() && !rightDownButton.state();
 }
 
 const struct TakeoffTest tocTest[] PROGMEM =
@@ -934,7 +924,7 @@ const struct TakeoffTest tocTest[] PROGMEM =
     [toc_alpha_sensor] = { "ALPHA_S", toc_test_alpha_sensor },
     [toc_alpha_range] = { "ALPHA_R", toc_test_alpha_range },
     [toc_pitot] = { "PITOT", toc_test_pitot },
-    [toc_button] = { "BUTTON", toc_test_button },
+    [toc_button] = { "BUTTON", toc_test_button_neutral },
     [toc_aile_neutral] = { "AILE_N", toc_test_aile_neutral },
     [toc_aile_range] = { "AILE_R", toc_test_aile_range },
     [toc_elev_neutral] = { "ELEV_N", toc_test_elev_neutral },
@@ -983,7 +973,7 @@ bool tocTestInvoke(bool reset, bool challenge, bool verbose)
 
 bool tocTestReset()
 {
-  return tocTestInvoke(true, true, true);
+  return tocTestInvoke(true, false, false);
 }
 
 void tocTestUpdate()
@@ -1676,6 +1666,13 @@ void measurementTask()
   writeBytesCum = 0;
   
   prevMeasurement = currentTime;
+
+  // PPM monitoring
+
+  if(ppmWarnSlow || ppmWarnShort) {
+    lastPPMWarn = currentTime;
+    ppmWarnSlow = ppmWarnShort = false;
+  }
 }
 
 //
@@ -2012,8 +2009,7 @@ void configurationTask()
   // T/O config test
   //
 
-  if(vpMode.takeOff)
-    tocTestUpdate();
+  tocTestUpdate();
 
   //
   //   GEAR BUTTON
@@ -2067,21 +2063,13 @@ void configurationTask()
       failsafeDisable();
       
     } else {
-      if(!vpMode.takeOff && iasFilter.output() < vpParam.iasMin*2/3) {
-	if(tocTestReset()) {
-	  vpStatus.silent = false;
-	  
+      if(iasFilter.output() < vpParam.iasMin*2/3) {
+	if(!vpMode.takeOff) {
 	  consoleNoteLn_P(PSTR("TakeOff mode ENABLED"));
-	  goodBeep(0.5);
-	
 	  vpMode.takeOff = true;
-	  vpMode.slowFlight = false;
 	  elevTrim = vpParam.takeoffTrim;
-	} else {
-	  consoleNoteLn_P(PSTR("T/o/c test reset FAILED"));
-	  badBeep(1);
-	}	
-      } else if(vpMode.takeOff) {
+	}
+	
 	if(tocTestStatus(true)) {
 	  consoleNoteLn_P(PSTR("T/o configuration is GOOD"));
 	  goodBeep(1);
@@ -2089,11 +2077,7 @@ void configurationTask()
 	  consoleNoteLn_P(PSTR("T/o configuration test FAILED"));
 	  badBeep(5);
 	}
-      } /*else if(vpMode.bankLimiter) {
-	consoleNoteLn_P(PSTR("Bank limiter DISABLED"));
-	vpMode.wingLeveler = vpMode.bankLimiter = false;
-	logMark();
-	}*/
+      }
     }
   } else if(AILEMODEBUTTON.depressed()) {
     //
@@ -2991,10 +2975,10 @@ void beepTask()
 
   if(beepDuration > 0) {
     if(beepGood)
-      beepPrim(1800, 1e3/BEEP_HZ);
+      beepPrim(800, 1e3/BEEP_HZ);
     else {
       if(phase < 2) {
-	beepPrim(phase < 1 ? 2000 : 1750, 1e3/BEEP_HZ);
+	beepPrim(phase < 1 ? 950 : 750, 1e3/BEEP_HZ);
 	phase++;
       } else
 	phase = 0;
@@ -3212,6 +3196,10 @@ void setup()
   // Misc filters
 
   accAvg.reset(G);
+
+  // T/o/c test
+  
+  tocTestReset();
 
   // Done
   
