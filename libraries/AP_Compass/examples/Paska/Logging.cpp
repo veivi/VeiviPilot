@@ -285,9 +285,7 @@ bool logInit(uint32_t maxDuration)
     if(!readEEPROM(eepromSize-1, &dummy, 1)) {
       consoleNote_P(PSTR("EEPROM size = "));
       consolePrint(eepromSize/(1<<10));
-      consolePrint("k + ");
-      consolePrint(eepromSize%(1<<10));
-      consolePrintLn(" bytes");
+      consolePrintLn("k bytes");
       
       logSize = (eepromSize - logOffset)/sizeof(uint16_t);
 

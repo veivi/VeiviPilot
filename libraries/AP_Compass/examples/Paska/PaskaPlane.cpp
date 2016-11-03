@@ -228,7 +228,7 @@ bool beepGood;
 const int maxParams = 8;
 int beepDuration, gaugeCount, gaugeVariable[maxParams];
 I2CDevice alphaDevice(&I2c, 0, "alpha"), pitotDevice(&I2c, 0, "pitot");
-I2CDevice eepromDevice(&I2c, 0, "EEPROM");
+I2CDevice eepromDevice(&I2c, 0, "EEPROM"), displayDevice(&I2c, 0, "display");
 
 const int maxTests_c = 1;
 float autoTestIAS[maxTests_c], autoTestK[maxTests_c], autoTestT[maxTests_c], autoTestKxIAS[maxTests_c];
@@ -531,6 +531,17 @@ bool AS5048B_alpha(int16_t *result)
     *result = (int16_t) (raw - vpParam.alphaRef);
   
   return success;
+}
+
+//
+// OLED display interface
+//
+
+#define DISPLAY_ADDR 0x3C
+
+bool display_write(uint8_t addr, const uint8_t *storage, uint8_t bytes) 
+{
+  return I2c.write(DISPLAY_ADDR, addr, storage, bytes) == 0;
 }
 
 //
@@ -1405,6 +1416,19 @@ void alphaTask()
     sensorHash = crc16(sensorHash, (uint8_t*) &raw, sizeof(raw));
     prev = raw;
   }
+}
+
+void displayTask()
+{
+  /*  
+  uint8_t buffer;
+
+  if(!displayDevice.hasFailed()
+     && !displayDevice.handleStatus(!display_read(0, &buffer, 1))) {
+    consoleNote_P(PSTR("// Display reg 0 = "));
+    consolePrintLn(buffer);
+  }
+  */
 }
 
 void airspeedTask()
@@ -3039,6 +3063,8 @@ struct Task taskList[] = {
     HZ_TO_PERIOD(AIRSPEED_HZ) },
   { blinkTask,
     HZ_TO_PERIOD(LED_TICK) },
+  { displayTask,
+    HZ_TO_PERIOD(1) },
   { controlTaskGroup,
     HZ_TO_PERIOD(CONTROL_HZ) },
   { simulatorLinkTask,
