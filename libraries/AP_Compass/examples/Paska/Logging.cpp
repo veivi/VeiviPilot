@@ -73,7 +73,7 @@ uint16_t logRead(int32_t index)
 
 static void logCommit(void)
 {
-  if(!logReady(false) || !uncommitted)
+  if(!uncommitted)
     return;
     
   logPtr = logIndex(uncommitted);
@@ -89,9 +89,6 @@ static void logCommit(void)
 
 static void logEnter(const uint16_t *value, int count)
 {
-  if(!logReady(false))
-    return;
-    
   logWrite(logPtr, value, count);
   logCommit();
 
@@ -108,9 +105,6 @@ static void logEnter(uint16_t value)
 
 void logClear(void)
 {
-  if(!logReady())
-    return;
-
   bool wasNotEmpty = logLen > 0;
   
   consoleNoteLn_P(PSTR("Log being CLEARED"));
@@ -124,15 +118,15 @@ void logClear(void)
     storeNVState();
     consoleNote_P(PSTR("Log STAMP incremented to "));
     consolePrintLn(nvState.logStamp);
-  }
-    
+  }    
 }
-  
+
+void logInit()
+{
+}
+
 void logTestSet(uint16_t ch)
 {
-  if(!logReady())
-    return;
-
   nvState.testNum = ch;
   
   logClear();
@@ -285,15 +279,21 @@ bool logInit(uint32_t maxDuration)
   case invalid_c:
     logSize = 0;
     
-    while(!readEEPROM(eepromSize, &dummy, 1))
+    while(!readEEPROM(eepromSize+(1<<10)-1, &dummy, 1))
       eepromSize += 1<<10;
     
     if(!readEEPROM(eepromSize-1, &dummy, 1)) {
+      consoleNote_P(PSTR("EEPROM size = "));
+      consolePrint(eepromSize/(1<<10));
+      consolePrint("k + ");
+      consolePrint(eepromSize%(1<<10));
+      consolePrintLn(" bytes");
+      
       logSize = (eepromSize - logOffset)/sizeof(uint16_t);
 
       consoleNote_P(PSTR("Inferred log size = "));
       consolePrint(logSize/(1<<10));
-      consolePrint("k+");
+      consolePrint("k + ");
       consolePrint(logSize%(1<<10));
       consolePrintLn(" entries");
       
@@ -352,7 +352,9 @@ bool logInit(uint32_t maxDuration)
 	logState = ready_c;
        }
     } else {
-      consoleNoteLn_P(PSTR("*** The log is corrupt and is being cleared ***"));
+      consoleNoteLn_P(PSTR("Log appears corrupted"));
+      consoleNoteLn_P(PSTR("Log being INITIALIZED"));
+  
       logEndStamp = 0;
       logPtr = logSize-1;
       logLen = 0;

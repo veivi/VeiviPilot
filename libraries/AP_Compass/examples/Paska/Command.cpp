@@ -47,6 +47,7 @@ const struct Command commands[] PROGMEM = {
   { "alpha", c_alpha },
   { "dumpz", c_dump },
   { "clear", c_clear },
+  { "init", c_init },
   { "store", c_store },
   { "report", c_report },
   { "stop", c_stop },

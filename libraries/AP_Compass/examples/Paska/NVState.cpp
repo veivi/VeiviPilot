@@ -45,7 +45,12 @@ const struct ParamRecord paramDefaults = {
   .takeoffTrim = 0.25
 };
 
-const struct NVStateRecord stateDefaults = { 0, 128, 1024, 400, 0, false, 0 };
+const struct NVStateRecord stateDefaults = {
+  .crc = 0,
+  .paramPartition = 128,
+  .logPartition = 2048,
+  .logStamp = 400,
+  .model = 0 };
 
 static uint16_t crc16OfRecord(uint16_t initial, const uint8_t *record, int size)
 {
@@ -65,6 +70,11 @@ static uint16_t stateRecordCrc(struct NVStateRecord *record)
 void defaultParams(void)
 {
   vpParam = paramDefaults;
+}
+
+void defaultState(void)
+{
+  nvState = stateDefaults;
 }
 
 int maxModels(void)
@@ -122,7 +132,7 @@ void readNVState(void)
     
   if(nvState.crc != stateRecordCrc(&nvState)) {
     consolePrintLn_P(PSTR(" CORRUPT, using defaults")); 
-    defaultParams();
+    defaultState();
   } else
     consolePrintLn_P(PSTR(" OK"));
 }

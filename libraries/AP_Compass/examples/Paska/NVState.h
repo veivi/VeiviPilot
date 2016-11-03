@@ -40,7 +40,7 @@ struct NVStateRecord {
   uint16_t paramPartition, logPartition;
   uint16_t logStamp;
   uint16_t model;
-  bool logRPM;
+  bool dummy0;
   uint16_t testNum;
   int32_t rxCenter[MAX_CH], rxMin[MAX_CH], rxMax[MAX_CH];
 };

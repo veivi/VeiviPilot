@@ -1302,6 +1302,10 @@ void executeCommand(const char *buf)
       logClear();
       break;
 
+    case c_init:
+      logInit();
+      break;
+
     case c_stop:
       logDisable();
       break;

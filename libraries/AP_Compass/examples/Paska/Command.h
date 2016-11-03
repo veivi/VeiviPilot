@@ -41,6 +41,7 @@ typedef enum {
   c_params,
   c_reset,
   c_clear,
+  c_init,
   c_gauge,
   c_stamp,
   c_model,
