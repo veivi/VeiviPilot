@@ -1789,13 +1789,9 @@ void displayRefreshTask()
 
 void tocReportDisplay(const char *s)
 {
-  if(!tocStatusFailed) {
-    print("T/O/C FLAG :");
-    tocStatusFailed = true;
-  }
-
   print(" ");
   print(s);
+  tocStatusFailed = true;
 }
 
 void displayTask()
@@ -1815,8 +1811,10 @@ void displayTask()
   print(vpParam.name);
   printNL();
   
+  print("T/O/C");
+    
   if(tocTestStatus(tocReportDisplay))
-    print("T/O/C GOOD");
+    print(" GOOD");
   
   clear();
 }
@@ -2492,6 +2490,7 @@ void configurationTask()
 	  consoleNoteLn_P(PSTR("T/o configuration is GOOD"));
 	  goodBeep(1);
 	} else {
+	  consolePrintLn("");
 	  consoleNoteLn_P(PSTR("T/o configuration test FAILED"));
 	  badBeep(5);
 	}
