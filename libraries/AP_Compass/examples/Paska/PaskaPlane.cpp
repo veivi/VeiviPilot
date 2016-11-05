@@ -681,10 +681,6 @@ void cycleTimeMonitorReset(void)
   
 void cycleTimeMonitor(float value)
 {
-  if(beepDuration > 0)
-    // We're beeping, fuggetaboutit
-    return;
-  
   //
   // Track min and max
   //
@@ -1818,8 +1814,10 @@ void displayTask()
   print("Model: ");
   print(vpParam.name);
   printNL();
+  
   if(tocTestStatus(tocReportDisplay))
     print("T/O/C GOOD");
+  
   clear();
 }
 
@@ -3130,7 +3128,10 @@ void controlTask()
 {
   // Cycle time bookkeeping 
   
-  if(controlCycleEnded > 0) {
+  if(beepDuration > 0) {
+    // We're beeping, fuggetaboutit
+    controlCycleEnded = 0;
+  } else if(controlCycleEnded > 0) {
     controlCycle = (currentTime - controlCycleEnded)/1.0e6;
     cycleTimeMonitor(controlCycle);
   }
