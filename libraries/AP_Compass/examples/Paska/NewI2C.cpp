@@ -36,7 +36,7 @@ I2CDevice::I2CDevice(NewI2C *interface, uint8_t addr, const char *dname)
 
 bool I2CDevice::hasFailed()
 {
-  return failed && currentTime < failedAt+1e6;
+  return failed && currentTime < failedAt+5.0e6;
 }
 
 bool I2CDevice::status()
@@ -192,6 +192,11 @@ uint8_t NewI2C::wait(uint8_t address)
   }
 }
 
+uint8_t NewI2C::write(uint8_t address, const uint8_t *data, uint8_t numberBytes)
+{
+  return write(address, NULL, 0, data, numberBytes);
+}
+
 uint8_t NewI2C::write(uint8_t address, uint8_t registerAddress, const uint8_t *data, uint8_t numberBytes)
 {
   return write(address, &registerAddress, sizeof(registerAddress), data, numberBytes);
@@ -244,6 +249,11 @@ uint8_t NewI2C::write(uint8_t address, const uint8_t *addrArray, uint8_t addrSiz
     return 7;
     
   return returnStatus;
+}
+
+uint8_t NewI2C::read(uint8_t address, uint8_t *dataBuffer, uint8_t numberBytes)
+{
+  return read(address, NULL, 0, dataBuffer, numberBytes);
 }
 
 uint8_t NewI2C::read(uint8_t address, uint8_t registerAddress, uint8_t *dataBuffer, uint8_t numberBytes)
