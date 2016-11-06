@@ -544,19 +544,25 @@ bool SSD1306_data(const uint8_t *storage, uint8_t bytes)
 {
   uint8_t buffer[1+BLOCK] = { (1<<6) };
 
+  if(displayDevice.hasFailed())
+    return false;
+     
   if(bytes > BLOCK)
     bytes = BLOCK;
   
   for(int i = 0; i < bytes; i++)
     buffer[1+i] = storage[i];
   
-  return I2c.write(SSD1306_ADDR, buffer, bytes+1) == 0;
+  return displayDevice.handleStatus(I2c.write(SSD1306_ADDR, buffer, bytes+1));
 }
 
 bool SSD1306_zero(uint8_t bytes) 
 {
   uint8_t buffer[1+BLOCK] = { (1<<6) };
 
+  if(displayDevice.hasFailed())
+    return false;
+     
   memset(&buffer[1], 0, sizeof(buffer)-1);
   
   while(bytes > 0) {
@@ -565,7 +571,7 @@ bool SSD1306_zero(uint8_t bytes)
     if(block > BLOCK)
       block = BLOCK;
   
-    if(I2c.write(SSD1306_ADDR, buffer, block+1) != 0)
+    if(!displayDevice.handleStatus(I2c.write(SSD1306_ADDR, buffer, block+1)))
       return false;
 
     bytes -= block;
@@ -578,12 +584,8 @@ bool SSD1306_command(const uint8_t value)
 {
   uint8_t buffer[] = { 0, value };
   
-  return I2c.write(SSD1306_ADDR, buffer, sizeof(buffer)) == 0;
-}
-
-bool SSD1306_status(uint8_t *value)
-{  
-  return I2c.read(SSD1306_ADDR, value, 1) == 0;
+  return !displayDevice.hasFailed()
+    && displayDevice.handleStatus(I2c.write(SSD1306_ADDR, buffer, sizeof(buffer)));
 }
 
 //
@@ -1594,12 +1596,6 @@ void printNL()
   print(NULL, 16-cursorCol);
 }
 
-void clear()
-{
-  while(cursorRow > 0)
-    printNL();
-}
-
 void print(const char *s)
 {
   print(s, strlen(s));
@@ -1740,6 +1736,14 @@ void displayRefreshRow()
 {
   static bool initialized = false;
   static uint8_t row;
+
+  if(vpStatus.silent)
+    return;
+  
+  if(displayDevice.hasFailed()) {
+    initialized = false;
+    return;
+  }
   
   if(!initialized) {
     SSD1306_command(SSD1306_DISPLAYOFF);          // 0xAE
@@ -1820,6 +1824,7 @@ void displayRefreshTask()
 void tocReportDisplay(bool result, int i, const char *s)
 {
   cursorMove((i % 3)*5, i/3 + 2);
+  
   if(!result) {
     setAttr(true);
     print(s);
@@ -1830,6 +1835,9 @@ void tocReportDisplay(bool result, int i, const char *s)
 
 void displayTask()
 {
+  if(vpStatus.silent)
+    return;
+  
   cursorMove(0,0);
   print("Model: ");
   print(vpParam.name);
@@ -2656,7 +2664,7 @@ void configurationTask()
 
   if(vpMode.takeOff
      && (pitotDevice.status() || iasFilter.output() > vpParam.iasMin)) {
-    if(!vpStatus.consoleLink)
+    if(iasFilter.output() > vpParam.iasMin && !vpStatus.consoleLink)
       vpStatus.silent = true;
     
     consoleNoteLn_P(PSTR("TakeOff mode DISABLED"));
