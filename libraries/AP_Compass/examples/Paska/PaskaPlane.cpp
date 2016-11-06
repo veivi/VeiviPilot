@@ -710,29 +710,22 @@ void cycleTimeMonitor(float value)
 //
 
 typedef enum {
-  toc_ram,
-  toc_load,
-  toc_ppm,
-  toc_timing,
   toc_mode,
   toc_trim,
-  toc_eeprom,
-  toc_attitude,
+  toc_alpha,
   toc_gyro,
-  toc_alpha_sensor,
-  toc_alpha_range,
+  toc_attitude,
   toc_pitot,
   toc_button,
-  toc_aile_neutral,
-  toc_aile_range,
-  toc_elev_neutral,
-  toc_elev_range,
-  toc_rudder_neutral,
-  toc_rudder_range,
-  toc_throttle_zero,
-  toc_throttle_range,
-  toc_tuning_zero,
-  toc_tuning_range } testCode_t;
+  toc_tuning,
+  toc_timing,
+  toc_lstick,
+  toc_rstick,
+  toc_eeprom,
+  toc_ram,
+  toc_load,
+  toc_ppm
+} testCode_t;
 
 #define TOC_TEST_NAME_MAX 16
 
@@ -834,6 +827,11 @@ bool toc_test_alpha_range(bool reset)
   return bigAlpha && zeroAlpha;
 }
 
+bool toc_test_alpha(bool reset)
+{
+  return toc_test_alpha_sensor(reset) && toc_test_alpha_range(reset);
+}
+
 bool toc_test_pitot(bool reset)
 {
   static bool positiveIAS;
@@ -865,8 +863,6 @@ struct TOCRangeTestState {
 
 bool toc_test_range_generic(struct TOCRangeTestState *state, bool reset, struct RxInputRecord *input, float expectedMin, float expectedMax)
 {
-  return true;
-  /*
   const float value = inputValue(input);
   
   if(reset) {
@@ -879,31 +875,42 @@ bool toc_test_range_generic(struct TOCRangeTestState *state, bool reset, struct 
   
   return (fabsf(state->valueMin - expectedMin) < toc_margin_c
 	  && fabsf(state->valueMax - expectedMax) < toc_margin_c);
-  */
 }
 
-bool toc_test_elev_range(bool reset)
+bool toc_test_rstick_range(bool reset)
 {
-  static struct TOCRangeTestState state;
-  return toc_test_range_generic(&state, reset, &elevInput, -1, 1);
+  static struct TOCRangeTestState stateElev, stateAile;
+  return toc_test_range_generic(&stateElev, reset, &elevInput, -1, 1)
+    && toc_test_range_generic(&stateAile, reset, &aileInput, -1, 1);
 }
 
-bool toc_test_aile_range(bool reset)
+bool toc_test_rstick_neutral(bool reset)
 {
-  static struct TOCRangeTestState state;
-  return toc_test_range_generic(&state, reset, &aileInput, -1, 1);
+  return ( fabsf(inputValue(&aileInput)) < toc_margin_c/2 )
+    && ( fabsf(inputValue(&elevInput)) < toc_margin_c/2 );
 }
 
-bool toc_test_throttle_range(bool reset)
+bool toc_test_rstick(bool reset)
 {
-  static struct TOCRangeTestState state;
-  return toc_test_range_generic(&state, reset, &throttleInput, 0, 1);
+  return toc_test_rstick_range(reset) && toc_test_rstick_neutral(reset);
 }
 
-bool toc_test_rudder_range(bool reset)
+bool toc_test_lstick_range(bool reset)
 {
-  static struct TOCRangeTestState state;
-  return toc_test_range_generic(&state, reset, &rudderInput, -1, 1);
+  static struct TOCRangeTestState stateThr, stateRudder;
+  return toc_test_range_generic(&stateThr, reset, &throttleInput, 0, 1)
+    && toc_test_range_generic(&stateRudder, reset, &rudderInput, -1, 1);
+}
+
+bool toc_test_lstick_neutral(bool reset)
+{
+  return ( fabsf(inputValue(&rudderInput)) < toc_margin_c/2 )
+    && ( fabsf(inputValue(&throttleInput)) < toc_margin_c/2 );
+}
+
+bool toc_test_lstick(bool reset)
+{
+  return toc_test_lstick_range(reset) && toc_test_lstick_neutral(reset);
 }
 
 bool toc_test_tuning_range(bool reset)
@@ -912,29 +919,14 @@ bool toc_test_tuning_range(bool reset)
   return toc_test_range_generic(&state, reset, &tuningKnobInput, 0, 1);
 }
 
-bool toc_test_aile_neutral(bool reset)
-{
-  return reset || fabsf(inputValue(&aileInput)) < toc_margin_c/2;
-}
-
-bool toc_test_elev_neutral(bool reset)
-{
-  return reset || fabsf(inputValue(&elevInput)) < toc_margin_c/2;
-}
-
-bool toc_test_rudder_neutral(bool reset)
-{
-  return reset || fabsf(inputValue(&rudderInput)) < toc_margin_c/2;
-}
-
-bool toc_test_throttle_zero(bool reset)
-{
-  return reset || fabsf(inputValue(&throttleInput)) < toc_margin_c/2;
-}
-
 bool toc_test_tuning_zero(bool reset)
 {
-  return reset || fabsf(inputValue(&tuningKnobInput)) < toc_margin_c/2;
+  return fabsf(inputValue(&tuningKnobInput)) < toc_margin_c/2;
+}
+
+bool toc_test_tuning(bool reset)
+{
+  return toc_test_tuning_range(reset) && toc_test_tuning_zero(reset);
 }
 
 bool toc_test_button_range(bool reset)
@@ -956,38 +948,55 @@ bool toc_test_button_range(bool reset)
 
 bool toc_test_button_neutral(bool reset)
 {
-  return !leftUpButton.state() && !leftDownButton.state()
+  return  !leftUpButton.state() && !leftDownButton.state()
     && !rightUpButton.state() && !rightDownButton.state();
 }
 
+bool toc_test_button(bool reset)
+{
+  return toc_test_button_range(reset) && toc_test_button_neutral(reset);
+}
+
+/*
+  toc_mode,
+  toc_trim,
+  toc_gyro,
+  toc_attitude,
+  toc_alpha,
+  toc_pitot,
+  toc_button,
+  toc_tuning,
+  toc_lstick,
+  toc_rstick,
+  toc_timing,
+  toc_ram,
+  toc_load,
+  toc_ppm,
+  toc_eeprom
+*/
+
 const struct TakeoffTest tocTest[] PROGMEM =
-  { [toc_ram] = { "RAM", toc_test_ram },
-    [toc_load] = { "LOAD", toc_test_load },
-    [toc_ppm] = { "PPM", toc_test_ppm },
-    [toc_timing] = { "TIMING", toc_test_timing },
+  {
     [toc_mode] = { "MODE", toc_test_mode },
     [toc_trim] = { "TRIM", toc_test_trim },
-    [toc_eeprom] = { "EEPROM", toc_test_eeprom },
-    [toc_attitude] = { "ATTI", toc_test_attitude },
+    [toc_alpha] = { "ALPHA", toc_test_alpha },
     [toc_gyro] = { "GYRO", toc_test_gyro },
-    [toc_alpha_sensor] = { "ALPHA_S", toc_test_alpha_sensor },
-    [toc_alpha_range] = { "ALPHA_R", toc_test_alpha_range },
+    [toc_attitude] = { "ATTI", toc_test_attitude },
     [toc_pitot] = { "PITOT", toc_test_pitot },
-    [toc_button] = { "BUTTON", toc_test_button_neutral },
-    [toc_aile_neutral] = { "AILE_N", toc_test_aile_neutral },
-    [toc_aile_range] = { "AILE_R", toc_test_aile_range },
-    [toc_elev_neutral] = { "ELEV_N", toc_test_elev_neutral },
-    [toc_elev_range] = { "ELEV_R", toc_test_elev_range },
-    [toc_rudder_neutral] = { "RUD_N", toc_test_rudder_neutral },
-    [toc_rudder_range] = { "RUD_R", toc_test_rudder_range },
-    [toc_throttle_zero] = { "THR_Z", toc_test_throttle_zero },
-    [toc_throttle_range] = { "THR_R", toc_test_throttle_range },
-    [toc_tuning_zero] = { "TUNE_Z", toc_test_tuning_zero },
-    [toc_tuning_range] = { "TUNE_R", toc_test_tuning_range } };
+    [toc_button] = { "BUTN", toc_test_button },
+    [toc_tuning] = { "TUNE", toc_test_tuning },
+    [toc_timing] = { "TIMNG", toc_test_timing },
+    [toc_lstick] = { "LSTK", toc_test_lstick },
+    [toc_rstick] = { "RSTK", toc_test_rstick },
+    [toc_eeprom] = { "EPROM", toc_test_eeprom },
+    [toc_ram] = { "RAM", toc_test_ram },
+    [toc_load] = { "LOAD", toc_test_load },
+    [toc_ppm] = { "PPM", toc_test_ppm }
+  };
 
 const int tocNumOfTests = sizeof(tocTest)/sizeof(struct TakeoffTest);
 
-bool tocTestInvoke(bool reset, bool challenge, void (*report)(const char *))
+bool tocTestInvoke(bool reset, bool challenge, void (*report)(bool, int, const char *))
 {
   bool fail = false;
   struct TakeoffTest cache;
@@ -997,11 +1006,11 @@ bool tocTestInvoke(bool reset, bool challenge, void (*report)(const char *))
 
     bool result = (*cache.function)(reset);
     
-    if(challenge && !result) {
-      if(report)
-	(*report)(cache.description);
+    if(challenge) {
+      (*report)(result, i, cache.description);
 
-      fail = true;
+      if(!result)
+	fail = true;
     }
   }
 
@@ -1020,8 +1029,11 @@ void tocTestUpdate()
 
 bool tocStatusFailed;
 
-void tocReportConsole(const char *s)
+void tocReportConsole(bool result, int i, const char *s)
 {
+  if(result)
+    return;
+  
   if(!tocStatusFailed) {
     consoleNote_P(PSTR("T/O/C FAIL :"));
     tocStatusFailed = true;
@@ -1031,7 +1043,7 @@ void tocReportConsole(const char *s)
   consolePrint(s);
 }
 
-bool tocTestStatus(void (*reportFn)(const char*))
+bool tocTestStatus(void (*reportFn)(bool, int, const char*))
 {
   tocStatusFailed = false;
   return tocTestInvoke(false, true, reportFn);
@@ -1542,10 +1554,20 @@ void markModified(uint8_t col)
   }
 }
 
+bool inverseVideo = false;
+
+void setAttr(bool inverse)
+{
+  inverseVideo = inverse;
+}
+
 void print(const char *s, int l)
 {
   for(int i = 0; i < l; i++) {
-    const char c = s ? s[i] : '\0';
+    uint8_t c = s ? s[i] : '\0';
+
+    if(inverseVideo)
+      c |= 0x80;
     
     if(displayBuffer[cursorRow*16 + cursorCol] != c) {
       displayBuffer[cursorRow*16 + cursorCol] = c;
@@ -1563,6 +1585,8 @@ void print(const char *s, int l)
 	cursorRow = 0;
     }
   }
+
+  inverseVideo = false;
 }
 
 void printNL()
@@ -1762,18 +1786,24 @@ void displayRefreshRow()
       
       SSD1306_command(SSD1306_COLUMNADDR);
       SSD1306_command(modifiedLeft[row]*8);
-      SSD1306_command(127);
+      SSD1306_command((uint8_t) ~0U);
 
       for(int col = modifiedLeft[row]; col < modifiedRight[row]+1; col++) {
-	uint8_t buffer[8];
+	uint8_t buffer[8], chr = displayBuffer[row*16+col];
 
-	memcpy_P(buffer, &fontData[displayBuffer[row*16+col]*8],
-		 sizeof(buffer));
+	memcpy_P(buffer, &fontData[(chr & 0x7F)*8], sizeof(buffer));
+
+	if(chr & 0x80) {
+	  for(uint8_t i = 0; i < sizeof(buffer); i++)
+	    buffer[i] = ~buffer[i];
+	}
+
 	SSD1306_data(buffer, sizeof(buffer));
       }
 
-      modifiedLeft[row] = -1;
-      return;
+      modifiedLeft[row++] = -1;
+      
+      return; // We refresh no more than one row at a time
     }
 
     row++;
@@ -1787,36 +1817,35 @@ void displayRefreshTask()
   displayRefreshRow();
 }
 
-void tocReportDisplay(const char *s)
+void tocReportDisplay(bool result, int i, const char *s)
 {
-  print(" ");
-  print(s);
-  tocStatusFailed = true;
+  cursorMove((i % 3)*5, i/3 + 2);
+  if(!result) {
+    setAttr(true);
+    print(s);
+    tocStatusFailed = true;
+  } else
+    print(NULL, 5);
 }
 
 void displayTask()
 {
-  static uint32_t firstDisplay = 0L;
-
-  if(!firstDisplay)
-    firstDisplay = currentTime;
-  
-  if(currentTime < firstDisplay+5.0e6) {
-    tocTestReset();
-    return;
-  }
-	  
   cursorMove(0,0);
   print("Model: ");
   print(vpParam.name);
   printNL();
   
-  print("T/O/C");
-    
-  if(tocTestStatus(tocReportDisplay))
-    print(" GOOD");
-  
-  clear();
+  tocTestStatus(tocReportDisplay);
+
+  cursorMove(0,1);
+  print("T/O/C ");
+
+  if(tocStatusFailed) {
+    setAttr((currentTime & (1UL<<20)) != 0);
+    print("FAIL");
+  } else {
+    print("GOOD");
+  }
 }
 
 void airspeedTask()
@@ -2403,6 +2432,7 @@ void configurationTask()
     leftDownButton.reset();
     rightUpButton.reset();
     rightDownButton.reset();
+    tocTestReset();
   }
 
   // We skip the rest unless we're armed
@@ -2483,6 +2513,7 @@ void configurationTask()
 	if(!vpMode.takeOff) {
 	  consoleNoteLn_P(PSTR("TakeOff mode ENABLED"));
 	  vpMode.takeOff = true;
+	  vpStatus.silent = false;
 	  elevTrim = vpParam.takeoffTrim;
 	}
 	
@@ -3456,9 +3487,9 @@ struct Task taskList[] = {
   { blinkTask,
     HZ_TO_PERIOD(LED_TICK) },
   { displayRefreshTask,
-    HZ_TO_PERIOD(10) },
+    HZ_TO_PERIOD(20) },
   { displayTask,
-    HZ_TO_PERIOD(3) },
+    HZ_TO_PERIOD(5) },
   { controlTaskGroup,
     HZ_TO_PERIOD(CONTROL_HZ) },
   { simulatorLinkTask,
