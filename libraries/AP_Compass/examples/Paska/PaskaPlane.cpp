@@ -761,29 +761,9 @@ bool toc_test_ram(bool reset)
 
 bool toc_test_timing(bool reset)
 {
-  static bool measured = false, started = false, result = false;
-  static uint32_t startTime = 0;
-  
-  if(reset) {
-    result = measured = started = false;
-
-  } else if(!started) {
-    if(!beepDuration) {
-      cycleTimeMonitorReset();
-      startTime = currentTime;
-      started = true;
-    }
-  } else if(!measured && currentTime > startTime + 3.0e6) {
-    result =
-      cycleTimeSampleAvailable
-      && (cycleTimeMin >= 1.0/CONTROL_HZ)
-      && (cycleTimeMax < 4.0/CONTROL_HZ)
-      && (cycleTimeAverage.output() < 1.2/CONTROL_HZ);
-    
-    measured = true;
-  }
-
-  return measured && result;
+  return cycleTimeSampleAvailable
+    && (cycleTimeMin >= 1.0/CONTROL_HZ)
+    && (cycleTimeAverage.output() < 1.2/CONTROL_HZ);
 }
 
 bool toc_test_load(bool reset)
@@ -798,7 +778,7 @@ bool toc_test_eeprom(bool reset)
 
 bool toc_test_alpha_sensor(bool reset)
 {
-  return !alphaDevice.status() && alphaEntropyAcc.output() > 10;
+  return !alphaDevice.status() && alphaEntropyAcc.output() > 50;
 }
 
 bool toc_test_alpha_range(bool reset)
@@ -843,7 +823,7 @@ bool toc_test_pitot(bool reset)
   else if(vpStatus.positiveIAS)
     positiveIAS = true;
   
-  return !pitotDevice.status() && iasEntropyAcc.output() > 10
+  return !pitotDevice.status() && iasEntropyAcc.output() > 50
     && !vpStatus.pitotBlocked && positiveIAS;
 }
 
@@ -958,24 +938,6 @@ bool toc_test_button(bool reset)
 {
   return toc_test_button_range(reset) && toc_test_button_neutral(reset);
 }
-
-/*
-  toc_mode,
-  toc_trim,
-  toc_gyro,
-  toc_attitude,
-  toc_alpha,
-  toc_pitot,
-  toc_button,
-  toc_tuning,
-  toc_lstick,
-  toc_rstick,
-  toc_timing,
-  toc_ram,
-  toc_load,
-  toc_ppm,
-  toc_eeprom
-*/
 
 const struct TakeoffTest tocTest[] PROGMEM =
   {
@@ -1463,7 +1425,7 @@ void alphaTask()
   if(!alphaDevice.hasFailed()
      && !alphaDevice.handleStatus(!AS5048B_alpha(&raw))) {
     alphaFilter.input(CIRCLE*(float) raw / (1L<<(8*sizeof(raw))));
-    alphaEntropy += population(raw ^ prev);
+    alphaEntropy += ABS(raw - prev);
     sensorHash = crc16(sensorHash, (uint8_t*) &raw, sizeof(raw));
     prev = raw;
   }
@@ -1539,9 +1501,6 @@ void cursorMove(uint8_t col, uint8_t row)
   cursorCol = col;
   cursorRow = row;
 }
-
-#define MIN(a,b) ((a) < (b) ? (a) : (b))
-#define MAX(a,b) ((a) > (b) ? (a) : (b))
 
 void markModified(uint8_t col)
 {
@@ -1864,7 +1823,7 @@ void airspeedTask()
   if(!pitotDevice.hasFailed()
      && !pitotDevice.handleStatus(!MS4525DO_pressure(&raw))) {
     pressureBuffer.input((float) raw);
-    iasEntropy += population(raw ^ prev);
+    iasEntropy += ABS(raw - prev);
     sensorHash = crc16(sensorHash, (uint8_t*) &raw, sizeof(raw));
     prev = raw;
   }
@@ -3662,8 +3621,9 @@ void setup()
 
   // T/o/c test
   
+  cycleTimeMonitorReset();
   tocTestReset();
-
+      
   // Done
   
   consoleNote_P(PSTR("Initialized, "));
