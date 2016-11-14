@@ -3,6 +3,8 @@
 #include <avr/io.h>
 #include <AP_HAL/AP_HAL.h>
 
+#define BACKOFF (1.0e6)
+
 extern const AP_HAL::HAL& hal;
 
 #define START           0x08
@@ -32,11 +34,12 @@ static uint32_t millis()
 I2CDevice::I2CDevice(NewI2C *interface, uint8_t addr, const char *dname)
 {
   name = dname;
+  backoff = BACKOFF;
 }
 
 bool I2CDevice::hasFailed()
 {
-  return failed && currentTime < failedAt+5.0e6;
+  return failed && currentTime < failedAt+backoff;
 }
 
 bool I2CDevice::status()
@@ -52,7 +55,9 @@ bool I2CDevice::handleStatus(bool fail)
     consoleNote_P(PSTR("Bad "));
     consolePrintLn(name);
 
-    if(!failed && ++failCount > 10) {
+    if(failed)
+      backoff += backoff/2;
+    else if(++failCount > 10) {
       consoleNote("");
       consolePrint(name);
       consolePrintLn_P(PSTR(" failed"));
@@ -67,6 +72,7 @@ bool I2CDevice::handleStatus(bool fail)
       consolePrintLn_P(PSTR(" recovered"));
       failCount = 0;
       failed = warn = false;
+      backoff = BACKOFF;
     }
   }
   

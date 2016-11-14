@@ -45,7 +45,7 @@ class I2CDevice {
  private:
   bool warn, failed;
   int failCount;
-  uint32_t failedAt;
+  uint32_t failedAt, backoff;
   const char *name;
   //  NewI2C *interface;
   //  uint8_t addr;

@@ -913,19 +913,8 @@ bool toc_test_tuning(bool reset)
 
 bool toc_test_button_range(bool reset)
 {
-  static bool leftUp, leftDown, rightUp, rightDown;
-
-  if(reset) {
-    leftUp = leftDown = rightUp = rightDown = false;
-    
-  } else {
-    leftUp |= leftUpButton.state();
-    leftDown |= leftDownButton.state();
-    rightUp |= rightUpButton.state();
-    rightDown |= rightDownButton.state();
-  }
-
-  return leftUp && leftDown && rightUp && rightDown;
+  static struct TOCRangeTestState state;
+  return toc_test_range_generic(&state, reset, &buttonInput, -1, 1);
 }
 
 bool toc_test_button_neutral(bool reset)
