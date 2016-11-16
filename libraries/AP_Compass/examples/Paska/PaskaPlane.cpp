@@ -1960,7 +1960,7 @@ void sensorTaskFast()
     heading = (int) (sensorData.heading + 0.5);
     accX = sensorData.accx*FOOT;
     accY = sensorData.accy*FOOT;
-    accZ = sensorData.accz*FOOT;
+    accZ = -sensorData.accz*FOOT;
 
     dynPressure = square(iAS) / 2;
     
@@ -2934,6 +2934,14 @@ void gaugeTask()
 	  consolePrint((tmp & 1) ? "+" : " ");
 	  tmp = tmp >> 1;
 	}
+	break;
+	
+      case 11:
+	consolePrint_P(PSTR(" alpha = "));
+	consolePrint(alpha*RADIAN, 1);
+	consoleTab(15);
+	consolePrint_P(PSTR(" CoL(rel) = "));
+	consolePrint(2*accZ/square(iAS), 3);
 	break;
       }
     }
