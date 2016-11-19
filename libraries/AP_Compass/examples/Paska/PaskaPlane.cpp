@@ -229,6 +229,7 @@ const int maxParams = 8;
 int beepDuration, gaugeCount, gaugeVariable[maxParams];
 I2CDevice alphaDevice(&I2c, 0, "alpha"), pitotDevice(&I2c, 0, "pitot");
 I2CDevice eepromDevice(&I2c, 0, "EEPROM"), displayDevice(&I2c, 0, "display");
+Tabulator coeffOfLiftTabulator(-5, 20), elevToAlphaTabulator(-0.3, 1);
 
 const int maxTests_c = 1;
 float autoTestIAS[maxTests_c], autoTestK[maxTests_c], autoTestT[maxTests_c], autoTestKxIAS[maxTests_c];
@@ -1380,6 +1381,11 @@ void executeCommand(const char *buf)
       consoleNote_P(PSTR("Log write bandwidth = "));
       consolePrint(logBandWidth);
       consolePrintLn_P(PSTR(" bytes/sec"));
+
+      consoleNoteLn_P(PSTR("CoeffOfLift table"));
+      coeffOfLiftTabulator.report();
+      consoleNoteLn_P(PSTR("AlphaFF table"));
+      elevToAlphaTabulator.report();
       break;
 
     case c_reset:
@@ -1986,6 +1992,11 @@ void sensorTaskSlow()
     altitude = sensorData.alt*FOOT;
   else
     altitude = (float) barometer.get_altitude();
+
+  if(vpStatus.positiveIAS) {
+    coeffOfLiftTabulator.datum(alpha*RADIAN, 2*accZ/square(iAS));
+    elevToAlphaTabulator.datum(elevOutput, alpha*RADIAN);
+  }
 }
 
 void sensorMonitorTask()

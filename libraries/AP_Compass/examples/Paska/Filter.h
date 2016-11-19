@@ -107,4 +107,20 @@ private:
   int length;
 };
 
+const int TabulatorWindow_c = 1<<5;
+
+class Tabulator {
+ public:
+  Tabulator(float a, float b);
+
+  void datum(float x, float y);
+  void report();
+
+ private:
+  float rangeA, rangeB, vMin, vMax;
+  int count[TabulatorWindow_c];
+  float sum[TabulatorWindow_c], var[TabulatorWindow_c];
+};
+
+
 #endif

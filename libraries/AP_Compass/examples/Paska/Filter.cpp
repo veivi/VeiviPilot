@@ -18,17 +18,6 @@ float coeffOfLift(float aoa)
     return 1 - (ratio - 1);
 }
 
-uint8_t population(uint16_t a)
-{
-  uint8_t v = 0;
-  
-  for(uint8_t i = 0; i < 16; i++)
-    if(a & (1U<<i))
-      v++;
-  
-  return v;
-}
-
 float sign(float x)
 {
   return x < 0.0 ? -1.0 : 1.0;
@@ -258,4 +247,62 @@ float AlphaBuffer::output(void) {
 void AlphaBuffer::input(float v) { 
   length++;
   sum += v;
+}
+
+Tabulator::Tabulator(float a, float b) {
+  rangeA = a;
+  rangeB = b;
+}
+
+const int threshold_c = 3;
+
+void Tabulator::datum(float x, float y)
+{
+  int index = TabulatorWindow_c * (x - rangeA) / (rangeB - rangeA);
+    
+  if(index < 0 || index > TabulatorWindow_c-1)
+    return;
+
+  count[index]++;
+  sum[index] += y;
+  
+  if(count[index] > threshold_c) {
+    const float est = sum[index]/count[index];
+    vMin = MIN(vMin, est);
+    vMax = MAX(vMax, est);
+    var[index] += square(y - est);
+  }
+}
+
+void Tabulator::report()
+{
+  const int colLeft = 10, colRight = 78;
+  const int col0 = colLeft - vMin*(colRight-colLeft)/(vMax-vMin);
+    
+  for(int i = 0; i < TabulatorWindow_c; i++) {
+    consoleNote("");
+    consolePrint(rangeA + (rangeB-rangeA)*i/TabulatorWindow_c);
+    consoleTab(colLeft);
+
+    if(count[i] > threshold_c) {
+      int x = colLeft + (colRight-colLeft) * (sum[i]/count[i] - vMin) / (vMax - vMin);
+
+      if(x < col0) {
+	consoleTab(x);
+	consolePrint("*");
+	consoleTab(col0);
+	consolePrint("|");
+      } else if(x > col0) {
+	consoleTab(col0);
+	consolePrint("|");
+	consoleTab(x);
+	consolePrint("*");
+      } else {
+	consoleTab(col0);
+	consolePrint("*");
+      }
+    }
+
+    consolePrintLn("");
+  }
 }
