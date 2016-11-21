@@ -229,7 +229,7 @@ const int maxParams = 8;
 int beepDuration, gaugeCount, gaugeVariable[maxParams];
 I2CDevice alphaDevice(&I2c, 0, "alpha"), pitotDevice(&I2c, 0, "pitot");
 I2CDevice eepromDevice(&I2c, 0, "EEPROM"), displayDevice(&I2c, 0, "display");
-Tabulator coeffOfLiftTabulator(-5, 20), elevToAlphaTabulator(-0.3, 1);
+Tabulator coeffOfLiftTabulator(-5, 17), elevToAlphaTabulator(-0.5, 0.9);
 
 const int maxTests_c = 1;
 float autoTestIAS[maxTests_c], autoTestK[maxTests_c], autoTestT[maxTests_c], autoTestKxIAS[maxTests_c];

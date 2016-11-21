@@ -285,21 +285,20 @@ void Tabulator::report()
     consoleTab(colLeft);
 
     if(count[i] > threshold_c) {
-      int x = colLeft + (colRight-colLeft) * (sum[i]/count[i] - vMin) / (vMax - vMin);
+      float e = sum[i]/count[i], v = sqrt(var[i]/(count[i]-threshold_c));
+      int xc = colLeft + (colRight-colLeft) * (e - vMin) / (vMax - vMin);
+      int xl = colLeft + (colRight-colLeft) * (e - v - vMin) / (vMax - vMin);
+      int xr = colLeft + (colRight-colLeft) * (e + v - vMin) / (vMax - vMin);
 
-      if(x < col0) {
-	consoleTab(x);
-	consolePrint("*");
-	consoleTab(col0);
-	consolePrint("|");
-      } else if(x > col0) {
-	consoleTab(col0);
-	consolePrint("|");
-	consoleTab(x);
-	consolePrint("*");
-      } else {
-	consoleTab(col0);
-	consolePrint("*");
+      for(int x = colLeft; x <= colRight; x++) {
+	if(x == xc)
+	  consolePrint("*");
+	else if(x == col0)
+	  consolePrint("|");
+	else if(x >= xl && x <= xr)
+	  consolePrint("-");
+	else
+	  consolePrint(" ");
       }
     }
 
