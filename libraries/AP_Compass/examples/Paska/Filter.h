@@ -115,6 +115,8 @@ class Tabulator {
 
   void datum(float x, float y);
   void report();
+  float estimate(float x);
+  float variance(float x);
 
  private:
   float rangeA, rangeB, vMin, vMax;

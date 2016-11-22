@@ -1386,7 +1386,9 @@ void executeCommand(const char *buf)
       coeffOfLiftTabulator.report();
       consoleNoteLn_P(PSTR("AlphaFF table"));
       elevToAlphaTabulator.report();
-      break;
+      consoleNote_P(PSTR("Empirical stall speed = "));
+      consolePrintLn(sqrt(2*G/coeffOfLiftTabulator.estimate(vpParam.alphaMax*RADIAN)));
+  break;
 
     case c_reset:
       pciWarn = ppmWarnShort = ppmWarnSlow = false;
@@ -1982,6 +1984,16 @@ void sensorTaskFast()
   effAlpha = clamp(alpha, -RADIAN, RADIAN);
   iasFilter.input(iAS);
   iasFilterSlow.input(iAS);
+
+
+  //
+  // Tabulate empirical curves
+  //
+ 
+  if(vpStatus.positiveIAS) {
+    coeffOfLiftTabulator.datum(alpha*RADIAN, accZ/dynPressure);
+    elevToAlphaTabulator.datum(elevOutput, alpha*RADIAN);
+  }
 }
 
 void sensorTaskSlow()
@@ -1992,11 +2004,6 @@ void sensorTaskSlow()
     altitude = sensorData.alt*FOOT;
   else
     altitude = (float) barometer.get_altitude();
-
-  if(vpStatus.positiveIAS) {
-    coeffOfLiftTabulator.datum(alpha*RADIAN, 2*accZ/square(iAS));
-    elevToAlphaTabulator.datum(elevOutput, alpha*RADIAN);
-  }
 }
 
 void sensorMonitorTask()

@@ -274,6 +274,16 @@ void Tabulator::datum(float x, float y)
   }
 }
 
+float Tabulator::estimate(float x)
+{
+  int index = TabulatorWindow_c * (x - rangeA) / (rangeB - rangeA);
+    
+  if(index < 0 || index > TabulatorWindow_c-1 || count[index] < threshold_c)
+    return 0/0.0;
+
+  return sum[index]/count[index];
+}
+
 void Tabulator::report()
 {
   const int colLeft = 10, colRight = 78;
@@ -284,7 +294,7 @@ void Tabulator::report()
     consolePrint(rangeA + (rangeB-rangeA)*i/TabulatorWindow_c);
     consoleTab(colLeft);
 
-    if(count[i] > threshold_c) {
+    if(count[i] > 2*threshold_c) {
       float e = sum[i]/count[i], v = sqrt(var[i]/(count[i]-threshold_c));
       int xc = colLeft + (colRight-colLeft) * (e - vMin) / (vMax - vMin);
       int xl = colLeft + (colRight-colLeft) * (e - v - vMin) / (vMax - vMin);
