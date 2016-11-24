@@ -249,56 +249,88 @@ void AlphaBuffer::input(float v) {
   sum += v;
 }
 
-Tabulator::Tabulator(float a, float b) {
-  rangeA = a;
-  rangeB = b;
+int Tabulator::index(float x)
+{
+  return TabulatorWindow_c * (x - store.domainA) / (store.domainB - store.domainA);
 }
 
 const int threshold_c = 3;
 
 void Tabulator::datum(float x, float y)
 {
-  int index = TabulatorWindow_c * (x - rangeA) / (rangeB - rangeA);
+  int i = index(x);
     
-  if(index < 0 || index > TabulatorWindow_c-1)
+  if(i < 0 || i > TabulatorWindow_c-1)
     return;
 
-  count[index]++;
-  sum[index] += y;
+  store.count[i]++;
+  store.sum[i] += y;
   
-  if(count[index] > threshold_c) {
-    const float est = sum[index]/count[index];
-    vMin = MIN(vMin, est);
-    vMax = MAX(vMax, est);
-    var[index] += square(y - est);
+  if(store.count[i] > threshold_c) {
+    const float est = store.sum[i]/store.count[i];
+    store.rangeA = MIN(store.rangeA, est);
+    store.rangeB = MAX(store.rangeB, est);
+    store.var[i] += square(y - est);
   }
 }
 
 float Tabulator::estimate(float x)
 {
-  int index = TabulatorWindow_c * (x - rangeA) / (rangeB - rangeA);
-    
-  if(index < 0 || index > TabulatorWindow_c-1 || count[index] < threshold_c)
+  int i = index(x);
+
+  if(i < 0 || i > TabulatorWindow_c-1 || store.count[i] < threshold_c)
     return 0/0.0;
 
-  return sum[index]/count[index];
+  return store.sum[i]/store.count[i];
 }
 
-void Tabulator::report()
+void Tabulator::commit()
+{
+  if(committed)
+    storeData((uint8_t*) &storeCommitted, sizeof(storeCommitted));
+
+  storeCommitted = store;
+  committed = true;
+}
+
+void Tabulator::invalidate()
+{
+  committed = false;
+  readData((uint8_t*) &store, sizeof(store));
+}
+
+void Tabulator::clear()
+{
+  memset(&store.sum, 0, sizeof(store.sum));
+  memset(&store.var, 0, sizeof(store.var));
+  memset(&store.count, 0, sizeof(store.count));
+  store.rangeA = store.rangeB = 0;
+  storeData((uint8_t*) &store, sizeof(store));
+  committed = false;
+}
+
+void Tabulator::setDomain(float a, float b)
+{
+  store.domainA = a;
+  store.domainB = b;
+  clear();
+}
+
+void Tabulator::report(float t)
 {
   const int colLeft = 10, colRight = 78;
-  const int col0 = colLeft - vMin*(colRight-colLeft)/(vMax-vMin);
+  const int col0 = colLeft - store.rangeA*(colRight-colLeft)/(store.rangeB - store.rangeA);
     
   for(int i = 0; i < TabulatorWindow_c; i++) {
     consoleNote("");
-    consolePrint(rangeA + (rangeB-rangeA)*i/TabulatorWindow_c);
+    consolePrint(store.domainA + (store.domainB-store.domainA)*i/TabulatorWindow_c);
     consoleTab(colLeft);
 
-    if(count[i] > 2*threshold_c) {
-      float e = sum[i]/count[i], v = sqrt(var[i]/(count[i]-threshold_c));
-      int xc = colLeft + (colRight-colLeft) * (e - vMin) / (vMax - vMin);
-      int xl = colLeft + (colRight-colLeft) * (e - v - vMin) / (vMax - vMin);
-      int xr = colLeft + (colRight-colLeft) * (e + v - vMin) / (vMax - vMin);
+    if(store.count[i] > 2*threshold_c) {
+      float e = store.sum[i]/store.count[i], v = sqrt(store.var[i]/(store.count[i]-threshold_c));
+      int xc = colLeft + (colRight-colLeft) * (e - store.rangeA) / (store.rangeB - store.rangeA);
+      int xl = colLeft + (colRight-colLeft) * (e - v - store.rangeA) / (store.rangeB - store.rangeA);
+      int xr = colLeft + (colRight-colLeft) * (e + v - store.rangeA) / (store.rangeB - store.rangeA);
 
       for(int x = colLeft; x <= colRight; x++) {
 	if(x == xc)

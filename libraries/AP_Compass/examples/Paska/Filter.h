@@ -107,21 +107,31 @@ private:
   int length;
 };
 
-const int TabulatorWindow_c = 1<<5;
+const int TabulatorWindow_c = 24;
+
+struct TabulatorStore {
+  float domainA, domainB;
+  float rangeA, rangeB;
+  int count[TabulatorWindow_c];
+  float sum[TabulatorWindow_c], var[TabulatorWindow_c];
+};
 
 class Tabulator {
  public:
-  Tabulator(float a, float b);
-
+  int index(float x);
   void datum(float x, float y);
-  void report();
+  void report(float);
   float estimate(float x);
   float variance(float x);
+  void commit();
+  void invalidate();
+  void clear();
+  void setDomain(float, float);
 
  private:
-  float rangeA, rangeB, vMin, vMax;
-  int count[TabulatorWindow_c];
-  float sum[TabulatorWindow_c], var[TabulatorWindow_c];
+
+  struct TabulatorStore store, storeCommitted;
+  bool committed;
 };
 
 

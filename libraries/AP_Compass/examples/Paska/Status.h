@@ -11,6 +11,7 @@ struct StatusRecord {
   bool simulatorLink;
   bool silent;
   bool positiveIAS;
+  bool aloft;
   bool fullStop;
   bool pitotBlocked;
 };

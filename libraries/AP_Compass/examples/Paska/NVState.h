@@ -37,10 +37,9 @@ struct ParamRecord {
 
 struct NVStateRecord {
   uint16_t crc;
-  uint16_t paramPartition, logPartition;
+  uint16_t paramPartition, dataPartition, logPartition;
   uint16_t logStamp;
   uint16_t model;
-  bool dummy0;
   uint16_t testNum;
   int32_t rxCenter[MAX_CH], rxMin[MAX_CH], rxMax[MAX_CH];
 };
@@ -57,7 +56,9 @@ void storeNVState(void);
 void printParams(void);
 void backupParams(void);
 int maxModels(void);
-
+void readData(uint8_t *data, int size);
+void storeData(const uint8_t *data, int size);
+  
 float elevFromAlpha(float x);
 float alphaFromElev(float x);
 

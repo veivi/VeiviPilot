@@ -18,6 +18,7 @@ struct ParamRecord vpParam;
 
 #define stateOffset 0U
 #define paramOffset nvState.paramPartition
+#define dataOffset nvState.dataPartition
 
 const struct ParamRecord paramDefaults = {
   .crc = 0,
@@ -48,7 +49,8 @@ const struct ParamRecord paramDefaults = {
 const struct NVStateRecord stateDefaults = {
   .crc = 0,
   .paramPartition = 128,
-  .logPartition = 2048,
+  .dataPartition = 2048,
+  .logPartition = 4096,
   .logStamp = 400,
   .model = 0 };
 
@@ -121,6 +123,17 @@ void storeParams(void)
   	     (const uint8_t*) &vpParam, sizeof(vpParam));
   cacheFlush();
   consoleNoteLn_P(PSTR("  Stored"));
+}
+
+void readData(uint8_t *data, int size)
+{
+  cacheRead(dataOffset, data, size);
+}
+
+void storeData(const uint8_t *data, int size)
+{
+  cacheWrite(dataOffset, data, size);
+  cacheFlush();
 }
 
 void readNVState(void)

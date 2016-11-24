@@ -229,7 +229,8 @@ const int maxParams = 8;
 int beepDuration, gaugeCount, gaugeVariable[maxParams];
 I2CDevice alphaDevice(&I2c, 0, "alpha"), pitotDevice(&I2c, 0, "pitot");
 I2CDevice eepromDevice(&I2c, 0, "EEPROM"), displayDevice(&I2c, 0, "display");
-Tabulator coeffOfLiftTabulator(-5, 17), elevToAlphaTabulator(-0.5, 0.9);
+Tabulator tabulator;
+bool tabulateCoL;
 
 const int maxTests_c = 1;
 float autoTestIAS[maxTests_c], autoTestK[maxTests_c], autoTestT[maxTests_c], autoTestKxIAS[maxTests_c];
@@ -1302,6 +1303,7 @@ void executeCommand(const char *buf)
 	  param[0] = maxModels()-1;
 	setModel(param[0]);
 	storeNVState();
+	tabulator.clear();
       } else { 
 	consoleNote_P(PSTR("Current model is "));
 	consolePrintLn(nvState.model); 
@@ -1381,21 +1383,37 @@ void executeCommand(const char *buf)
       consoleNote_P(PSTR("Log write bandwidth = "));
       consolePrint(logBandWidth);
       consolePrintLn_P(PSTR(" bytes/sec"));
-
-      consoleNoteLn_P(PSTR("CoeffOfLift table"));
-      coeffOfLiftTabulator.report();
-      consoleNoteLn_P(PSTR("AlphaFF table"));
-      elevToAlphaTabulator.report();
-      consoleNote_P(PSTR("Empirical stall speed = "));
-      consolePrintLn(sqrt(2*G/coeffOfLiftTabulator.estimate(vpParam.alphaMax*RADIAN)));
-  break;
+      break;
 
     case c_reset:
       pciWarn = ppmWarnShort = ppmWarnSlow = false;
       consoleNoteLn_P(PSTR("Warning flags reset"));
       cycleTimeMonitorReset();
       break;
-    
+
+    case c_tab_col:
+      if(numParams > 1) {
+	tabulator.setDomain(param[0], param[1]);
+	tabulateCoL = true;
+      }
+      break;
+	
+    case c_tab_elev:
+      if(numParams > 1) {
+	tabulator.setDomain(param[0], param[1]);
+	tabulateCoL = false;
+      }
+      break;
+	
+    case c_tab:
+      consoleNoteLn_P(PSTR("Tabulator report"));
+      tabulator.report(param[0]);
+      if(tabulateCoL) {
+	consoleNote_P(PSTR("Empirical stall speed = "));
+	consolePrintLn(sqrt(2*G/tabulator.estimate(vpParam.alphaMax*RADIAN)));
+      }
+      break;
+      
     default:
       consolePrint_P(PSTR("Sorry, command not implemented: \""));
       consolePrint(buf, tokenLen);
@@ -1990,10 +2008,18 @@ void sensorTaskFast()
   // Tabulate empirical curves
   //
  
-  if(vpStatus.positiveIAS) {
-    coeffOfLiftTabulator.datum(alpha*RADIAN, accZ/dynPressure);
-    elevToAlphaTabulator.datum(elevOutput, alpha*RADIAN);
+  if(vpStatus.aloft) {
+    if(tabulateCoL)
+      tabulator.datum(alpha*RADIAN, accZ/dynPressure);
+    else
+      tabulator.datum(alpha*RADIAN, elevOutput);
   }
+}
+
+void commitTask()
+{
+  if(vpStatus.aloft)
+    tabulator.commit();
 }
 
 void sensorTaskSlow()
@@ -2353,7 +2379,7 @@ void configurationTask()
   // Flight detection
   //
 
-  static uint32_t lastNegativeIAS;
+  static uint32_t lastNegativeIAS, lastHighIAS, lastLowIAS;
 
   if(vpStatus.pitotBlocked || iasFilter.output() < vpParam.iasMin/2) {
     if(vpStatus.positiveIAS) {
@@ -2366,6 +2392,21 @@ void configurationTask()
   } else if(currentTime - lastNegativeIAS > 1e6 && !vpStatus.positiveIAS) {
     consoleNoteLn_P(PSTR("We have POSITIVE AIRSPEED"));
     vpStatus.positiveIAS = true;
+  }
+
+  if(vpStatus.pitotBlocked || iasFilter.output() < vpParam.iasMin*0.85) {
+    if(vpStatus.aloft && currentTime - lastHighIAS > 2e6) {
+      consoleNoteLn_P(PSTR("Flight ENDED"));
+      vpStatus.aloft = false;
+      tabulator.invalidate();
+    }
+    
+    lastLowIAS = currentTime;
+
+  } else if(currentTime - lastLowIAS > 5e6 && !vpStatus.aloft) {
+    consoleNoteLn_P(PSTR("We think we're ALOFT"));
+    vpStatus.aloft = true;
+    lastHighIAS = currentTime;
   }
   
   accTotal = sqrtf(square(accX) + square(accY) + square(accZ));
@@ -3502,6 +3543,8 @@ struct Task taskList[] = {
     HZ_TO_PERIOD(30) },
   { beepTask,
     HZ_TO_PERIOD(BEEP_HZ) },
+  { commitTask,
+    HZ_TO_PERIOD(1.0/10) },
   { NULL } };
 
 int scheduler()
@@ -3638,6 +3681,10 @@ void setup()
   
   cycleTimeMonitorReset();
   tocTestReset();
+
+  // Tabulator
+
+  tabulator.invalidate();
       
   // Done
   

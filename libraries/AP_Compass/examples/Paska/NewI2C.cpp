@@ -57,7 +57,7 @@ bool I2CDevice::handleStatus(bool fail)
 
     if(failed)
       backoff += backoff/2;
-    else if(++failCount > 10) {
+    else if(++failCount > 3) {
       consoleNote("");
       consolePrint(name);
       consolePrintLn_P(PSTR(" failed"));
@@ -183,15 +183,12 @@ uint8_t NewI2C::wait(uint8_t address)
         return 7;
       return(returnStatus);
     } else if(returnStatus != MT_SLA_NACK) {
-      consoleNote("wait() transmitAddress returned ");
-      consolePrintLn(returnStatus);
         if(returnStatus == 1){return(2);}
         return(returnStatus);
     }
 
     if(timeOutDelay > 0 && millis() - startingTime > timeOutDelay)
     {
-      consoleNoteLn("wait() timed out");
       lockUp();
       return(1);
     }
