@@ -71,7 +71,6 @@ const struct Command commands[] PROGMEM = {
   { "rollrate", c_rollrate },
   { "pitchrate", c_pitchrate },
   { "calibrate", c_calibrate },  
-  { "table", c_tab },  
   { "tab_col", c_tab_col },  
   { "tab_elev", c_tab_elev },  
   { "", c_invalid }

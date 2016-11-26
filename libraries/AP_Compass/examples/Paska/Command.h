@@ -77,7 +77,6 @@ typedef enum {
   c_ping,
   c_update,
   c_peak,
-  c_tab,
   c_tab_col,
   c_tab_elev
 } token_t;

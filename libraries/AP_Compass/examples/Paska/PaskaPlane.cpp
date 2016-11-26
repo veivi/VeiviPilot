@@ -230,7 +230,6 @@ int beepDuration, gaugeCount, gaugeVariable[maxParams];
 I2CDevice alphaDevice(&I2c, 0, "alpha"), pitotDevice(&I2c, 0, "pitot");
 I2CDevice eepromDevice(&I2c, 0, "EEPROM"), displayDevice(&I2c, 0, "display");
 Tabulator tabulator;
-bool tabulateCoL;
 
 const int maxTests_c = 1;
 float autoTestIAS[maxTests_c], autoTestK[maxTests_c], autoTestT[maxTests_c], autoTestKxIAS[maxTests_c];
@@ -1041,6 +1040,18 @@ const prog_char_t *applyParamUpdate()
   return NULL;
 }
 
+float tabulateFnCoL()
+{
+  return accZ/dynPressure;
+}
+
+float tabulateFnElev()
+{
+  return elevOutput;
+}
+
+float (*tabulateFn)(void);
+
 void executeCommand(const char *buf)
 {
   int bufLen = strlen(buf);
@@ -1383,37 +1394,35 @@ void executeCommand(const char *buf)
       consoleNote_P(PSTR("Log write bandwidth = "));
       consolePrint(logBandWidth);
       consolePrintLn_P(PSTR(" bytes/sec"));
-      break;
+      
+      consoleNoteLn_P(PSTR("Tabulator report"));
 
+      if(numParams > 0)
+	tabulator.report(param[0]);
+      else
+	tabulator.report(0.01);
+      break;
+      
     case c_reset:
       pciWarn = ppmWarnShort = ppmWarnSlow = false;
-      consoleNoteLn_P(PSTR("Warning flags reset"));
       cycleTimeMonitorReset();
+      consoleNoteLn_P(PSTR("Warning flags reset"));
       break;
 
     case c_tab_col:
       if(numParams > 1) {
 	tabulator.setDomain(param[0], param[1]);
-	tabulateCoL = true;
+	tabulateFn = tabulateFnCoL;
       }
       break;
 	
     case c_tab_elev:
       if(numParams > 1) {
 	tabulator.setDomain(param[0], param[1]);
-	tabulateCoL = false;
+	tabulateFn = tabulateFnElev;
       }
       break;
 	
-    case c_tab:
-      consoleNoteLn_P(PSTR("Tabulator report"));
-      tabulator.report(param[0]);
-      if(tabulateCoL) {
-	consoleNote_P(PSTR("Empirical stall speed = "));
-	consolePrintLn(sqrt(2*G/tabulator.estimate(vpParam.alphaMax*RADIAN)));
-      }
-      break;
-      
     default:
       consolePrint_P(PSTR("Sorry, command not implemented: \""));
       consolePrint(buf, tokenLen);
@@ -1925,7 +1934,7 @@ void receiverTask()
     }
 }
 
-const float simulatedAttitudeErr_c = 1.3/RADIAN;
+const float simulatedAttitudeErr_c = 0.7/RADIAN;
 
 void sensorTaskFast()
 {
@@ -2003,17 +2012,12 @@ void sensorTaskFast()
   iasFilter.input(iAS);
   iasFilterSlow.input(iAS);
 
-
   //
   // Tabulate empirical curves
   //
  
-  if(vpStatus.aloft) {
-    if(tabulateCoL)
-      tabulator.datum(alpha*RADIAN, accZ/dynPressure);
-    else
-      tabulator.datum(alpha*RADIAN, elevOutput);
-  }
+  if(vpStatus.aloft && tabulateFn)
+    tabulator.datum(alpha*RADIAN, (*tabulateFn)());
 }
 
 void commitTask()

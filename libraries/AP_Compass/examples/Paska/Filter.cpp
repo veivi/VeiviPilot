@@ -323,7 +323,7 @@ void Tabulator::report(float t)
     
   for(int i = 0; i < TabulatorWindow_c; i++) {
     consoleNote("");
-    consolePrint(store.domainA + (store.domainB-store.domainA)*i/TabulatorWindow_c);
+    consolePrint(store.domainA + (store.domainB-store.domainA)*(0.5+i)/TabulatorWindow_c);
     consoleTab(colLeft);
 
     if(store.count[i] > 2*threshold_c) {
@@ -346,4 +346,35 @@ void Tabulator::report(float t)
 
     consolePrintLn("");
   }
+  
+  consolePrintLn("");
+  
+  consolePrint("x = c(");
+  
+  for(int i = 0; i < TabulatorWindow_c; i++) {
+    float v = sqrt(store.var[i]/(store.count[i]-threshold_c));
+
+    if(store.count[i] > 2*threshold_c && v < t) {
+      if(i > 0)
+	consolePrint(", ");
+      consolePrint(store.domainA + (store.domainB-store.domainA)*(i + 0.5)/TabulatorWindow_c);
+    }
+  }
+  
+  consolePrintLn(")");
+    
+  consolePrint("y = c(");
+  
+  for(int i = 0; i < TabulatorWindow_c; i++) {
+    float e = store.sum[i]/store.count[i], v = sqrt(store.var[i]/(store.count[i]-threshold_c));
+
+    if(store.count[i] > 2*threshold_c && v < t) {
+      if(i > 0)
+	consolePrint(", ");
+      
+      consolePrint(e, 3);
+    }
+  }
+  
+  consolePrintLn(")");
 }
