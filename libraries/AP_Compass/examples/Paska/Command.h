@@ -32,7 +32,12 @@ typedef enum {
 
   c_dump,
   c_max,
+  c_ias,
+  c_peak,
   c_zl,
+  c_col_a,
+  c_col_b,
+  c_col_max,
   c_store,
   c_report,
   c_start,
@@ -62,7 +67,6 @@ typedef enum {
   c_ff,
   c_pid,
   c_wl,
-  c_ias,
   c_roll_k,
   c_rollrate,
   c_pitch_k,
@@ -76,7 +80,6 @@ typedef enum {
   c_beep,
   c_ping,
   c_update,
-  c_peak,
   c_tab_col,
   c_tab_elev
 } token_t;

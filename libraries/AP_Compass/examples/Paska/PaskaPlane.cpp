@@ -1042,7 +1042,8 @@ const prog_char_t *applyParamUpdate()
 
 float tabulateFnCoL()
 {
-  return accZ/dynPressure;
+  float lift = sqrt(square(sin(alpha)*accX) + square(cos(alpha)*accZ));
+  return lift/dynPressure;
 }
 
 float tabulateFnElev()
@@ -1221,7 +1222,7 @@ void executeCommand(const char *buf)
     case c_rollrate:
       if(numParams > 0) {
 	vpParam.roll_C
-	  = param[0]/RADIAN/powf(vpParam.iasMin, stabilityAileExp2_c);
+	  = param[0]/RADIAN/powf(stallIAS(), stabilityAileExp2_c);
 	consoleNote_P(PSTR("Roll rate K = "));
 	consolePrintLn(vpParam.roll_C);
 	storeNVState();
@@ -1347,6 +1348,20 @@ void executeCommand(const char *buf)
     case c_log:
       vpMode.alwaysLog = true;
       break;
+
+    case c_zl:
+      vpParam.cL_B = 1.1*vpParam.cL_max/(vpParam.alphaMax - param[0]/RADIAN);
+      vpParam.cL_A = -(param[0]/RADIAN)/vpParam.cL_B;
+      break;
+      
+    case c_peak:
+      vpParam.cL_B = (1 + (PI/2-1)*param[0])*vpParam.cL_max
+	/(vpParam.alphaMax - zeroLiftAlpha());
+      break;
+      
+    case c_ias:
+      vpParam.cL_max = 2*G / square(param[0]);
+      break;
       
     case c_report:
       consoleNote_P(PSTR("Idle avg = "));
@@ -1411,14 +1426,14 @@ void executeCommand(const char *buf)
 
     case c_tab_col:
       if(numParams > 1) {
-	tabulator.setDomain(param[0], param[1]);
+	tabulator.setDomain(param[0]/RADIAN, param[1]/RADIAN);
 	tabulateFn = tabulateFnCoL;
       }
       break;
 	
     case c_tab_elev:
       if(numParams > 1) {
-	tabulator.setDomain(param[0], param[1]);
+	tabulator.setDomain(param[0]/RADIAN, param[1]/RADIAN);
 	tabulateFn = tabulateFnElev;
       }
       break;
@@ -2017,7 +2032,7 @@ void sensorTaskFast()
   //
  
   if(vpStatus.aloft && tabulateFn)
-    tabulator.datum(alpha*RADIAN, (*tabulateFn)());
+    tabulator.datum(alpha, (*tabulateFn)());
 }
 
 void commitTask()
@@ -2058,7 +2073,7 @@ void sensorMonitorTask()
   
   static uint32_t iasLastAlive;
 
-  if(iAS < vpParam.iasMin/3 || fabsf(iAS - iasFilterSlow.output()) > 0.5) {
+  if(iAS < stallIAS()/3 || fabsf(iAS - iasFilterSlow.output()) > 0.5) {
     if(vpStatus.pitotBlocked) {
       consoleNoteLn_P(PSTR("Pitot block CLEARED"));
       vpStatus.pitotBlocked = false;
@@ -2360,11 +2375,11 @@ const float origoAlpha = -5.0/RADIAN;
 
 static float scaleByIAS(float k, float p)
 {
-  float effIAS = fmaxf(iasFilter.output(), vpParam.iasMin);
+  float effIAS = fmaxf(iasFilter.output(), stallIAS());
   
   if(pitotDevice.status() || vpStatus.pitotBlocked)
     // Failsafe value chosen to be ... on the safe side
-    effIAS = p > 0 ? vpParam.iasMin : vpParam.iasMin * 3/2;
+    effIAS = p > 0 ? stallIAS() : stallIAS() * 3/2;
   
   return k * powf(effIAS, p);
 }
@@ -2385,7 +2400,7 @@ void configurationTask()
 
   static uint32_t lastNegativeIAS, lastHighIAS, lastLowIAS;
 
-  if(vpStatus.pitotBlocked || iasFilter.output() < vpParam.iasMin/2) {
+  if(vpStatus.pitotBlocked || iasFilter.output() < stallIAS()/2) {
     if(vpStatus.positiveIAS) {
       consoleNoteLn_P(PSTR("Positive airspeed LOST"));
       vpStatus.positiveIAS = false;
@@ -2398,7 +2413,7 @@ void configurationTask()
     vpStatus.positiveIAS = true;
   }
 
-  if(vpStatus.pitotBlocked || iasFilter.output() < vpParam.iasMin*0.85) {
+  if(vpStatus.pitotBlocked || iasFilter.output() < stallIAS()*0.85) {
     if(vpStatus.aloft && currentTime - lastHighIAS > 2e6) {
       consoleNoteLn_P(PSTR("Flight ENDED"));
       vpStatus.aloft = false;
@@ -2528,7 +2543,7 @@ void configurationTask()
       failsafeDisable();
       
     } else {
-      if(iasFilter.output() < vpParam.iasMin*2/3) {
+      if(iasFilter.output() < stallIAS()*2/3) {
 	if(!vpMode.takeOff) {
 	  consoleNoteLn_P(PSTR("TakeOff mode ENABLED"));
 	  vpMode.takeOff = true;
@@ -2674,8 +2689,8 @@ void configurationTask()
   // TakeOff mode disabled when airspeed detected (or fails)
 
   if(vpMode.takeOff
-     && (pitotDevice.status() || iasFilter.output() > vpParam.iasMin)) {
-    if(iasFilter.output() > vpParam.iasMin && !vpStatus.consoleLink)
+     && (pitotDevice.status() || iasFilter.output() > stallIAS())) {
+    if(iasFilter.output() > stallIAS() && !vpStatus.consoleLink)
       vpStatus.silent = true;
     
     consoleNoteLn_P(PSTR("TakeOff mode DISABLED"));
@@ -2860,7 +2875,7 @@ void configurationTask()
 
   if(!vpFeature.alphaHold)
     elevTrimSub =
-      elevFromAlpha(clamp(effAlpha, vpParam.alphaZeroLift, maxAlpha))
+      elevFromAlpha(clamp(effAlpha, zeroLiftAlpha(), maxAlpha))
       - elevStick - elevTrim;
 }
 
@@ -3162,23 +3177,7 @@ void gpsTask()
 
 float nominalPitchRate(float bank, float target)
 {
-  return square(sin(bank))*coeffOfLift(target)
-    *iasFilter.output()*G/square(vpParam.iasMin);
-}
-
-//
-// More complex version with both bank and pitch, not really what we need
-// for level flight so won't happen for now.
-//
-
-float nominalPitchRate(float bank, float pitch, float target)
-{
-  const float alphaCL0 = vpParam.alphaZeroLift,
-    ratio = (target - alphaCL0) / (vpParam.alphaMax - alphaCL0);
-
-  const float theta = 0; // the angle between local "up" and earh "up"
-    
-  return G/iAS*(ratio*square(iAS/vpParam.iasMin) - cos(theta));
+  return 2*square(sin(bank))*coeffOfLift(target)*dynPressure/iasFilter.output();
 }
 
 void controlTask()

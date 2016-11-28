@@ -2,7 +2,7 @@
 #include "Console.h"
 #include "NVState.h"
 #include <math.h>
-
+/*
 float coeffOfLift(float aoa)
 {
   const float alphaCL0 = vpParam.alphaZeroLift,
@@ -16,6 +16,32 @@ float coeffOfLift(float aoa)
       *(1 - (1 - vpParam.col_Peak)*(1 + vpParam.col_Peak*(PI/2 - 1)));
   } else
     return 1 - (ratio - 1);
+}
+*/
+
+float zeroLiftAlpha()
+{
+  return -vpParam.cL_A/vpParam.cL_B;
+}
+
+float stallIAS()
+{
+  return sqrt(2*G/vpParam.cL_max);
+}
+
+float coeffOfLift(float aoa)
+{
+  const float range = vpParam.alphaMax -  zeroLiftAlpha(),
+    ratio = (aoa - zeroLiftAlpha()) / range;
+  
+  const float k = vpParam.cL_B*range/vpParam.cL_max;
+
+  const float d = 2/(PI+2)*(1 - 1/k), w = 1 - 1/k + d;
+
+  if(ratio < 1-w)
+    return vpParam.cL_A + aoa*vpParam.cL_B;
+  else
+    return k*(1-w+d*sin(PI/2*(ratio - 1 + w)/w))*vpParam.cL_max;
 }
 
 float sign(float x)
@@ -321,9 +347,14 @@ void Tabulator::report(float t)
   const int colLeft = 10, colRight = 78;
   const int col0 = colLeft - store.rangeA*(colRight-colLeft)/(store.rangeB - store.rangeA);
     
+
+  float maxX = 0, maxV = -1e6;
+  
   for(int i = 0; i < TabulatorWindow_c; i++) {
     consoleNote("");
-    consolePrint(store.domainA + (store.domainB-store.domainA)*(0.5+i)/TabulatorWindow_c);
+
+    float xI = (store.domainA + (store.domainB-store.domainA)*(0.5+i)/TabulatorWindow_c)*RADIAN;
+    consolePrint(xI);
     consoleTab(colLeft);
 
     if(store.count[i] > 2*threshold_c) {
@@ -332,6 +363,11 @@ void Tabulator::report(float t)
       int xl = colLeft + (colRight-colLeft) * (e - v - store.rangeA) / (store.rangeB - store.rangeA);
       int xr = colLeft + (colRight-colLeft) * (e + v - store.rangeA) / (store.rangeB - store.rangeA);
 
+      if(e > maxV) {
+	maxV = e;
+	maxX = xI;
+      }
+      
       for(int x = colLeft; x <= colRight; x++) {
 	if(x == xc)
 	  consolePrint("*");
@@ -347,34 +383,43 @@ void Tabulator::report(float t)
     consolePrintLn("");
   }
   
+  consoleNote_P(PSTR("Max value = "));
+  consolePrint(maxV, 4);
+  consolePrint_P(PSTR(" at "));
+  consolePrintLn(maxX, 2);
+  
   consolePrintLn("");
   
   consolePrint("x = c(");
+
+  int c = 0;
   
   for(int i = 0; i < TabulatorWindow_c; i++) {
     float v = sqrt(store.var[i]/(store.count[i]-threshold_c));
 
     if(store.count[i] > 2*threshold_c && v < t) {
-      if(i > 0)
+      if(c++ > 0)
 	consolePrint(", ");
-      consolePrint(store.domainA + (store.domainB-store.domainA)*(i + 0.5)/TabulatorWindow_c);
+      consolePrint(store.domainA + (store.domainB-store.domainA)*(i + 0.5)/TabulatorWindow_c, 4);
     }
   }
   
   consolePrintLn(")");
     
   consolePrint("y = c(");
-  
+
+  c = 0;
+
   for(int i = 0; i < TabulatorWindow_c; i++) {
     float e = store.sum[i]/store.count[i], v = sqrt(store.var[i]/(store.count[i]-threshold_c));
 
     if(store.count[i] > 2*threshold_c && v < t) {
-      if(i > 0)
+      if(c++ > 0)
 	consolePrint(", ");
       
-      consolePrint(e, 3);
+      consolePrint(e, 4);
     }
   }
   
-  consolePrintLn(")");
+  consolePrintLn(")");  
 }

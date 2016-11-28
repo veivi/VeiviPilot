@@ -32,16 +32,16 @@ const struct ParamRecord paramDefaults = {
   .rudderNeutral = 0, .rudderDefl = 45.0/90,
   .brakeNeutral = 0, .brakeDefl = 45.0/90,
   .servoAile = 0, .servoElev = 1, .servoRudder = 2, .servoFlap = -1, .servoFlap2 = -1, .servoGear = -1, .servoBrake = -1,
-  .alphaZeroLift = -2.0/RADIAN, .alphaMax = 12.0/RADIAN,
+  .cL_A = 0.05, .alphaMax = 12.0/RADIAN,
   .i_Ku_C = 100, .i_Tu = 0.25, .o_P = 0.3, 
   .s_Ku_C = 400, .s_Tu = 0.25, 
   .r_Mix = 0.1,
   .p_Ku_C = 100, .p_Tu = 1.0,
   .ff_A = 0.0, .ff_B = 0.0,
   .wl_Limit = 0.0,
-  .iasMin = 12,
+  .cL_max= 0.25,
   .roll_C = 0.1,
-  .col_Peak = 0.2,
+  .cL_B = 0.6,
   .servoRate = 60/0.09,
   .takeoffTrim = 0.25
 };
@@ -81,7 +81,7 @@ void defaultState(void)
 
 int maxModels(void)
 {
-  return (nvState.logPartition - nvState.paramPartition) / sizeof(vpParam);
+  return (nvState.dataPartition - nvState.paramPartition) / sizeof(vpParam);
 }
 
 bool setModel(int model)
@@ -197,12 +197,16 @@ void printParams()
   consolePrintLn(vpParam.s_Tu, 4);
   consoleNote_P(PSTR("    Weak leveling limit angle = "));
   consolePrintLn(vpParam.wl_Limit*RADIAN, 4);
-  consoleNote_P(PSTR("  Alpha (max) = "));
+  consoleNote_P(PSTR("  Stall alpha = "));
   consolePrint(vpParam.alphaMax*RADIAN);
-  consolePrint_P(PSTR(" (CL0) = "));
-  consolePrint(vpParam.alphaZeroLift*RADIAN);
-  consolePrint_P(PSTR(" IAS(alphaMax) = "));
-  consolePrintLn(vpParam.iasMin);
+  consolePrint_P(PSTR(" IAS = "));
+  consolePrintLn(stallIAS());
+  consoleNote_P(PSTR(" Coeff of lift (A, B, max) = "));
+  consolePrint(vpParam.cL_A);
+  consolePrint_P(PSTR(", "));
+  consolePrint(vpParam.cL_B);
+  consolePrint_P(PSTR(", "));
+  consolePrintLn(vpParam.cL_max);
   consoleNote_P(PSTR("  Roll rate K = "));
   consolePrintLn(vpParam.roll_C);
   consoleNoteLn_P(PSTR("  Elevator"));
@@ -252,13 +256,13 @@ void printParams()
 
   consoleNoteLn_P(PSTR("CoL(norm) curve"));
   
-  for(float aR = -0.2; aR <= 1.2; aR += 0.075) {
+  for(float aR = -0.25; aR <= 1.2; aR += 0.075) {
     consoleNote("");
     consolePrint(vpParam.alphaMax*RADIAN*aR);
     consoleTab(10);
 
     const int col0 = 20, col1 = 78;
-    int x = col0 + (col1-col0) * coeffOfLift(vpParam.alphaMax*aR);
+    int x = col0 + (col1-col0) * coeffOfLift(vpParam.alphaMax*aR)/vpParam.cL_max;
 
     if(x < col0) {
       consoleTab(x);
