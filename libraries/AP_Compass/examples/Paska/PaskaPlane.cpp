@@ -48,12 +48,6 @@ AP_GPS gps;
 AP_AHRS_DCM ahrs {ins,  barometer, gps};
 
 //
-// Threshold speed margin (IAS)
-//
-
-const float thresholdMargin_c = 15/100.0;
-
-//
 // HW timer declarations
 //
 
@@ -213,7 +207,7 @@ bool ailePilotInput, elevPilotInput, rudderPilotInput;
 uint32_t controlCycleEnded;
 float elevTrim, effTrim, elevTrimSub, targetAlpha;
 Controller elevCtrl, aileCtrl, pushCtrl;
-float autoAlphaP, maxAlpha, shakerAlpha, thresholdAlpha, rudderMix;
+float autoAlphaP, maxAlpha, rudderMix;
 float accX, accY, accZ, accTotal, altitude,  bankAngle, pitchAngle, rollRate, pitchRate, targetPitchRate, yawRate, levelBank;
 uint16_t heading;
 NewI2C I2c = NewI2C();
@@ -315,7 +309,7 @@ extern "C" {
 int maxDatagramSize = MAX_DG_SIZE;
 uint8_t datagramRxStore[MAX_DG_SIZE];
 
-void executeCommand(const char *buf);
+void executeCommand(char *buf);
 
 struct SimLinkSensor sensorData;
 uint16_t simFrames;
@@ -327,7 +321,7 @@ void datagramRxError(const char *error)
   consolePrintLn(error);
 }
   
-void datagramInterpreter(uint8_t t, const uint8_t *data, int size)
+void datagramInterpreter(uint8_t t, uint8_t *data, int size)
 {
   uint32_t pingBuffer = 0;
   
@@ -342,7 +336,7 @@ void datagramInterpreter(uint8_t t, const uint8_t *data, int size)
     break;
     
   case DG_CONSOLE:
-    executeCommand((const char*) data);
+    executeCommand((char*) data);
     break;
 
   case DG_SIMLINK:
@@ -1007,23 +1001,6 @@ bool tocTestStatus(void (*reportFn)(bool, int, const char*))
 // Command interpreter
 //
 
-int indexOf(const char *s, const char c, int index)
-{
-  while(s[index] != '\0') {
-    if(s[index] == c)
-      return index;
-  
-    index++;
-  }
-    
-  return -1;
-}
-
-int indexOf(const char *s, const char c)
-{
-  return indexOf(s, c, 0);
-}
-
 const prog_char_t *applyParamUpdate()
 {
   /*
@@ -1042,7 +1019,7 @@ const prog_char_t *applyParamUpdate()
 
 float tabulateFnCoL()
 {
-  float lift = sqrt(square(sin(alpha)*accX) + square(cos(alpha)*accZ));
+  float lift = sin(alpha)*accX + cos(alpha)*accZ;
   return lift/dynPressure;
 }
 
@@ -1053,15 +1030,29 @@ float tabulateFnElev()
 
 float (*tabulateFn)(void);
 
-void executeCommand(const char *buf)
+char *parse(char *ptr)
 {
-  int bufLen = strlen(buf);
+  while(*ptr && !isblank(*ptr))
+    ptr++;
+
+  if(*ptr) {
+    *ptr++ = '\0';
+    while(*ptr && isblank(*ptr))
+      ptr++;
+  }
+
+  return ptr;
+}
+
+void executeCommand(char *buf)
+{
+  while(*buf && isblank(*buf))
+    buf++;
   
   consolePrint_P(PSTR("// % "));
-  consolePrint(buf, bufLen);
-  consolePrintLn("");
+  consolePrintLn(buf);
 
-  if(bufLen < 1 || buf[0] == '/') {
+  if(!*buf || buf[0] == '/') {
     gaugeCount = 0;
     calibStop(nvState.rxMin, nvState.rxCenter, nvState.rxMax);
     return;
@@ -1071,30 +1062,21 @@ void executeCommand(const char *buf)
     return;
   }
   
-  int index = 0, prevIndex = 0, numParams = 0, tokenLen = bufLen;
+  int numParams = 0;
   float param[maxParams];
   const char *paramText[maxParams];
 
   for(int i = 0; i < maxParams; i++)
     param[i] = 0.0;
 
-  if((index = indexOf(buf, ' ')) > 0) {
-    tokenLen = index;
-    
-    do {
-      prevIndex = index;
-    
-      index = indexOf(buf, ' ', index+1);
-      
-      if(index < 0)
-        index = bufLen;
-
-      if(numParams < maxParams) {
-	paramText[numParams] = &buf[prevIndex+1];
-        param[numParams] = atof(paramText[numParams]);
-	numParams++;
-      }	
-    } while(index < bufLen);
+  char *parsePtr = buf;
+  
+  while(*(parsePtr = parse(parsePtr))) {
+    if(numParams < maxParams) {
+      paramText[numParams] = parsePtr;
+      param[numParams] = atof(paramText[numParams]);
+      numParams++;
+    }
   }
   
   int matches = 0, j = 0;
@@ -1108,7 +1090,7 @@ void executeCommand(const char *buf)
     if(cache.token == c_invalid)
       break;
     
-    if(!strncmp(buf, cache.name, tokenLen)) {
+    if(!strncmp(buf, cache.name, strlen(buf))) {
       command = cache;
       matches++;
     }
@@ -1116,12 +1098,12 @@ void executeCommand(const char *buf)
   
   if(matches < 1) {
     consolePrint_P(PSTR("Command not recognized: \""));
-    consolePrint(buf, tokenLen);
+    consolePrint(buf);
     consolePrintLn("\"");
     
   } else if(matches > 1) {
     consolePrint_P(PSTR("Ambiguos command: \""));
-    consolePrint(buf, tokenLen);
+    consolePrint(buf);
     consolePrintLn("\"");
     
   } else if(command.var[0]) {
@@ -1222,7 +1204,7 @@ void executeCommand(const char *buf)
     case c_rollrate:
       if(numParams > 0) {
 	vpParam.roll_C
-	  = param[0]/RADIAN/powf(stallIAS(), stabilityAileExp2_c);
+	  = param[0]/RADIAN/powf(vpDerived.stallIAS, stabilityAileExp2_c);
 	consoleNote_P(PSTR("Roll rate K = "));
 	consolePrintLn(vpParam.roll_C);
 	storeNVState();
@@ -1356,7 +1338,7 @@ void executeCommand(const char *buf)
       
     case c_peak:
       vpParam.cL_B = (1 + (PI/2-1)*param[0])*vpParam.cL_max
-	/(vpParam.alphaMax - zeroLiftAlpha());
+	/(vpParam.alphaMax - vpDerived.zeroLiftAlpha);
       break;
       
     case c_ias:
@@ -1440,7 +1422,7 @@ void executeCommand(const char *buf)
 	
     default:
       consolePrint_P(PSTR("Sorry, command not implemented: \""));
-      consolePrint(buf, tokenLen);
+      consolePrint(buf);
       consolePrintLn("\"");
       break;
     }
@@ -1923,7 +1905,7 @@ void receiverTask()
     vpFeature.pusher = false;
 
     trimRateLimiter.setRate(1.5/RADIAN);
-    elevTrim = elevFromAlpha(thresholdAlpha) - elevTrimSub;
+    elevTrim = elevFromAlpha(vpDerived.thresholdAlpha) - elevTrimSub;
   } else
     trimRateLimiter.setRate(CIRCLE);
       
@@ -2073,7 +2055,7 @@ void sensorMonitorTask()
   
   static uint32_t iasLastAlive;
 
-  if(iAS < stallIAS()/3 || fabsf(iAS - iasFilterSlow.output()) > 0.5) {
+  if(iAS < vpDerived.stallIAS/3 || fabsf(iAS - iasFilterSlow.output()) > 0.5) {
     if(vpStatus.pitotBlocked) {
       consoleNoteLn_P(PSTR("Pitot block CLEARED"));
       vpStatus.pitotBlocked = false;
@@ -2375,11 +2357,11 @@ const float origoAlpha = -5.0/RADIAN;
 
 static float scaleByIAS(float k, float p)
 {
-  float effIAS = fmaxf(iasFilter.output(), stallIAS());
+  float effIAS = fmaxf(iasFilter.output(), vpDerived.stallIAS);
   
   if(pitotDevice.status() || vpStatus.pitotBlocked)
     // Failsafe value chosen to be ... on the safe side
-    effIAS = p > 0 ? stallIAS() : stallIAS() * 3/2;
+    effIAS = p > 0 ? vpDerived.stallIAS : vpDerived.stallIAS * 3/2;
   
   return k * powf(effIAS, p);
 }
@@ -2400,7 +2382,7 @@ void configurationTask()
 
   static uint32_t lastNegativeIAS, lastHighIAS, lastLowIAS;
 
-  if(vpStatus.pitotBlocked || iasFilter.output() < stallIAS()/2) {
+  if(vpStatus.pitotBlocked || iasFilter.output() < vpDerived.stallIAS/2) {
     if(vpStatus.positiveIAS) {
       consoleNoteLn_P(PSTR("Positive airspeed LOST"));
       vpStatus.positiveIAS = false;
@@ -2413,7 +2395,7 @@ void configurationTask()
     vpStatus.positiveIAS = true;
   }
 
-  if(vpStatus.pitotBlocked || iasFilter.output() < stallIAS()*0.85) {
+  if(vpStatus.pitotBlocked || iasFilter.output() < vpDerived.stallIAS*0.85) {
     if(vpStatus.aloft && currentTime - lastHighIAS > 2e6) {
       consoleNoteLn_P(PSTR("Flight ENDED"));
       vpStatus.aloft = false;
@@ -2543,7 +2525,7 @@ void configurationTask()
       failsafeDisable();
       
     } else {
-      if(iasFilter.output() < stallIAS()*2/3) {
+      if(iasFilter.output() < vpDerived.stallIAS*2/3) {
 	if(!vpMode.takeOff) {
 	  consoleNoteLn_P(PSTR("TakeOff mode ENABLED"));
 	  vpMode.takeOff = true;
@@ -2689,8 +2671,8 @@ void configurationTask()
   // TakeOff mode disabled when airspeed detected (or fails)
 
   if(vpMode.takeOff
-     && (pitotDevice.status() || iasFilter.output() > stallIAS())) {
-    if(iasFilter.output() > stallIAS() && !vpStatus.consoleLink)
+     && (pitotDevice.status() || iasFilter.output() > vpDerived.stallIAS)) {
+    if(iasFilter.output() > vpDerived.stallIAS && !vpStatus.consoleLink)
       vpStatus.silent = true;
     
     consoleNoteLn_P(PSTR("TakeOff mode DISABLED"));
@@ -2863,19 +2845,12 @@ void configurationTask()
   }
 
   //
-  // Effective alpha limits
-  //
-  
-  thresholdAlpha = maxAlpha/square(1 + thresholdMargin_c);
-  shakerAlpha = maxAlpha/square(1 + thresholdMargin_c/2);
-
-  //
   // Trim adjustment by mode
   //
 
   if(!vpFeature.alphaHold)
     elevTrimSub =
-      elevFromAlpha(clamp(effAlpha, zeroLiftAlpha(), maxAlpha))
+      elevFromAlpha(clamp(effAlpha, vpDerived.zeroLiftAlpha, maxAlpha))
       - elevStick - elevTrim;
 }
 
@@ -3177,7 +3152,7 @@ void gpsTask()
 
 float nominalPitchRate(float bank, float target)
 {
-  return 2*square(sin(bank))*coeffOfLift(target)*dynPressure/iasFilter.output();
+  return square(sin(bank))*coeffOfLift(target)*iasFilter.output()/2;
 }
 
 void controlTask()
@@ -3201,7 +3176,7 @@ void controlTask()
   const float shakerLimit = (float) 2/3;
   const float effStick = vpMode.rxFailSafe ? shakerLimit : elevStick;
   const float stickStrength = fmaxf(effStick-shakerLimit, 0)/(1-shakerLimit);
-  const float effMaxAlpha = mixValue(stickStrength, shakerAlpha, maxAlpha);
+  const float effMaxAlpha = mixValue(stickStrength, vpDerived.shakerAlpha, maxAlpha);
     
   effTrim = vpFeature.alphaHold ? elevTrim + elevTrimSub : elevTrim;
 
@@ -3253,7 +3228,7 @@ void controlTask()
   if(vpMode.rxFailSafe)
     maxBank = 10/RADIAN;
   else if(vpFeature.alphaHold)
-    maxBank /= 1 + alphaFromElev(effTrim) / thresholdAlpha / 2;
+    maxBank /= 1 + alphaFromElev(effTrim) / vpDerived.thresholdAlpha / 2;
   
   float targetRollRate = maxRollRate*aileStick;
 
@@ -3356,7 +3331,7 @@ void trimTask()
   else
     elevTrim = clamp(elevTrim,
 		     trimMin - elevTrimSub,
-		     elevFromAlpha(thresholdAlpha) - elevTrimSub);
+		     elevFromAlpha(vpDerived.thresholdAlpha) - elevTrimSub);
 }
 
 void pingTestTask()

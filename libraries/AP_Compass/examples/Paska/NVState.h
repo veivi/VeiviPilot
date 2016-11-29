@@ -4,6 +4,12 @@
 #include <stdint.h>
 #include <AP_ProgMem/AP_ProgMem.h>
 
+//
+// Threshold speed margin (IAS)
+//
+
+const float thresholdMargin_c = 15/100.0;
+
 #define NAME_LEN     8
 #define MAX_CH       8
 
@@ -35,6 +41,11 @@ struct ParamRecord {
   float takeoffTrim;
   };
 
+struct DerivedParams {
+  float stallIAS, zeroLiftAlpha;
+  float thresholdAlpha, shakerAlpha;
+};
+
 struct NVStateRecord {
   uint16_t crc;
   uint16_t paramPartition, dataPartition, logPartition;
@@ -46,6 +57,7 @@ struct NVStateRecord {
 
 extern struct ParamRecord vpParam;
 extern struct NVStateRecord nvState;
+extern struct DerivedParams vpDerived;
 extern const prog_char_t *updateDescription;
 
 void defaultParams(void);
@@ -54,6 +66,7 @@ void storeParams(void);
 void readNVState(void);
 void storeNVState(void);
 void printParams(void);
+void deriveParams();
 void backupParams(void);
 int maxModels(void);
 void readData(uint8_t *data, int size);

@@ -15,6 +15,7 @@ extern "C" {
 
 struct NVStateRecord nvState;
 struct ParamRecord vpParam;
+struct DerivedParams vpDerived;
 
 #define stateOffset 0U
 #define paramOffset nvState.paramPartition
@@ -162,6 +163,8 @@ void storeNVState(void)
 
 void printParams()
 {
+  deriveParams();
+  
   consoleNote_P(PSTR("  NAME \""));
   consolePrint(vpParam.name);
   consolePrintLn_P(PSTR("\""));
@@ -200,7 +203,7 @@ void printParams()
   consoleNote_P(PSTR("  Stall alpha = "));
   consolePrint(vpParam.alphaMax*RADIAN);
   consolePrint_P(PSTR(" IAS = "));
-  consolePrintLn(stallIAS());
+  consolePrintLn(vpDerived.stallIAS);
   consoleNote_P(PSTR(" Coeff of lift (A, B, max) = "));
   consolePrint(vpParam.cL_A);
   consolePrint_P(PSTR(", "));
@@ -380,3 +383,24 @@ float alphaFromElev(float x)
 {
   return (x - vpParam.ff_A)/vpParam.ff_B;
 }
+
+void deriveParams()
+{
+  // Zero lift alpha
+  
+  vpDerived.zeroLiftAlpha = -vpParam.cL_A/vpParam.cL_B;
+
+  // Stall IAS
+  
+  vpDerived.stallIAS = sqrt(2*G/vpParam.cL_max);
+  
+  //
+  // Effective alpha limits
+  //
+  
+  vpDerived.thresholdAlpha =
+    coeffOfLiftInverse(vpParam.cL_max/square(1 + thresholdMargin_c));
+  vpDerived.shakerAlpha =
+    coeffOfLiftInverse(vpParam.cL_max/square(1 + thresholdMargin_c/2));
+}
+

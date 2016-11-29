@@ -19,20 +19,10 @@ float coeffOfLift(float aoa)
 }
 */
 
-float zeroLiftAlpha()
-{
-  return -vpParam.cL_A/vpParam.cL_B;
-}
-
-float stallIAS()
-{
-  return sqrt(2*G/vpParam.cL_max);
-}
-
 float coeffOfLift(float aoa)
 {
-  const float range = vpParam.alphaMax -  zeroLiftAlpha(),
-    ratio = (aoa - zeroLiftAlpha()) / range;
+  const float range = vpParam.alphaMax -  vpDerived.zeroLiftAlpha,
+    ratio = (aoa - vpDerived.zeroLiftAlpha) / range;
   
   const float k = vpParam.cL_B*range/vpParam.cL_max;
 
@@ -41,7 +31,24 @@ float coeffOfLift(float aoa)
   if(ratio < 1-w)
     return vpParam.cL_A + aoa*vpParam.cL_B;
   else
-    return k*(1-w+d*sin(PI/2*(ratio - 1 + w)/w))*vpParam.cL_max;
+    return MIN(k*(1-w+d*sin(PI/2*(ratio - 1 + w)/w)), 1)*vpParam.cL_max;
+}
+
+float coeffOfLiftInverse(float target)
+{
+  float left = vpDerived.zeroLiftAlpha, right = vpParam.alphaMax, center, approx;
+
+  do {
+    center = (left+right)/2;
+    approx = coeffOfLift(center);
+    
+    if(approx > target)
+      right = center;
+    else
+      left = center;
+  } while(fabs(approx - target) > 0.0003);
+
+  return center;
 }
 
 float sign(float x)

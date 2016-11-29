@@ -21,8 +21,7 @@ float randomNum(float small, float large);
 uint32_t randomUInt32();
 float quantize(float value, float *state, int numSteps);
 float coeffOfLift(float aoa);
-float zeroLiftAlpha();
-float stallIAS();
+float coeffOfLiftInverse(float col);
 
 class RunningAvgFilter {
  public:
