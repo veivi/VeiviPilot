@@ -1019,8 +1019,8 @@ const prog_char_t *applyParamUpdate()
 
 float tabulateFnCoL()
 {
-  float lift = sin(alpha)*accX + cos(alpha)*accZ;
-  return lift/dynPressure;
+  float liftWing = cos(alpha)*accZ; // We only want the wing contribution
+  return liftWing/dynPressure;
 }
 
 float tabulateFnElev()

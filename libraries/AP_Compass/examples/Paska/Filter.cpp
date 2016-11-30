@@ -21,17 +21,15 @@ float coeffOfLift(float aoa)
 
 float coeffOfLift(float aoa)
 {
-  const float range = vpParam.alphaMax -  vpDerived.zeroLiftAlpha,
-    ratio = (aoa - vpDerived.zeroLiftAlpha) / range;
-  
-  const float k = vpParam.cL_B*range/vpParam.cL_max;
+  const float i = (vpParam.cL_max - vpParam.cL_A)/vpParam.cL_B,
+    d = 2/(PI-2)*(vpParam.alphaMax - i),
+    w = d + vpParam.alphaMax - i;
 
-  const float d = 2/(PI+2)*(1 - 1/k), w = 1 - 1/k + d;
-
-  if(ratio < 1-w)
+  if(aoa < vpParam.alphaMax - w)
     return vpParam.cL_A + aoa*vpParam.cL_B;
   else
-    return MIN(k*(1-w+d*sin(PI/2*(ratio - 1 + w)/w)), 1)*vpParam.cL_max;
+    return vpParam.cL_A
+      + vpParam.cL_B*(i - d*(1 - sin(PI/2*(aoa - vpParam.alphaMax + w)/w)));
 }
 
 float coeffOfLiftInverse(float target)
