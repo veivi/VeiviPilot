@@ -1332,17 +1332,25 @@ void executeCommand(char *buf)
       break;
 
     case c_zl:
-      vpParam.cL_B = 1.1*vpParam.cL_max/(vpParam.alphaMax - param[0]/RADIAN);
-      vpParam.cL_A = -(param[0]/RADIAN)/vpParam.cL_B;
+      if(numParams > 0) {
+	vpParam.cL_B = 1.1*vpParam.cL_max/(vpParam.alphaMax - param[0]/RADIAN);
+	vpParam.cL_A = -(param[0]/RADIAN)/vpParam.cL_B;
+      }
       break;
       
     case c_peak:
-      vpParam.cL_B = (1 + (PI/2-1)*param[0])*vpParam.cL_max
-	/(vpParam.alphaMax - vpDerived.zeroLiftAlpha);
+      if(numParams > 0)
+	vpParam.cL_B = (1 + (PI/2-1)*param[0])*vpParam.cL_max/vpParam.alphaMax;
       break;
       
     case c_ias:
-      vpParam.cL_max = 2*G / square(param[0]);
+      if(numParams > 0)
+	vpParam.cL_max = 2*G / square(param[0]);
+      break;
+      
+    case c_max:
+      if(numParams > 0)
+	vpParam.alphaMax = param[0]/RADIAN;
       break;
       
     case c_report:
@@ -2395,7 +2403,7 @@ void configurationTask()
     vpStatus.positiveIAS = true;
   }
 
-  if(vpStatus.pitotBlocked || iasFilter.output() < vpDerived.stallIAS*0.85) {
+  if(vpStatus.pitotBlocked || iAS < vpDerived.stallIAS*0.9) {
     if(vpStatus.aloft && currentTime - lastHighIAS > 2e6) {
       consoleNoteLn_P(PSTR("Flight ENDED"));
       vpStatus.aloft = false;
@@ -2404,11 +2412,14 @@ void configurationTask()
     
     lastLowIAS = currentTime;
 
-  } else if(currentTime - lastLowIAS > 5e6 && !vpStatus.aloft) {
-    consoleNoteLn_P(PSTR("We think we're ALOFT"));
-    vpStatus.aloft = true;
+  } else {
     lastHighIAS = currentTime;
-  }
+
+    if(currentTime - lastLowIAS > 5e6 && !vpStatus.aloft) {
+      consoleNoteLn_P(PSTR("We think we're ALOFT"));
+      vpStatus.aloft = true;
+    }
+   }
   
   accTotal = sqrtf(square(accX) + square(accY) + square(accZ));
   

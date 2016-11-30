@@ -161,6 +161,40 @@ void storeNVState(void)
     consoleNoteLn_P(PSTR("PANIC : State record exceeds partition size"));
 }
 
+void printCoeffElement(float v)
+{
+    consoleNote("");
+    consolePrint(v*RADIAN);
+    consoleTab(10);
+
+    const int col0 = 20, col1 = 78;
+    int x = col0 + (col1-col0) * coeffOfLift(v)/vpParam.cL_max;
+
+    if(x < col0) {
+      consoleTab(x);
+      consolePrint("*");
+      consoleTab(col0);
+      consolePrint("|");
+      consoleTab(col1);
+      consolePrintLn("|");
+    } else if(x > col0) {
+      consoleTab(col0);
+      consolePrint("|");
+      consoleTab(x);
+      if(x < col1) {
+	consolePrint("*");
+	consoleTab(col1);
+	consolePrintLn("|");
+      } else
+	consolePrintLn("*");
+    } else {
+      consoleTab(col0);
+      consolePrint("*");
+      consoleTab(col1);
+      consolePrintLn("|");
+    }
+}
+
 void printParams()
 {
   deriveParams();
@@ -183,9 +217,9 @@ void printParams()
   consolePrint(vpParam.ff_A, 5);
   consolePrint_P(PSTR(" + "));
   consolePrint(vpParam.ff_B, 5);
-  consolePrint_P(PSTR(" x  (alpha range = "));
+  consolePrint_P(PSTR(" x  (eff alpha range = "));
   consolePrint(alphaFromElev(-1.0)*RADIAN);
-  consolePrint_P(PSTR("..."));
+  consolePrint_P(PSTR(" ... "));
   consolePrint(alphaFromElev(1.0)*RADIAN);
   consolePrintLn_P(PSTR(")"));
   consoleNoteLn_P(PSTR("  Pusher"));
@@ -200,16 +234,20 @@ void printParams()
   consolePrintLn(vpParam.s_Tu, 4);
   consoleNote_P(PSTR("    Weak leveling limit angle = "));
   consolePrintLn(vpParam.wl_Limit*RADIAN, 4);
-  consoleNote_P(PSTR("  Stall alpha = "));
+  consoleNote_P(PSTR("  Alpha range = "));
+  consolePrint(vpDerived.zeroLiftAlpha*RADIAN);
+  consolePrint_P(PSTR(" ... "));
   consolePrint(vpParam.alphaMax*RADIAN);
-  consolePrint_P(PSTR(" IAS = "));
+  consolePrint_P(PSTR(", stall IAS = "));
   consolePrintLn(vpDerived.stallIAS);
-  consoleNote_P(PSTR(" Coeff of lift (A, B, max) = "));
-  consolePrint(vpParam.cL_A);
-  consolePrint_P(PSTR(", "));
-  consolePrint(vpParam.cL_B);
-  consolePrint_P(PSTR(", "));
-  consolePrintLn(vpParam.cL_max);
+  consoleNoteLn_P(PSTR("  Coeff of lift A + Bx"));
+  consoleNote_P(PSTR("    "));
+  consolePrint(vpParam.cL_A, 4);
+  consolePrint_P(PSTR(" + "));
+  consolePrint(vpParam.cL_B, 4);
+  consolePrint_P(PSTR(" x  (max = "));
+  consolePrint(vpParam.cL_max, 4);
+  consolePrintLn(")");
   consoleNote_P(PSTR("  Roll rate K = "));
   consolePrintLn(vpParam.roll_C);
   consoleNoteLn_P(PSTR("  Elevator"));
@@ -259,38 +297,22 @@ void printParams()
 
   consoleNoteLn_P(PSTR("CoL(norm) curve"));
   
-  for(float aR = -0.25; aR <= 1.2; aR += 0.075) {
+  for(float aR = -0.2; aR <= 1.2; aR += 0.07)
+    printCoeffElement(vpParam.alphaMax*aR);
+
+  /*
+  for(float aR = -0.3; aR <= 0.1; aR += 0.05)
+    printCoeffElement(vpParam.alphaMax*aR);
+
+  for(int i = 0; i < 3; i++) {
     consoleNote("");
-    consolePrint(vpParam.alphaMax*RADIAN*aR);
-    consoleTab(10);
-
-    const int col0 = 20, col1 = 78;
-    int x = col0 + (col1-col0) * coeffOfLift(vpParam.alphaMax*aR)/vpParam.cL_max;
-
-    if(x < col0) {
-      consoleTab(x);
-      consolePrint("*");
-      consoleTab(col0);
-      consolePrint("|");
-      consoleTab(col1);
-      consolePrintLn("|");
-    } else if(x > col0) {
-      consoleTab(col0);
-      consolePrint("|");
-      consoleTab(x);
-      if(x < col1) {
-	consolePrint("*");
-	consoleTab(col1);
-	consolePrintLn("|");
-      } else
-	consolePrintLn("*");
-    } else {
-      consoleTab(col0);
-      consolePrint("*");
-      consoleTab(col1);
-      consolePrintLn("|");
-    }
+    consoleTab(30);
+    consolePrintLn(".");
   }
+
+  for(float aR = 0.80; aR <= 1.2; aR += 0.05)
+    printCoeffElement(vpParam.alphaMax*aR);
+  */
 }
 
 static void backupParamEntry(const Command *e)
@@ -313,7 +335,7 @@ static void backupParamEntry(const Command *e)
       break;
       
     case e_float:
-      consolePrint(*((float*) e->var[i]), 3);
+      consolePrint(*((float*) e->var[i]), 4);
       break;
 
     case e_percent:

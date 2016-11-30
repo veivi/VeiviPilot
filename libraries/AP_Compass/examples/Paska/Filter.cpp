@@ -25,8 +25,8 @@ float coeffOfLift(float aoa)
     d = 2/(PI-2)*(vpParam.alphaMax - i),
     w = d + vpParam.alphaMax - i;
 
-  if(aoa < vpParam.alphaMax - w)
-    return vpParam.cL_A + aoa*vpParam.cL_B;
+  if(i > vpParam.alphaMax || aoa < vpParam.alphaMax - w)
+    return MIN(vpParam.cL_A + aoa*vpParam.cL_B, vpParam.cL_max);
   else
     return vpParam.cL_A
       + vpParam.cL_B*(i - d*(1 - sin(PI/2*(aoa - vpParam.alphaMax + w)/w)));
@@ -34,8 +34,11 @@ float coeffOfLift(float aoa)
 
 float coeffOfLiftInverse(float target)
 {
-  float left = vpDerived.zeroLiftAlpha, right = vpParam.alphaMax, center, approx;
+  float left = vpDerived.zeroLiftAlpha, right = vpParam.alphaMax;
+  float center, approx;
 
+  int i = 0;
+  
   do {
     center = (left+right)/2;
     approx = coeffOfLift(center);
@@ -44,6 +47,12 @@ float coeffOfLiftInverse(float target)
       right = center;
     else
       left = center;
+
+    if(i++ > 1<<5) {
+      consoleNote_P(PSTR("Inverse cL not defined for "));
+      consolePrintLn(target);
+      return 0/0.0;
+    }
   } while(fabs(approx - target) > 0.0003);
 
   return center;
@@ -392,6 +401,13 @@ void Tabulator::report(float t)
   consolePrint(maxV, 4);
   consolePrint_P(PSTR(" at "));
   consolePrintLn(maxX, 2);
+  
+  consolePrintLn("");
+  
+  consolePrint_P(PSTR("col_max "));
+  consolePrint(maxV, 4);
+  consolePrint(" ");
+  consolePrintLn(maxX/RADIAN, 4);
   
   consolePrintLn("");
   

@@ -4,7 +4,6 @@
 
 const struct Command commands[] PROGMEM = {
   { "name", c_name, e_string, &vpParam.name },
-  { "max", c_max, e_angle, &vpParam.alphaMax },
   { "5048b_ref", c_5048b_ref, e_uint16, &vpParam.alphaRef },
   { "inner_pid_zn", c_inner_pid_zn,
     e_float, &vpParam.i_Ku_C, &vpParam.i_Tu },
@@ -38,9 +37,10 @@ const struct Command commands[] PROGMEM = {
   { "roll_k", c_roll_k, e_float, &vpParam.roll_C },
   { "servorate", c_servorate, e_float, &vpParam.servoRate },
   { "col_ab", c_col_ab, e_float, &vpParam.cL_A, &vpParam.cL_B },
-  { "col_max", c_col_max, e_float, &vpParam.cL_max },
+  { "col_max", c_col_max, e_float, &vpParam.cL_max, &vpParam.alphaMax },
   { "ias", c_ias },
   { "peak", c_peak },
+  { "max", c_max },
   { "zl", c_zl },
   { "update", c_update },
   { "beep", c_beep },
