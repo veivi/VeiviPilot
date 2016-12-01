@@ -2736,7 +2736,7 @@ void configurationTask()
 
   float s_Ku = scaleByIAS(vpParam.s_Ku_C, stabilityAileExp1_c);
   float i_Ku = scaleByIAS(vpParam.i_Ku_C, stabilityElevExp_c);
-  float p_Ku = scaleByIAS(vpParam.p_Ku_C, stabilityElevExp_c);
+  float p_Ku = vpParam.p_Ku_C;
   
   aileCtrl.setZieglerNicholsPID(s_Ku*scale, vpParam.s_Tu);
   elevCtrl.setZieglerNicholsPID(i_Ku*scale, vpParam.i_Tu);
@@ -2876,12 +2876,15 @@ void gaugeTask()
 	consolePrint_P(PSTR(" alpha = "));
 	consolePrint(alpha*RADIAN, 1);
 	consoleTab(15);
-	consolePrint_P(PSTR(" KIAS = "));
+	consolePrint_P(PSTR(" IAS,K(m/s) = "));
 	consolePrint((int) (iAS/KNOT));
-	consoleTab(30);
+	consolePrint_P(PSTR(" ("));
+	consolePrint(iAS, 1);
+	consolePrint_P(PSTR(")"));
+	consoleTab(40);
 	consolePrint_P(PSTR(" hdg = "));
 	consolePrint(heading);
-	consoleTab(45);
+	consoleTab(60);
 	consolePrint_P(PSTR(" alt = "));
 
 	tmp = altitude/FOOT;
@@ -3223,9 +3226,11 @@ void controlTask()
 
   if(vpFeature.pusher) {
     pushCtrl.input(effMaxAlpha - effAlpha, controlCycle);
-    elevOutput = fminf(elevOutput, pushCtrl.output());
+    elevOutput = fminf(elevOutput,
+		       elevFromAlpha(effMaxAlpha) + pushCtrl.output());
   } else
-    pushCtrl.reset(elevOutput, effMaxAlpha - effAlpha);
+    pushCtrl.reset(elevOutput - elevFromAlpha(effMaxAlpha),
+		   effMaxAlpha - effAlpha);
   
   elevOutput = clamp(elevOutput, -1, 1);
   
@@ -3659,7 +3664,7 @@ void setup()
 
   // Static controller settings
   
-  pushCtrl.limit(0.3, 1);
+  pushCtrl.limit(-0.7, 0.7);
   flapRateLimiter.setRate(0.5);
   
   // Misc filters
