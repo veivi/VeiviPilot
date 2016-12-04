@@ -2403,7 +2403,7 @@ void configurationTask()
     vpStatus.positiveIAS = true;
   }
 
-  if(vpStatus.pitotBlocked || iAS < vpDerived.stallIAS*0.9) {
+  if(vpStatus.pitotBlocked || iAS < vpDerived.stallIAS*0.85) {
     if(vpStatus.aloft && currentTime - lastHighIAS > 2e6) {
       consoleNoteLn_P(PSTR("Flight ENDED"));
       vpStatus.aloft = false;
@@ -2550,7 +2550,7 @@ void configurationTask()
 	} else {
 	  consolePrintLn("");
 	  consoleNoteLn_P(PSTR("T/o configuration test FAILED"));
-	  badBeep(5);
+	  badBeep(2);
 	}
       }
     }
@@ -2560,41 +2560,13 @@ void configurationTask()
     //
   
     failsafeDisable();
-    /*      
-    if(!vpMode.bankLimiter) {
-      consoleNoteLn_P(PSTR("Bank limiter ENABLED"));
-      vpMode.bankLimiter = true;
-    }
-    */	
+    
     if(!vpMode.wingLeveler) {
       consoleNoteLn_P(PSTR("Wing leveler ENABLED"));
       vpMode.wingLeveler = true;
     } 
   }
-  /*
-  //
-  // ELEV MODE BUTTON
-  //
-
-  if(ELEVMODEBUTTON.singlePulse() && vpMode.slowFlight) {
-    //
-    // PULSE : DISABLE ALPHA HOLD
-    //
   
-    consoleNoteLn_P(PSTR("Slow flight mode DISABLED"));
-    vpMode.slowFlight = false;
-    logMark();
-    
-  } else if(ELEVMODEBUTTON.depressed() && !vpMode.slowFlight && !vpMode.takeOff) {
-    //
-    // CONTINUOUS : ENABLE ALPHA HOLD / SLOW FLIGHT
-    //
-  
-    consoleNoteLn_P(PSTR("Slow flight mode ENABLED"));
-    vpMode.slowFlight = true;
-    logMark();
-  }
-  */
   //
   // Direct mode selector input
   //
