@@ -14,6 +14,7 @@ struct StatusRecord {
   bool aloft;
   bool fullStop;
   bool pitotBlocked;
+  bool stall;
 };
 
 extern struct StatusRecord vpStatus;

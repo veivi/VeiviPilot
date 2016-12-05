@@ -2388,7 +2388,7 @@ void configurationTask()
   // Flight detection
   //
 
-  static uint32_t lastNegativeIAS, lastHighIAS, lastLowIAS;
+  static uint32_t lastNegativeIAS, lastHighIAS, lastLowIAS, lastStall;
 
   if(vpStatus.pitotBlocked || iasFilter.output() < vpDerived.stallIAS/2) {
     if(vpStatus.positiveIAS) {
@@ -2420,6 +2420,23 @@ void configurationTask()
       vpStatus.aloft = true;
     }
    }
+
+  if(vpMode.alphaFailSafe || vpMode.sensorFailSafe
+     || alpha < vpParam.alphaMax) {
+    if(!vpStatus.stall)
+      lastStall = currentTime;
+    else if(currentTime - lastStall > 1.0e6) {
+      consoleNoteLn_P(PSTR("We've RECOVERED"));
+      vpStatus.stall = false;
+    }
+  } else {
+    if(vpStatus.stall)
+      lastStall = currentTime;
+    else if(currentTime - lastStall > 0.5e6) {
+      consoleNoteLn_P(PSTR("We're STALLING"));
+      vpStatus.stall = true;
+    }
+  }
   
   accTotal = sqrtf(square(accX) + square(accY) + square(accZ));
   
@@ -2529,7 +2546,7 @@ void configurationTask()
 
   if(AILEMODEBUTTON.singlePulse()) {
     //
-    // PULSE : DISABLE BANK LIMITER
+    // PULSE : Takeoff mode enable
     //
   
     if(vpMode.alphaFailSafe || vpMode.sensorFailSafe) {
@@ -2670,9 +2687,10 @@ void configurationTask()
     // Default
 
     vpFeature.stabilizeBank
-      = !(vpMode.takeOff || gearOutput == 0);
+      = !(vpStatus.stall || vpMode.takeOff || gearOutput == 0);
     vpFeature.keepLevel
-      = vpMode.wingLeveler || vpMode.takeOff || gearOutput == 0;
+      = !vpStatus.stall
+      && (vpMode.wingLeveler || vpMode.takeOff || gearOutput == 0);
     vpFeature.pusher
       = !alphaDevice.status() && !vpMode.takeOff && !vpMode.slowFlight;
     vpFeature.stabilizePitch = vpFeature.alphaHold
@@ -2806,10 +2824,15 @@ void configurationTask()
       maxAlpha = 0.8*vpParam.alphaMax;
       break;
 
+    case 8:
+      // Stall behavior test
+      
+      vpFeature.pusher = false;
+      break;
+      
     case 9:
       // Max alpha
 
-      vpFeature.stabilizeBank = vpMode.bankLimiter = vpFeature.keepLevel = true;
       maxAlpha = testGain = testGainLinear(20/RADIAN, 10/RADIAN);
       break;         
 
