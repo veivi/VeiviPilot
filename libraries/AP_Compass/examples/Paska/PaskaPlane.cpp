@@ -1332,10 +1332,8 @@ void executeCommand(char *buf)
       break;
 
     case c_zl:
-      if(numParams > 0) {
-	vpParam.cL_B = 1.1*vpParam.cL_max/(vpParam.alphaMax - param[0]/RADIAN);
-	vpParam.cL_A = -(param[0]/RADIAN)/vpParam.cL_B;
-      }
+      if(numParams > 0)
+	vpParam.cL_A = -vpParam.cL_B*param[0]/RADIAN;
       break;
       
     case c_peak:
@@ -2970,6 +2968,23 @@ void gaugeTask()
 	break;
 
       case 9:
+	consolePrint_P(PSTR(" gain*IAS^("));
+	for(float j = 0; j < 2; j += 0.5) {
+	  if(j > 0)
+	    consolePrint(", ");
+	  consolePrint(j);
+	}
+	
+	consolePrint_P(PSTR(") = "));
+	
+	for(float j = 0; j < 2; j += 0.5) {
+	  if(j > 0)
+	    consolePrint(", ");
+	  consolePrint(testGain*powf(iAS, j));
+	}
+	break;
+	
+      case 10:
 	consolePrint_P(PSTR(" acc(avg) = "));
 	consolePrint(accTotal);
 	consolePrint_P(PSTR("("));
@@ -2983,7 +2998,15 @@ void gaugeTask()
 	consolePrint_P(PSTR(")"));
 	break;
 
-      case 10:
+      case 11:
+	consolePrint_P(PSTR(" alpha = "));
+	consolePrint(alpha*RADIAN, 1);
+	consoleTab(15);
+	consolePrint_P(PSTR(" CoL(rel) = "));
+	consolePrint(2*accZ/square(iAS), 3);
+	break;
+	
+      case 12:
 	consoleNote_P(PSTR(" entropy(alpha,ias) = "));
 	consolePrint(alphaEntropyAcc.output());
 	consolePrint_P(PSTR(", "));
@@ -2996,15 +3019,7 @@ void gaugeTask()
 	  consolePrint((tmp & 1) ? "+" : " ");
 	  tmp = tmp >> 1;
 	}
-	break;
-	
-      case 11:
-	consolePrint_P(PSTR(" alpha = "));
-	consolePrint(alpha*RADIAN, 1);
-	consoleTab(15);
-	consolePrint_P(PSTR(" CoL(rel) = "));
-	consolePrint(2*accZ/square(iAS), 3);
-	break;
+	break;	
       }
     }
 
@@ -3659,7 +3674,7 @@ void setup()
 
   // Static controller settings
   
-  pushCtrl.limit(-0.7, 0.7);
+  pushCtrl.limit(-0.5, 0.5);
   flapRateLimiter.setRate(0.5);
   
   // Misc filters
