@@ -32,7 +32,7 @@ typedef enum {
 
   c_dump,
   c_max,
-  c_ias,
+  c_stall,
   c_peak,
   c_zl,
   c_col_ab,

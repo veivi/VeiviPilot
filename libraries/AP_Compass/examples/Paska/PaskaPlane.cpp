@@ -751,7 +751,7 @@ bool toc_test_ppm(bool reset)
 
 bool toc_test_ram(bool reset)
 {
-  return hal.util->available_memory() > (1<<9);
+  return hal.util->available_memory() > (1<<8);
 }
 
 bool toc_test_timing(bool reset)
@@ -1332,18 +1332,24 @@ void executeCommand(char *buf)
       break;
 
     case c_zl:
-      if(numParams > 0)
+      if(numParams > 0) {
+	vpParam.cL_B = vpParam.cL_max/(vpParam.alphaMax - param[0]/RADIAN);
 	vpParam.cL_A = -vpParam.cL_B*param[0]/RADIAN;
+      }
       break;
       
     case c_peak:
       if(numParams > 0)
-	vpParam.cL_B = (1 + (PI/2-1)*param[0])*vpParam.cL_max/vpParam.alphaMax;
+	vpParam.cL_B =
+	  (1+param[0])*(vpParam.cL_max - vpParam.cL_A)/vpParam.alphaMax;
       break;
       
-    case c_ias:
-      if(numParams > 0)
+    case c_stall:
+      if(numParams > 0) {
 	vpParam.cL_max = 2*G / square(param[0]);
+	if(numParams > 1)
+	  vpParam.alphaMax = param[1]/RADIAN;
+      }
       break;
       
     case c_max:

@@ -38,7 +38,7 @@ const struct Command commands[] PROGMEM = {
   { "servorate", c_servorate, e_float, &vpParam.servoRate },
   { "col_ab", c_col_ab, e_float, &vpParam.cL_A, &vpParam.cL_B },
   { "col_max", c_col_max, e_float, &vpParam.cL_max, &vpParam.alphaMax },
-  { "ias", c_ias },
+  { "stall", c_stall },
   { "peak", c_peak },
   { "max", c_max },
   { "zl", c_zl },
