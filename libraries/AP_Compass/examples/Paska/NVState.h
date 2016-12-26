@@ -33,7 +33,7 @@ struct ParamRecord {
   float r_Mix;
   float p_Ku_C, p_Tu;
   float ff_A, ff_B;
-  float wl_Limit;
+  float maxPitch;
   float cL_max;
   float roll_C;
   float cL_B;

@@ -65,7 +65,6 @@ typedef enum {
   c_name,
   c_ff,
   c_pid,
-  c_wl,
   c_roll_k,
   c_rollrate,
   c_pitch_k,
@@ -80,7 +79,8 @@ typedef enum {
   c_ping,
   c_update,
   c_tab_col,
-  c_tab_elev
+  c_tab_elev,
+  c_climb
 } token_t;
 
 typedef enum

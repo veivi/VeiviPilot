@@ -3218,7 +3218,7 @@ void controlTask()
 
   if(vpFeature.alphaHold)
     targetPitchRate = nominalPitchRate(bankAngle, targetAlpha)
-      + fminf(targetAlpha - effAlpha, PI/4 - pitchAngle)*autoAlphaP;
+      + fminf(targetAlpha - effAlpha, vpParam.maxPitch - pitchAngle)*autoAlphaP;
 
   else if(vpFeature.pitchHold)
     targetPitchRate = (0.1 + effStick/2 - pitchAngle)*autoAlphaP;
@@ -3284,7 +3284,7 @@ void controlTask()
       // Bank limiter + weak leveling
 
       targetRollRate -=
-	maxRollRate*clamp(bankAngle, -vpParam.wl_Limit, vpParam.wl_Limit);
+	maxRollRate*clamp(bankAngle, -0.5/RADIAN, 0.5/RADIAN);
       
       targetRollRate = clamp(targetRollRate,
 			     (-maxBank - bankAngle)*maxRollRate,

@@ -39,7 +39,7 @@ const struct ParamRecord paramDefaults = {
   .r_Mix = 0.1,
   .p_Ku_C = 100, .p_Tu = 1.0,
   .ff_A = 0.0, .ff_B = 0.0,
-  .wl_Limit = 0.0,
+  .maxPitch = 45/RADIAN,
   .cL_max= 0.25,
   .roll_C = 0.1,
   .cL_B = 0.6,
@@ -232,8 +232,8 @@ void printParams()
   consolePrint(vpParam.s_Ku_C, 4);
   consolePrint_P(PSTR(" Tu = "));
   consolePrintLn(vpParam.s_Tu, 4);
-  consoleNote_P(PSTR("    Weak leveling limit angle = "));
-  consolePrintLn(vpParam.wl_Limit*RADIAN, 4);
+  consoleNote_P(PSTR("  Climb pitch(max) = "));
+  consolePrintLn(vpParam.maxPitch*RADIAN, 2);
   consoleNote_P(PSTR("  Alpha range = "));
   consolePrint(vpDerived.zeroLiftAlpha*RADIAN);
   consolePrint_P(PSTR(" ... "));
