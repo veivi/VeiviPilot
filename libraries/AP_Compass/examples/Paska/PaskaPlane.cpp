@@ -36,6 +36,7 @@ extern "C" {
 const float stabilityElevExp_c = -1.5;
 const float stabilityAileExp1_c = -1.5;
 const float stabilityAileExp2_c = 0.5;
+const float stabilityPusherExp_c = -0.5;
 
 const float alphaWindow_c = 1.0/30;
 
@@ -2730,7 +2731,7 @@ void configurationTask()
 
   float s_Ku = scaleByIAS(vpParam.s_Ku_C, stabilityAileExp1_c);
   float i_Ku = scaleByIAS(vpParam.i_Ku_C, stabilityElevExp_c);
-  float p_Ku = vpParam.p_Ku_C;
+  float p_Ku = scaleByIAS(vpParam.p_Ku_C, stabilityPusherExp_c);
   
   aileCtrl.setZieglerNicholsPID(s_Ku*scale, vpParam.s_Tu);
   elevCtrl.setZieglerNicholsPID(i_Ku*scale, vpParam.i_Tu);
@@ -2826,6 +2827,14 @@ void configurationTask()
 
       pushCtrl.setPID(testGain = testGainExpo(p_Ku_ref), 0, 0);
       maxAlpha = 0.8*vpParam.alphaMax;
+      break;
+
+    case 6:
+      // Pusher used as alpha hold
+
+      vpFeature.alphaHold = true;
+      vpFeature.stabilizePitch = false;
+      pushCtrl.setPID(testGain = testGainExpo(p_Ku_ref), 0, 0);
       break;
 
     case 8:
@@ -3240,7 +3249,10 @@ void controlTask()
 
   // Pusher
 
-  if(vpFeature.pusher) {
+  if(vpFeature.alphaHold && !vpFeature.stabilizePitch) {
+    pushCtrl.input(targetAlpha - effAlpha, controlCycle);
+    elevOutput = elevOutputFeedForward + pushCtrl.output();
+  } else if(vpFeature.pusher) {
     pushCtrl.input(effMaxAlpha - effAlpha, controlCycle);
     elevOutput = fminf(elevOutput,
 		       elevFromAlpha(effMaxAlpha) + pushCtrl.output());

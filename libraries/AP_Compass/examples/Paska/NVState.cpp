@@ -223,7 +223,7 @@ void printParams()
   consolePrint(alphaFromElev(1.0)*RADIAN);
   consolePrintLn_P(PSTR(")"));
   consoleNoteLn_P(PSTR("  Pusher"));
-  consoleNote_P(PSTR("    Ku = "));
+  consoleNote_P(PSTR("    Ku*IAS^0.5 = "));
   consolePrint(vpParam.p_Ku_C, 4);
   consolePrint_P(PSTR(" Tu = "));
   consolePrintLn(vpParam.p_Tu, 4);
