@@ -78,18 +78,18 @@ const struct PinDescriptor led[] = {{ PortA, 3 }, { PortA, 4 }, { PortA, 5 }};
 
 struct PinDescriptor ppmInputPin = { PortL, 1 }; 
 struct RxInputRecord aileInput, elevInput, throttleInput, rudderInput,
-  buttonInput, tuningKnobInput, flapInput, modeInput;
+  buttonInput, tuningKnobInput, auxInput, modeInput;
 struct RxInputRecord *ppmInputs[] = 
-  { &aileInput, &elevInput, &throttleInput, &rudderInput, &buttonInput, &tuningKnobInput, &flapInput, &modeInput };
+  { &aileInput, &elevInput, &throttleInput, &rudderInput, &buttonInput, &tuningKnobInput, &modeInput, &auxInput };
 
 ButtonInputChannel buttonInputFilter;
 Button rightDownButton(-1.0), rightUpButton(0.33),
   leftDownButton(-0.3), leftUpButton(1);
-struct SwitchRecord flapSwitch = { &flapInput }, modeSelector = { &modeInput };
-int8_t flapSwitchValue, modeSelectorValue;
+struct SwitchRecord modeSelector = { &modeInput };
+int8_t modeSelectorValue;
 
-#define AILEMODEBUTTON rightUpButton
-#define ELEVMODEBUTTON rightDownButton
+#define LEVELBUTTON rightUpButton
+#define FLAPBUTTON rightDownButton
 #define TRIMBUTTON leftUpButton
 #define GEARBUTTON leftDownButton
 
@@ -217,7 +217,8 @@ AlphaBuffer pressureBuffer;
 RunningAvgFilter alphaFilter;
 uint32_t simTimeStamp;
 RateLimiter aileRateLimiter, flapRateLimiter, trimRateLimiter;
-float elevOutput, elevOutputFeedForward, aileOutput = 0, flapOutput = 0, gearOutput = 0, brakeOutput = 0, rudderOutput = 0;
+uint8_t flapOutput, gearOutput;
+float elevOutput, elevOutputFeedForward, aileOutput = 0, brakeOutput = 0, rudderOutput = 0;
 uint16_t iasEntropy, alphaEntropy, sensorHash = 0xFFFF;
 bool beepGood;
 const int maxParams = 8;
@@ -1882,13 +1883,12 @@ void receiverTask()
   if(inputValid(&throttleInput))
     throttleStick = inputValue(&throttleInput);
 
-  flapSwitchValue = readSwitch(&flapSwitch);
   modeSelectorValue = readSwitch(&modeSelector);
   
   buttonInputFilter.input(inputValue(&buttonInput));  
 
-  AILEMODEBUTTON.input(buttonInputFilter.value());
-  ELEVMODEBUTTON.input(buttonInputFilter.value());
+  LEVELBUTTON.input(buttonInputFilter.value());
+  FLAPBUTTON.input(buttonInputFilter.value());
   TRIMBUTTON.input(buttonInputFilter.value());
   GEARBUTTON.input(buttonInputFilter.value());
 
@@ -1896,8 +1896,8 @@ void receiverTask()
   // Receiver fail detection
   //
   
-  if(buttonInputFilter.value() < -0.90
-     && aileStick < -0.90 && elevStick > 0.90) {
+  if(LEVELBUTTON.state()
+     && throttleStick < 0.1 && aileStick < -0.90 && elevStick > 0.90) {
     if(!vpMode.rxFailSafe) {
       consoleNoteLn_P(PSTR("Receiver failsafe mode ENABLED"));
       vpMode.rxFailSafe = true;
@@ -2546,10 +2546,31 @@ void configurationTask()
   }
 
   //
-  // AILE MODE BUTTON
+  // FLAP BUTTON
   //
 
-  if(AILEMODEBUTTON.singlePulse()) {
+  if(FLAPBUTTON.singlePulse() && flapOutput > 0) {
+    //
+    // SINGLE PULSE: FLAPS UP one step
+    //
+    
+    consoleNote_P(PSTR("Flaps RETRACTED to "));
+    consolePrintLn(--flapOutput);
+
+  } else if(FLAPBUTTON.depressed() && flapOutput < 3) {
+    //
+    // CONTINUOUS: FLAPS DOWN one step
+    //
+    
+    consoleNote_P(PSTR("Flaps EXTENDED to "));
+    consolePrintLn(++flapOutput);
+  }
+
+  //
+  // WING LEVELER BUTTON
+  //
+
+  if(LEVELBUTTON.singlePulse()) {
     //
     // PULSE : Takeoff mode enable
     //
@@ -2576,7 +2597,7 @@ void configurationTask()
 	}
       }
     }
-  } else if(AILEMODEBUTTON.depressed()) {
+  } else if(LEVELBUTTON.depressed()) {
     //
     // CONTINUOUS : LEVEL WINGS
     //
@@ -3315,8 +3336,6 @@ void controlTask()
     clamp(rudderStick + aileRateLimiter.output()*rudderMix, -1, 1);
 
   // Flaps
-  
-  flapOutput = flapSwitchValue + 1;
   
   flapRateLimiter.input(flapOutput, controlCycle);
     
