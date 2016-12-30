@@ -80,6 +80,7 @@ typedef enum {
   c_update,
   c_tab_col,
   c_tab_elev,
+  c_curve,
   c_climb
 } token_t;
 

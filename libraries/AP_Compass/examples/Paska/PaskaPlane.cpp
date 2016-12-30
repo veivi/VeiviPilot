@@ -1046,6 +1046,40 @@ char *parse(char *ptr)
   return ptr;
 }
 
+void printCoeffElement(float v)
+{
+    consoleNote("");
+    consolePrint(v*RADIAN);
+    consoleTab(10);
+
+    const int col0 = 20, col1 = 78;
+    int x = col0 + (col1-col0) * coeffOfLift(v)/vpParam.cL_max;
+
+    if(x < col0) {
+      consoleTab(x);
+      consolePrint("*");
+      consoleTab(col0);
+      consolePrint("|");
+      consoleTab(col1);
+      consolePrintLn("|");
+    } else if(x > col0) {
+      consoleTab(col0);
+      consolePrint("|");
+      consoleTab(x);
+      if(x < col1) {
+	consolePrint("*");
+	consoleTab(col1);
+	consolePrintLn("|");
+      } else
+	consolePrintLn("*");
+    } else {
+      consoleTab(col0);
+      consolePrint("*");
+      consoleTab(col1);
+      consolePrintLn("|");
+    }
+}
+
 void executeCommand(char *buf)
 {
   while(*buf && isblank(*buf))
@@ -1313,6 +1347,13 @@ void executeCommand(char *buf)
       printParams();
       break;
 
+    case c_curve:
+      consoleNoteLn_P(PSTR("CoL(norm) curve"));
+  
+      for(float aR = -0.2; aR <= 1.2; aR += 0.07)
+	printCoeffElement(vpParam.alphaMax*aR);
+      break;
+      
     case c_clear:
       logClear();
       break;
@@ -2426,7 +2467,7 @@ void configurationTask()
     }
    }
 
-  if(vpMode.alphaFailSafe || vpMode.sensorFailSafe
+  if(vpMode.alphaFailSafe || vpMode.sensorFailSafe || vpMode.takeOff
      || alpha < vpParam.alphaMax) {
     if(!vpStatus.stall)
       lastStall = currentTime;
@@ -3711,7 +3752,7 @@ void setup()
 
   // Static controller settings
   
-  pushCtrl.limit(-0.5, 0.5);
+  pushCtrl.limit(-0.7, 0.7);
   flapRateLimiter.setRate(0.5);
   
   // Misc filters
