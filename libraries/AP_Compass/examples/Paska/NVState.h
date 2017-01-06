@@ -61,7 +61,8 @@ extern struct DerivedParams vpDerived;
 extern const prog_char_t *updateDescription;
 
 void defaultParams(void);
-bool setModel(int model);
+bool setModel(int model, bool verbose);
+void deleteModel(int model);
 void storeParams(void);
 void readNVState(void);
 void storeNVState(void);

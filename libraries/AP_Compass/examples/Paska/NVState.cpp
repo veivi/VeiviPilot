@@ -23,7 +23,7 @@ struct DerivedParams vpDerived;
 
 const struct ParamRecord paramDefaults = {
   .crc = 0,
-  { .name = "Unnamed" },
+  { .name = "Invalid" },
   .i2c_clkDiv = 12,
   .i2c_5048B = 0x40, .i2c_24L256 = 0x50, 
   .alphaRef = 0,
@@ -85,7 +85,7 @@ int maxModels(void)
   return (nvState.dataPartition - nvState.paramPartition) / sizeof(vpParam);
 }
 
-bool setModel(int model)
+bool setModel(int model, bool verbose)
 {
   if(model < 0)
     model = 0;
@@ -96,21 +96,25 @@ bool setModel(int model)
   cacheRead(paramOffset + sizeof(vpParam)*model,
 	    (uint8_t*) &vpParam, sizeof(vpParam));
 
-  consoleNote_P(PSTR("MODEL "));
-  consolePrintLn(model);
-  consoleNote_P(PSTR("  Model record CRC = "));
-  consolePrint(vpParam.crc);
-
+  if(verbose) {
+    consoleNote_P(PSTR("MODEL "));
+    consolePrintLn(model);
+    consoleNote_P(PSTR("  Model record CRC = "));
+    consolePrint(vpParam.crc);
+  }
+  
   bool isGood = true;
   
   if(paramRecordCrc(&vpParam) != vpParam.crc) {
-    consolePrintLn_P(PSTR(" CORRUPT, using defaults")); 
+    if(verbose)
+      consolePrintLn_P(PSTR(" CORRUPT, using defaults")); 
     vpParam = paramDefaults;
     isGood = false;
-  } else
+  } else if(verbose)
     consolePrintLn_P(PSTR(" OK"));
 
-  printParams();
+  if(verbose)
+    printParams();
 
   return isGood;
 }
@@ -124,6 +128,14 @@ void storeParams(void)
   	     (const uint8_t*) &vpParam, sizeof(vpParam));
   cacheFlush();
   consoleNoteLn_P(PSTR("  Stored"));
+}
+
+void deleteModel(int model)
+{
+  
+  cacheWrite(paramOffset + sizeof(struct ParamRecord)*model,
+  	     NULL, sizeof(struct ParamRecord));
+  cacheFlush();
 }
 
 void readData(uint8_t *data, int size)

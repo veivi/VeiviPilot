@@ -51,6 +51,7 @@ const struct Command commands[] PROGMEM = {
   { "clear", c_clear },
   { "init", c_init },
   { "store", c_store },
+  { "delete", c_delete },
   { "report", c_report },
   { "stop", c_stop },
   { "log", c_log },

@@ -1285,22 +1285,22 @@ void executeCommand(char *buf)
     
     case c_backup:
       for(int i = 0; i < maxModels(); i++) {
-	if(setModel(i))
+	if(setModel(i, false))
 	  backupParams();
       }
-      setModel(currentModel);
+      setModel(currentModel, false);
       break;
 
     case c_update:
       if(!updateDescription) {
 	for(int i = 0; i < maxModels(); i++) {
-	  if(setModel(i)) {
+	  if(setModel(i, false)) {
 	    updateDescription = applyParamUpdate();
 	    storeParams();
 	  }
 	}
 	
-	setModel(currentModel);
+	setModel(currentModel, false);
 	
 	if(updateDescription) {
 	  consoleNote_P(PSTR("Param update applied : "));
@@ -1331,7 +1331,7 @@ void executeCommand(char *buf)
       if(numParams > 0) {
 	if(param[0] > maxModels()-1)
 	  param[0] = maxModels()-1;
-	setModel(param[0]);
+	setModel(param[0], true);
 	storeNVState();
 	tabulator.clear();
       } else { 
@@ -1345,6 +1345,14 @@ void executeCommand(char *buf)
       consolePrint(nvState.model);
       consolePrintLn(")");
       printParams();
+      break;
+
+    case c_delete:
+      if(numParams > 0) {
+	if(param[0] > maxModels()-1)
+	  param[0] = maxModels()-1;
+	deleteModel(param[0]);
+      }
       break;
 
     case c_curve:
@@ -2431,7 +2439,7 @@ static void failsafeDisable()
 void configurationTask()
 {
   //
-  // Flight detection
+  // Do we have positive airspeed?
   //
 
   static uint32_t lastNegativeIAS, lastHighIAS, lastLowIAS, lastStall;
@@ -2449,6 +2457,10 @@ void configurationTask()
     vpStatus.positiveIAS = true;
   }
 
+  //
+  // Are we flying?
+  //
+  
   if(vpStatus.pitotBlocked || iAS < vpDerived.stallIAS*0.85) {
     if(vpStatus.aloft && currentTime - lastHighIAS > 2e6) {
       consoleNoteLn_P(PSTR("Flight ENDED"));
@@ -2465,8 +2477,12 @@ void configurationTask()
       consoleNoteLn_P(PSTR("We think we're ALOFT"));
       vpStatus.aloft = true;
     }
-   }
+  }
 
+  //
+  // Stall detection
+  //
+  
   if(vpMode.alphaFailSafe || vpMode.sensorFailSafe || vpMode.takeOff
      || alpha < vpParam.alphaMax) {
     if(!vpStatus.stall)
@@ -2483,6 +2499,10 @@ void configurationTask()
       vpStatus.stall = true;
     }
   }
+
+  //
+  // Are we moving?
+  //
   
   accTotal = sqrtf(square(accX) + square(accY) + square(accZ));
   
@@ -3693,7 +3713,7 @@ void setup()
   
   // Param record
   
-  setModel(nvState.model);
+  setModel(nvState.model, true);
 
   // Set I2C speed
   

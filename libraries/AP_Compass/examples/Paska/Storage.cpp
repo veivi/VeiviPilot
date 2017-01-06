@@ -119,7 +119,7 @@ static void cacheWritePrimitive(uint32_t addr, const uint8_t *value, int size)
   }
   
   for(int i = 0; i < size; i++) {
-    cacheData[addr + i] = value[i];
+    cacheData[addr + i] = value ? value[i] : '\0';
     cacheFlag[addr + i] = true;
   }
   
@@ -143,7 +143,8 @@ void cacheWrite(uint32_t addr, const uint8_t *value, int size)
     
     uint32_t extent = CACHE_TAG(ptr) + CACHE_PAGE - ptr;
     cacheWritePrimitive(ptr, value, extent);
-    value += extent;
+    if(value)
+      value += extent;
     ptr += extent;
   }
   
@@ -151,7 +152,8 @@ void cacheWrite(uint32_t addr, const uint8_t *value, int size)
     // Full lines remain
     
     cacheWritePrimitive(ptr, value, CACHE_PAGE);
-    value += CACHE_PAGE;
+    if(value)
+      value += CACHE_PAGE;
     ptr += CACHE_PAGE;
   }
 
