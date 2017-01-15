@@ -3343,9 +3343,11 @@ void controlTask()
 		   effMaxAlpha - effAlpha);
   
   elevOutput = clamp(elevOutput, -1, 1);
-  
-  // Aileron
 
+  //
+  // Aileron
+  //
+  
   aileOutput = aileStick;
     
   const float maxRollRate = scaleByIAS(vpParam.roll_C, stabilityAileExp2_c);
@@ -3361,7 +3363,9 @@ void controlTask()
   if(!vpFeature.stabilizeBank) {
 
     if(vpFeature.keepLevel)
-      aileOutput = clamp((aileStick - bankAngle) / (PI/4), -1, 1);
+      // Simple leveling for situations where we want to avoid I term wind-up
+      
+      aileOutput = clamp((aileStick - bankAngle) / (PI/4) - rollRate/8, -1, 1);
     
     aileCtrl.reset(aileOutput, 0);
     
@@ -3378,7 +3382,7 @@ void controlTask()
       // Bank limiter + weak leveling
 
       targetRollRate -=
-	maxRollRate*clamp(bankAngle, -0.5/RADIAN, 0.5/RADIAN);
+	maxRollRate*clamp(bankAngle, -0.3/RADIAN, 0.3/RADIAN);
       
       targetRollRate = clamp(targetRollRate,
 			     (-maxBank - bankAngle)*maxRollRate,
