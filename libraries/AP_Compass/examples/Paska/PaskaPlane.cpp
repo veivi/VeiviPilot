@@ -2526,6 +2526,7 @@ void configurationTask()
   } else if(currentTime - lastMotion > 5.0e6 && !vpStatus.fullStop) {
     consoleNoteLn_P(PSTR("We have FULLY STOPPED"));
     vpStatus.fullStop = true;
+    logDisable();
   }
 
   //
@@ -2550,17 +2551,6 @@ void configurationTask()
   if(!vpStatus.armed)
     return;
   
-  //
-  // Logging control
-  //
-
-  if(!vpStatus.fullStop && vpStatus.positiveIAS
-     && (!vpStatus.consoleLink || vpMode.alwaysLog))
-    logEnable();
-  
-  else if(vpStatus.fullStop)
-    logDisable();
-
   //
   // T/O config test
   //
@@ -2759,11 +2749,14 @@ void configurationTask()
 
   if(vpMode.takeOff
      && (pitotDevice.status() || iasFilter.output() > vpDerived.stallIAS)) {
-    if(iasFilter.output() > vpDerived.stallIAS && !vpStatus.consoleLink)
+    consoleNoteLn_P(PSTR("TakeOff COMPLETED"));
+    vpMode.takeOff = false;
+    
+    if(!vpStatus.consoleLink)
       vpStatus.silent = true;
     
-    consoleNoteLn_P(PSTR("TakeOff mode DISABLED"));
-    vpMode.takeOff = false;
+    if(!vpStatus.consoleLink || vpMode.alwaysLog)
+      logEnable();
   }
 
   //
@@ -3367,7 +3360,7 @@ void controlTask()
     if(vpFeature.keepLevel)
       // Simple leveling for situations where we want to avoid I term wind-up
       
-      aileOutput = clamp((aileStick - bankAngle) / (PI/4) - rollRate/8, -1, 1);
+      aileOutput = clamp((aileStick - bankAngle) / (PI/4) - rollRate/64, -1, 1);
     
     aileCtrl.reset(aileOutput, 0);
     
