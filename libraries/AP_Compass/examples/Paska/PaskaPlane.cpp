@@ -412,6 +412,20 @@ void badBeep(float dur)
 }
 
 //
+//
+//
+
+bool pitotFailed()
+{
+  return !vpStatus.simulatorLink && pitotDevice.status();
+}
+
+bool alphaFailed()
+{
+  return !vpStatus.simulatorLink && alphaDevice.status();
+}
+
+//
 // Log interface
 //
 
@@ -775,7 +789,7 @@ bool toc_test_eeprom(bool reset)
 
 bool toc_test_alpha_sensor(bool reset)
 {
-  return !alphaDevice.status() && alphaEntropyAcc.output() > 50;
+  return !alphaFailed() && alphaEntropyAcc.output() > 50;
 }
 
 bool toc_test_alpha_range(bool reset)
@@ -820,7 +834,7 @@ bool toc_test_pitot(bool reset)
   else if(vpStatus.positiveIAS)
     positiveIAS = true;
   
-  return !pitotDevice.status() && iasEntropyAcc.output() > 50
+  return !pitotFailed() && iasEntropyAcc.output() > 50
     && !vpStatus.pitotBlocked && positiveIAS;
 }
 
@@ -1417,7 +1431,7 @@ void executeCommand(char *buf)
       consolePrintLn(simInputFreq);
       consoleNote_P(PSTR("Alpha = "));
       consolePrint(alpha*RADIAN);
-      if(alphaDevice.status())
+      if(alphaFailed())
 	consolePrintLn_P(PSTR(" FAIL"));
       else
 	consolePrintLn_P(PSTR(" OK"));
@@ -1446,7 +1460,7 @@ void executeCommand(char *buf)
 	consolePrint_P(PSTR(" PPM_SLOW"));
       if(eepromDevice.status())
 	consolePrint_P(PSTR(" EEPROM_FAILED"));
-      if(pitotDevice.status())
+      if(pitotFailed())
 	consolePrint_P(PSTR(" IAS_FAILED"));
       
       consolePrintLn("");
@@ -2054,7 +2068,9 @@ void sensorTaskFast()
     heading = (int) (sensorData.heading + 0.5);
     accX = sensorData.accx*FOOT;
     accY = sensorData.accy*FOOT;
-    accZ = -sensorData.accz*FOOT;
+
+    // Simulator accZ is erratic with weight on weels, disregard
+    accZ = vpStatus.simulatorLink ? G : -sensorData.accz*FOOT;
 
     dynPressure = square(iAS) / 2;
     
@@ -2093,6 +2109,10 @@ void sensorTaskSlow()
     altitude = sensorData.alt*FOOT;
   else
     altitude = (float) barometer.get_altitude();
+
+  // Weight on wheels switch not available for now
+
+  vpStatus.weightOnWheels = (gearOutput == 0);
 }
 
 void sensorMonitorTask()
@@ -2421,7 +2441,7 @@ static float scaleByIAS(float k, float p)
 {
   float effIAS = fmaxf(iasFilter.output(), vpDerived.stallIAS);
   
-  if(pitotDevice.status() || vpStatus.pitotBlocked)
+  if(pitotFailed() || vpStatus.pitotBlocked)
     // Failsafe value chosen to be ... on the safe side
     effIAS = p > 0 ? vpDerived.stallIAS : vpDerived.stallIAS * 3/2;
   
@@ -2458,7 +2478,7 @@ void configurationTask()
   }
 
   //
-  // Are we flying?
+  // Are we airborne?
   //
   
   if(vpStatus.pitotBlocked || iAS < vpDerived.stallIAS*0.85) {
@@ -2748,7 +2768,7 @@ void configurationTask()
   // TakeOff mode disabled when airspeed detected (or fails)
 
   if(vpMode.takeOff
-     && (pitotDevice.status() || iasFilter.output() > vpDerived.stallIAS)) {
+     && (pitotFailed() || iasFilter.output() > 0.85*vpDerived.stallIAS)) {
     consoleNoteLn_P(PSTR("TakeOff COMPLETED"));
     vpMode.takeOff = false;
     
@@ -2767,14 +2787,14 @@ void configurationTask()
     // Default
 
     vpFeature.stabilizeBank
-      = !(vpStatus.stall || vpMode.takeOff || gearOutput == 0);
+      = !(vpStatus.stall || vpStatus.weightOnWheels || vpMode.takeOff);
     vpFeature.keepLevel
       = !vpStatus.stall
-      && (vpMode.wingLeveler || vpMode.takeOff || gearOutput == 0);
+      && (vpMode.wingLeveler || vpMode.takeOff || vpStatus.weightOnWheels);
     vpFeature.pusher
-      = !alphaDevice.status() && !vpMode.takeOff && !vpMode.slowFlight;
+      = !alphaFailed() && !vpMode.takeOff && !vpMode.slowFlight;
     vpFeature.stabilizePitch = vpFeature.alphaHold
-      = !alphaDevice.status() && vpMode.slowFlight && !vpMode.takeOff;
+      = !alphaFailed() && vpMode.slowFlight && !vpMode.takeOff;
     vpFeature.pitchHold = false;
 
     // Slow flight implies bank limiter
