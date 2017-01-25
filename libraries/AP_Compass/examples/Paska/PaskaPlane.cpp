@@ -173,7 +173,7 @@ struct ModeRecord {
   bool wingLeveler;
   bool slowFlight;
   bool autoTest;
-  bool alwaysLog;
+  bool loggingSuppressed;
 };
 
 struct FeatureRecord {
@@ -345,7 +345,7 @@ void datagramInterpreter(uint8_t t, uint8_t *data, int size)
     if(vpStatus.consoleLink && size == sizeof(sensorData)) {
       if(!vpStatus.simulatorLink) {
 	consoleNoteLn_P(PSTR("Simulator CONNECTED"));
-	vpStatus.simulatorLink = true;
+	vpStatus.simulatorLink = vpMode.loggingSuppressed = true;
       }
 
       memcpy(&sensorData, data, sizeof(sensorData));
@@ -734,7 +734,7 @@ typedef enum {
   toc_timing,
   toc_lstick,
   toc_rstick,
-  toc_eeprom,
+  toc_fdr,
   toc_ram,
   toc_load,
   toc_ppm
@@ -782,9 +782,9 @@ bool toc_test_load(bool reset)
   return idleAvg > 0.15;
 }
 
-bool toc_test_eeprom(bool reset)
+bool toc_test_fdr(bool reset)
 {
-  return !eepromDevice.status();
+  return !eepromDevice.status() && logReady(false) && logLen < 0.20*logSize;
 }
 
 bool toc_test_alpha_sensor(bool reset)
@@ -952,7 +952,7 @@ const struct TakeoffTest tocTest[] PROGMEM =
     [toc_timing] = { "TIMNG", toc_test_timing },
     [toc_lstick] = { "LSTK", toc_test_lstick },
     [toc_rstick] = { "RSTK", toc_test_rstick },
-    [toc_eeprom] = { "EPROM", toc_test_eeprom },
+    [toc_fdr] = { "FDR", toc_test_fdr },
     [toc_ram] = { "RAM", toc_test_ram },
     [toc_load] = { "LOAD", toc_test_load },
     [toc_ppm] = { "PPM", toc_test_ppm }
@@ -1393,7 +1393,7 @@ void executeCommand(char *buf)
       break;
 
     case c_log:
-      vpMode.alwaysLog = true;
+      vpMode.loggingSuppressed = false;
       break;
 
     case c_zl:
@@ -2546,7 +2546,6 @@ void configurationTask()
   } else if(currentTime - lastMotion > 5.0e6 && !vpStatus.fullStop) {
     consoleNoteLn_P(PSTR("We have FULLY STOPPED"));
     vpStatus.fullStop = true;
-    logDisable();
   }
 
   //
@@ -2650,7 +2649,7 @@ void configurationTask()
       failsafeDisable();
       
     } else {
-      if(iasFilter.output() < vpDerived.stallIAS*2/3) {
+      if(!vpStatus.positiveIAS && !vpMode.slowFlight) {
 	if(!vpMode.takeOff) {
 	  consoleNoteLn_P(PSTR("TakeOff mode ENABLED"));
 	  vpMode.takeOff = true;
@@ -2680,7 +2679,16 @@ void configurationTask()
       vpMode.wingLeveler = true;
     } 
   }
-  
+
+  //
+  // Logging control
+  //
+
+  if(vpStatus.positiveIAS && !vpMode.loggingSuppressed)
+    logEnable();
+  else if(vpStatus.fullStop && logLen > logSize*0.90)
+    logDisable();
+
   //
   // Direct mode selector input
   //
@@ -2775,7 +2783,7 @@ void configurationTask()
     if(!vpStatus.consoleLink)
       vpStatus.silent = true;
     
-    if(!vpStatus.consoleLink || vpMode.alwaysLog)
+    if(!vpMode.loggingSuppressed)
       logEnable();
   }
 
@@ -3120,7 +3128,7 @@ void gaugeTask()
 	consoleNote_P(PSTR(" entropy(alpha,ias) = "));
 	consolePrint(alphaEntropyAcc.output());
 	consolePrint_P(PSTR(", "));
-	consolePrintLn(iasEntropyAcc.output());
+	consolePrint(iasEntropyAcc.output());
 	consolePrint_P(PSTR(" hash = "));
 	
 	tmp = sensorHash;
@@ -3129,6 +3137,8 @@ void gaugeTask()
 	  consolePrint((tmp & 1) ? "+" : " ");
 	  tmp = tmp >> 1;
 	}
+
+	consolePrintLn("");
 	break;	
       }
     }
@@ -3380,7 +3390,7 @@ void controlTask()
     if(vpFeature.keepLevel)
       // Simple leveling for situations where we want to avoid I term wind-up
       
-      aileOutput = clamp((aileStick - bankAngle) / (PI/4) - rollRate/64, -1, 1);
+      aileOutput = clamp(aileStick - bankAngle /* - rollRate/64 */, -1, 1);
     
     aileCtrl.reset(aileOutput, 0);
     
@@ -3397,7 +3407,7 @@ void controlTask()
       // Bank limiter + weak leveling
 
       targetRollRate -=
-	maxRollRate*clamp(bankAngle, -0.3/RADIAN, 0.3/RADIAN);
+	maxRollRate*clamp(bankAngle, -0.5/RADIAN, 0.5/RADIAN);
       
       targetRollRate = clamp(targetRollRate,
 			     (-maxBank - bankAngle)*maxRollRate,
