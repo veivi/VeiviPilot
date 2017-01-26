@@ -250,23 +250,23 @@ float RunningAvgFilter::input(float v)
   
 void DelayLine::setDelay(int a) 
 {
-  if(a < 1 || a > windowLenMax)
-     a = windowLenMax;
+  if(a < 1 || a > DelayMax)
+     a = DelayMax;
 
    delay = a;
 
-   for(int i = 0; i < windowLenMax; i++)
+   for(int i = 0; i < DelayMax; i++)
      memory[i] = 0.0;
 }
 
 float DelayLine::output() 
 { 
-  return memory[(ptr+windowLenMax-delay)%windowLenMax];
+  return memory[(ptr+DelayMax-delay)%DelayMax];
 }
 
 float DelayLine::input(float v) 
 {
-  ptr = (ptr + 1) % windowLenMax;
+  ptr = (ptr + 1) % DelayMax;
   memory[ptr] = v;
     
   return output();

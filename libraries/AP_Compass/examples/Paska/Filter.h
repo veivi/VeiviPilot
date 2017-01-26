@@ -37,6 +37,8 @@ class RunningAvgFilter {
   int ptr;
 };
 
+const int DelayMax = 4;
+
 class DelayLine {
   public:
     void setDelay(int l);
@@ -44,7 +46,7 @@ class DelayLine {
     float output();
     
   private:
-    float memory[windowLenMax];
+    float memory[DelayMax];
     int delay;
     int ptr;
 };

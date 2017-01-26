@@ -2504,7 +2504,7 @@ void configurationTask()
   //
   
   if(vpMode.alphaFailSafe || vpMode.sensorFailSafe || vpMode.takeOff
-     || alpha < vpParam.alphaMax) {
+     || alpha < vpParam.alphaMax*1.05) {
     if(!vpStatus.stall)
       lastStall = currentTime;
     else if(currentTime - lastStall > 1.0e6) {
@@ -3333,7 +3333,7 @@ void controlTask()
   if(vpFeature.alphaHold)
     targetPitchRate = nominalPitchRate(bankAngle, targetAlpha)
       + clamp(targetAlpha - effAlpha,
-	      -15/RADIAN - pitchAngle,
+	      -30/RADIAN - pitchAngle,
 	      vpParam.maxPitch - pitchAngle)*autoAlphaP;
 
   else if(vpFeature.pitchHold)
