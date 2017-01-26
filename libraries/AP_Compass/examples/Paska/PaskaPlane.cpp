@@ -1906,10 +1906,10 @@ void displayTask()
   print("T/O/C ");
 
   if(tocStatusFailed) {
-    setAttr((currentTime & (1UL<<20)) != 0);
-    print("FAIL");
+    setAttr((currentTime>>19) & 1);
+    print("WARNING");
   } else {
-    print("GOOD");
+    print("GOOD   ");
   }
 }
 
