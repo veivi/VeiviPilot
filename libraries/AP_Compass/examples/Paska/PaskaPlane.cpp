@@ -2970,10 +2970,14 @@ void configurationTask()
   // Trim adjustment by mode
   //
 
-  if(!vpFeature.alphaHold)
-    elevTrimSub =
-      elevFromAlpha(clamp(effAlpha, vpDerived.zeroLiftAlpha, maxAlpha))
-      - elevStick - elevTrim;
+  if(!vpFeature.alphaHold) {
+    if(vpStatus.aloft)
+      elevTrimSub =
+	elevFromAlpha(clamp(effAlpha, vpDerived.zeroLiftAlpha, maxAlpha))
+	- elevStick - elevTrim;
+    else
+      elevTrimSub = 0;
+  }
 }
 
 void gaugeTask()
