@@ -835,12 +835,12 @@ bool toc_test_pitot(bool reset)
     positiveIAS = true;
   
   return !pitotFailed() && iasEntropyAcc.output() > 50
-    && !vpStatus.pitotBlocked && positiveIAS;
+    && !vpStatus.pitotBlocked && positiveIAS && iAS < 5;
 }
 
 bool toc_test_attitude(bool reset)
 {
-  return fabsf(pitchAngle) < 10.0/RADIAN && fabsf(bankAngle) < 5.0/RADIAN;
+  return fabsf(pitchAngle) < 15.0/RADIAN && fabsf(bankAngle) < 15.0/RADIAN;
 }
 
 bool toc_test_gyro(bool reset)
@@ -1899,14 +1899,23 @@ void displayTask()
   print("Model: ");
   print(vpParam.name);
   printNL();
+
+  cursorMove(0,7);
+  
+  if(!vpStatus.armed) {
+    print(" DISARMED");
+    return;
+  }
   
   tocTestStatus(tocReportDisplay);
 
-  cursorMove(0,1);
+  cursorMove(0,7);
   print("T/O/C ");
 
+  static int count = 0;
+  
   if(tocStatusFailed) {
-    setAttr((currentTime>>19) & 1);
+    setAttr((++count/4) & 1);
     print("WARNING");
   } else {
     print("GOOD   ");
@@ -2574,7 +2583,8 @@ void configurationTask()
   // T/O config test
   //
 
-  tocTestUpdate();
+  if(!vpStatus.silent)
+    tocTestUpdate();
 
   //
   //   GEAR BUTTON
@@ -3647,7 +3657,7 @@ struct Task taskList[] = {
   { displayRefreshTask,
     HZ_TO_PERIOD(20) },
   { displayTask,
-    HZ_TO_PERIOD(5) },
+    HZ_TO_PERIOD(8) },
   { controlTaskGroup,
     HZ_TO_PERIOD(CONTROL_HZ) },
   { simulatorLinkTask,

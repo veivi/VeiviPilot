@@ -110,7 +110,7 @@ private:
   int length;
 };
 
-const int TabulatorWindow_c = 24;
+const int TabulatorWindow_c = 16;
 
 struct TabulatorStore {
   float domainA, domainB;
