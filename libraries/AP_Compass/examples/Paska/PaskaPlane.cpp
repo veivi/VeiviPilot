@@ -1794,9 +1794,6 @@ void displayRefreshRow()
   static bool initialized = false;
   static uint8_t row;
 
-  if(vpStatus.silent)
-    return;
-  
   if(displayDevice.hasFailed()) {
     initialized = false;
     return;
@@ -1873,6 +1870,14 @@ void displayRefreshRow()
   row = 0;
 }
 
+void displayClear()
+{
+  for(int i = 0; i < 8; i++) {
+    cursorMove(0, i);
+    printNL();
+  }
+}
+
 void displayRefreshTask()
 {
   displayRefreshRow();
@@ -1892,8 +1897,17 @@ void tocReportDisplay(bool result, int i, const char *s)
 
 void displayTask()
 {
-  if(vpStatus.silent)
-    return;
+  static bool cleared = false;
+  
+  if(vpStatus.silent) {
+    if(!cleared) {
+      displayClear();
+      cleared = true;
+    }
+    
+    return;    
+  } else
+    cleared = false;
   
   cursorMove(0,0);
   print("Model: ");
@@ -3436,8 +3450,10 @@ void controlTask()
     
   // Rudder
     
-  rudderOutput =
-    clamp(rudderStick + aileRateLimiter.output()*rudderMix, -1, 1);
+  rudderOutput = rudderStick;
+
+  if(!vpStatus.weightOnWheels)
+    rudderOutput += aileRateLimiter.output()*rudderMix;
 
   // Flaps
   
