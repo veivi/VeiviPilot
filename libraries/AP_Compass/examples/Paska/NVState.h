@@ -43,7 +43,7 @@ struct ParamRecord {
 
 struct DerivedParams {
   float stallIAS, zeroLiftAlpha;
-  float thresholdAlpha, shakerAlpha;
+  float thresholdAlpha, shakerAlpha, pusherAlpha;
 };
 
 struct NVStateRecord {

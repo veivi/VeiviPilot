@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#define INERTIA 2
+
 class Button {
 public:
   Button(float activeValue);

@@ -17,8 +17,6 @@ void Button :: reset()
   transition = 0;
 }
 
-#define INERTIA 2
-
 void Button :: input(float inputValue)
 {
   if(fabsf(inputValue - activeValue) > 0.05) {

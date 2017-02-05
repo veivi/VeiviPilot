@@ -207,7 +207,7 @@ bool ailePilotInput, elevPilotInput, rudderPilotInput;
 uint32_t controlCycleEnded;
 float elevTrim, effTrim, elevTrimSub, targetAlpha;
 Controller elevCtrl, aileCtrl, pushCtrl;
-float autoAlphaP, maxAlpha, rudderMix;
+float autoAlphaP, rudderMix;
 float accX, accY, accZ, accTotal, altitude,  bankAngle, pitchAngle, rollRate, pitchRate, targetPitchRate, yawRate, levelBank;
 uint16_t heading;
 NewI2C I2c = NewI2C();
@@ -2864,7 +2864,7 @@ void configurationTask()
   pushCtrl.setZieglerNicholsPID(p_Ku*scale, vpParam.p_Tu);
 
   autoAlphaP = vpParam.o_P;
-  maxAlpha = vpParam.alphaMax;
+  //  maxAlpha = vpParam.alphaMax;
   rudderMix = vpParam.r_Mix;
   levelBank = 0;
   
@@ -2952,7 +2952,7 @@ void configurationTask()
       // Pusher gain
 
       pushCtrl.setPID(testGain = testGainExpo(p_Ku_ref), 0, 0);
-      maxAlpha = 0.8*vpParam.alphaMax;
+      //      maxAlpha = 0.8*vpParam.alphaMax;
       break;
 
     case 6:
@@ -2972,7 +2972,7 @@ void configurationTask()
     case 9:
       // Max alpha
 
-      maxAlpha = testGain = testGainLinear(20/RADIAN, 10/RADIAN);
+      //      maxAlpha = testGain = testGainLinear(20/RADIAN, 10/RADIAN);
       break;         
 
     case 10:
@@ -2996,7 +2996,7 @@ void configurationTask()
   if(!vpFeature.alphaHold) {
     if(vpStatus.aloft)
       elevTrimSub =
-	elevFromAlpha(clamp(effAlpha, vpDerived.zeroLiftAlpha, maxAlpha))
+	elevFromAlpha(clamp(effAlpha, vpDerived.zeroLiftAlpha, vpParam.alphaMax))
 	- elevStick - elevTrim;
     else
       elevTrimSub = 0;
@@ -3347,7 +3347,7 @@ void controlTask()
   const float shakerLimit = (float) 2/3;
   const float effStick = vpMode.rxFailSafe ? shakerLimit : elevStick;
   const float stickStrength = fmaxf(effStick-shakerLimit, 0)/(1-shakerLimit);
-  const float effMaxAlpha = mixValue(stickStrength, vpDerived.shakerAlpha, maxAlpha);
+  const float effMaxAlpha = mixValue(stickStrength, vpDerived.shakerAlpha, vpDerived.pusherAlpha);
     
   effTrim = vpFeature.alphaHold ? elevTrim + elevTrimSub : elevTrim;
 
@@ -3505,7 +3505,7 @@ void trimTask()
     elevTrim += sign(elevStick) * trimRate / TRIM_HZ;
   }
   
-  const float trimMin = -0.20, trimMax = 0.80;
+  const float trimMin = -0.50, trimMax = 0.80;
   
   if(!vpFeature.alphaHold)
     elevTrim = clamp(elevTrim, trimMin, trimMax);
