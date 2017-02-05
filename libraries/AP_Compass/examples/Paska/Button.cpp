@@ -17,18 +17,18 @@ void Button :: reset()
   transition = 0;
 }
 
+#define INERTIA 2
+
 void Button :: input(float inputValue)
 {
-  inputState = fabsf(inputValue - activeValue) < 0.1;
-
-  if(!inputState)
-    inertiaState = false;
-
-  else if(!inertiaState) {
-    inertiaState = true;
+  if(fabsf(inputValue - activeValue) > 0.05) {
+    inertiaCount = 0;
     inputState = false;
-  }
-  
+  } else if(inertiaCount < INERTIA)
+    inertiaCount++;
+  else
+    inputState = true;
+
   if(inputState != statePrev) {
     transition = hal.scheduler->micros();
 
@@ -51,7 +51,7 @@ void Button :: input(float inputValue)
     }
     
     statePrev = inputState;
-  } else if(hal.scheduler->micros() - transition > 2.0e6/3) {
+  } else if(hal.scheduler->micros() - transition > 0.5e6) {
 
     if(stateLazy != inputState)
       buttonPress = inputState;
@@ -68,7 +68,7 @@ void Button :: input(float inputValue)
 
 bool Button::state(void)
 {
-  return inputState && inertiaState;
+  return inputState;
 }  
 
 bool Button::lazy(void)

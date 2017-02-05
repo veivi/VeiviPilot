@@ -16,8 +16,9 @@ public:
 
 private:
   float activeValue;
-  bool statePrev, stateLazy;
-  bool pulseArmed, inputState, inertiaState;
+  uint8_t inertiaCount;
+  bool inputState;
+  bool statePrev, stateLazy, pulseArmed;
   uint32_t transition;
   uint8_t count;
   bool pulseDouble, pulseSingle, buttonPress;

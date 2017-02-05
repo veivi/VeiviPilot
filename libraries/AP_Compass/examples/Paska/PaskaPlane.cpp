@@ -82,7 +82,6 @@ struct RxInputRecord aileInput, elevInput, throttleInput, rudderInput,
 struct RxInputRecord *ppmInputs[] = 
   { &aileInput, &elevInput, &throttleInput, &rudderInput, &buttonInput, &tuningKnobInput, &modeInput, &auxInput };
 
-ButtonInputChannel buttonInputFilter;
 Button rightDownButton(-1.0), rightUpButton(0.33),
   leftDownButton(-0.3), leftUpButton(1);
 struct SwitchRecord modeSelector = { &modeInput };
@@ -1971,12 +1970,12 @@ void receiverTask()
 
   modeSelectorValue = readSwitch(&modeSelector);
   
-  buttonInputFilter.input(inputValue(&buttonInput));  
-
-  LEVELBUTTON.input(buttonInputFilter.value());
-  FLAPBUTTON.input(buttonInputFilter.value());
-  TRIMBUTTON.input(buttonInputFilter.value());
-  GEARBUTTON.input(buttonInputFilter.value());
+  float buttonValue = inputValue(&buttonInput);
+  
+  LEVELBUTTON.input(buttonValue);
+  FLAPBUTTON.input(buttonValue);
+  TRIMBUTTON.input(buttonValue);
+  GEARBUTTON.input(buttonValue);
 
   //
   // Receiver fail detection
