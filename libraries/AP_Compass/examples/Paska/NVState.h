@@ -25,8 +25,9 @@ struct ParamRecord {
   float elevNeutral, elevDefl;
   float flapNeutral, flap2Neutral, flapStep;
   float rudderNeutral, rudderDefl;
+  float steerNeutral, steerDefl;
   float brakeNeutral, brakeDefl;
-  int8_t servoAile, servoElev, servoRudder, servoFlap, servoFlap2, servoGear, servoBrake;
+  int8_t servoAile, servoElev, servoRudder, servoFlap, servoFlap2, servoGear, servoBrake, servoSteer;
   float cL_A, alphaMax;
   float i_Ku_C, i_Tu, o_P;
   float s_Ku_C, s_Tu;

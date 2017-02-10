@@ -136,6 +136,8 @@ struct PWMOutput pwmOutput[] = {
   (vpParam.servoBrake < 0 ? NULL : &pwmOutput[vpParam.servoBrake])
 #define rudderHandle \
   (vpParam.servoRudder < 0 ? NULL : &pwmOutput[vpParam.servoRudder])
+#define steerHandle \
+  (vpParam.servoSteer < 0 ? NULL : &pwmOutput[vpParam.servoSteer])
 
 //
 // Periodic task stuff
@@ -217,7 +219,7 @@ RunningAvgFilter alphaFilter;
 uint32_t simTimeStamp;
 RateLimiter aileRateLimiter, flapRateLimiter, trimRateLimiter;
 uint8_t flapOutput, gearOutput;
-float elevOutput, elevOutputFeedForward, aileOutput = 0, brakeOutput = 0, rudderOutput = 0;
+float elevOutput, elevOutputFeedForward, aileOutput = 0, brakeOutput = 0, rudderOutput = 0, steerOutput = 0;
 uint16_t iasEntropy, alphaEntropy, sensorHash = 0xFFFF;
 bool beepGood;
 const int maxParams = 8;
@@ -3449,7 +3451,7 @@ void controlTask()
     
   // Rudder
     
-  rudderOutput = rudderStick;
+  rudderOutput = steerOutput = rudderStick;
 
   if(!vpStatus.weightOnWheels)
     rudderOutput += aileRateLimiter.output()*rudderMix;
@@ -3482,6 +3484,9 @@ void actuatorTask()
   pwmOutputWrite(rudderHandle, NEUTRAL
 		 + RANGE*clamp(vpParam.rudderNeutral + 
 			       vpParam.rudderDefl*rudderOutput, -1, 1));                        
+  pwmOutputWrite(steerHandle, NEUTRAL
+		 + RANGE*clamp(vpParam.steerNeutral + 
+			       vpParam.steerDefl*steerOutput, -1, 1));                        
   pwmOutputWrite(flapHandle, NEUTRAL
 		 + RANGE*clamp(vpParam.flapNeutral 
 			       + vpParam.flapStep*flapRateLimiter.output(), -1, 1));                              
