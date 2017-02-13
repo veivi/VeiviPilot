@@ -49,6 +49,7 @@ const struct Command commands[] PROGMEM = {
   { "zl", c_zl },
   { "update", c_update },
   { "beep", c_beep },
+  { "trim", c_trim },
   { "ping", c_ping },
   { "model", c_model },
   { "alpha", c_alpha },

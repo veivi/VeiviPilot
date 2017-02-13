@@ -1355,7 +1355,14 @@ void executeCommand(char *buf)
       }
       break;
     
-   case c_params:
+    case c_trim:
+      if(numParams > 0)
+	elevTrim = param[0]/100;
+      consoleNote_P(PSTR("Current elev trim(%) = "));
+      consolePrintLn(elevTrim*100); 
+      break;
+      
+    case c_params:
      consoleNote_P(PSTR("SETTINGS (MODEL "));
       consolePrint(nvState.model);
       consolePrintLn(")");
