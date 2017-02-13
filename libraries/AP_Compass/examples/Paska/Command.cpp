@@ -4,7 +4,7 @@
 
 const struct Command commands[] PROGMEM = {
   { "name", c_name, e_string, &vpParam.name },
-  { "5048b_ref", c_5048b_ref, e_uint16, &vpParam.alphaRef },
+  { "as5048b_ref", c_5048b_ref, e_uint16, &vpParam.alphaRef },
   { "inner_pid_zn", c_inner_pid_zn,
     e_float, &vpParam.i_Ku_C, &vpParam.i_Tu },
   { "outer_p", c_outer_p, e_float, &vpParam.o_P },
@@ -41,6 +41,8 @@ const struct Command commands[] PROGMEM = {
   { "col_ab", c_col_ab, e_float, &vpParam.cL_A, &vpParam.cL_B },
   { "col_max", c_col_max, e_float, &vpParam.cL_max, &vpParam.alphaMax },
   { "climb", c_climb, e_angle, &vpParam.maxPitch },
+  { "weight", c_weight, e_float, &vpParam.weight },
+  { "thrust", c_thrust, e_float, &vpParam.thrust },
   { "stall", c_stall },
   { "peak", c_peak },
   { "max", c_max },

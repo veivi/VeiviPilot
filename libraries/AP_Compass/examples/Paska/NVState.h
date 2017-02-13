@@ -40,6 +40,7 @@ struct ParamRecord {
   float cL_B;
   float servoRate;
   float takeoffTrim;
+  float weight, thrust;
   };
 
 struct DerivedParams {

@@ -182,6 +182,10 @@ void printParams()
   consolePrint(vpParam.name);
   consolePrintLn_P(PSTR("\""));
   
+  consoleNote_P(PSTR("  Weight(nom) = "));
+  consolePrint(vpParam.weight, 1);
+  consolePrint_P(PSTR(" g  thrust(nom) = "));
+  consolePrintLn(vpParam.thrust, 1);
   consoleNote_P(PSTR("  AS5048B ref = "));
   consolePrintLn(vpParam.alphaRef);
   consoleNoteLn_P(PSTR("  Alpha Hold"));
