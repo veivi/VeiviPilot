@@ -212,7 +212,7 @@ float elevTrim, effTrim, elevTrimSub, targetAlpha;
 Controller elevCtrl, aileCtrl, pushCtrl;
 float autoAlphaP, rudderMix;
 float accX, accY, accZ, accTotal, altitude,  bankAngle, pitchAngle, rollRate, pitchRate, targetPitchRate, yawRate, levelBank;
-uint16_t heading, headingMag;
+uint16_t heading;
 NewI2C I2c = NewI2C();
 Damper ball(1.5*CONTROL_HZ), iasFilterSlow(3*CONTROL_HZ), iasFilter(2), accAvg(2*CONTROL_HZ), iasEntropyAcc(CONFIG_HZ), alphaEntropyAcc(CONFIG_HZ);
 AlphaBuffer pressureBuffer;
@@ -2149,10 +2149,7 @@ void sensorTaskSlow()
   // Compass
 
   compass.read();
-  compass.learn_offsets();
 
-  headingMag =
-    (360 + (int) (compass.calculate_heading(ahrs.get_dcm_matrix())*RADIAN)) % 360;
   // Weight on wheels switch not available for now
 
   vpStatus.weightOnWheels = (gearOutput == 0);
@@ -3083,11 +3080,9 @@ void gaugeTask()
 	consolePrint(bankAngle*RADIAN, 2);
 	consolePrint_P(PSTR(" pitch = "));
 	consolePrint(pitchAngle*RADIAN, 2);
-	consolePrint_P(PSTR(" heading(mag) = "));
+	consolePrint_P(PSTR(" heading = "));
 	consolePrint(heading);
-	consolePrint("(");
-	consolePrint(headingMag);
-	consolePrint_P(PSTR(") alt = "));
+	consolePrint_P(PSTR(" alt = "));
 	consolePrint(altitude);
 	consolePrint_P(PSTR(" ball = "));
 	consolePrint(ball.output(), 2);
