@@ -2153,11 +2153,8 @@ void sensorTaskSlow()
   compass.read();
   compass.learn_offsets();
 
-  Matrix3f dcm_matrix;
-  dcm_matrix.from_euler(0, 0, 0); // use roll = 0, pitch = 0 for this example
   headingMag =
-    (360 + (int) (compass.calculate_heading(dcm_matrix)*RADIAN)) % 360;
-
+    (360 + (int) (compass.calculate_heading(ahrs.get_dcm_matrix())*RADIAN)) % 360;
   const int headingDiff = (360 + headingMag-headingGyro + 180) % 360 - 180;
 
   headingOffset += clamp((headingDiff - headingOffset)/8/(CONTROL_HZ/5),
@@ -3843,18 +3840,21 @@ void setup()
   consoleNote_P(PSTR("Initializing compass... "));
   consoleFlush();
 
-  if (!compass.init()) {
+  if(compass.init()) {
+    consolePrint_P(PSTR("  done, "));
+    consolePrint(compass.get_count());
+    consolePrintLn_P(PSTR(" sensor(s) detected."));
+  
+    ahrs.set_compass(&compass);
+  
+    compass.set_and_save_offsets(0,0,0,0); // set offsets to account for surrounding interference
+    compass.set_declination(ToRad(0.0f));
+    
+  } else {
     consolePrintLn_P(PSTR("  FAILED."));
     consoleFlush();
     while (1) ;
   }
-
-  consolePrint_P(PSTR("  done, "));
-  consolePrint(compass.get_count());
-  consolePrintLn_P(PSTR(" sensor(s) detected."));
-  
-  compass.set_and_save_offsets(0,0,0,0); // set offsets to account for surrounding interference
-  compass.set_declination(ToRad(0.0f));
 
   // LED output
 
