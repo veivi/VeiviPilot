@@ -47,6 +47,7 @@ AP_Baro barometer;
 AP_InertialSensor ins;
 AP_GPS gps;
 AP_AHRS_DCM ahrs {ins,  barometer, gps};
+static Compass compass;
 
 //
 // HW timer declarations
@@ -211,7 +212,8 @@ float elevTrim, effTrim, elevTrimSub, targetAlpha;
 Controller elevCtrl, aileCtrl, pushCtrl;
 float autoAlphaP, rudderMix;
 float accX, accY, accZ, accTotal, altitude,  bankAngle, pitchAngle, rollRate, pitchRate, targetPitchRate, yawRate, levelBank;
-uint16_t heading;
+uint16_t heading, headingGyro, headingMag;
+float headingOffset;
 NewI2C I2c = NewI2C();
 Damper ball(1.5*CONTROL_HZ), iasFilterSlow(3*CONTROL_HZ), iasFilter(2), accAvg(2*CONTROL_HZ), iasEntropyAcc(CONFIG_HZ), alphaEntropyAcc(CONFIG_HZ);
 AlphaBuffer pressureBuffer;
@@ -2006,7 +2008,7 @@ void receiverTask()
   // Apply rx failsafe settings
   //
   
-  if(vpMode.rxFailSafe) {
+  if(vpMode.rxFailSafe && vpStatus.armed) {
     vpFeature.stabilizePitch = vpFeature.stabilizeBank
       = vpFeature.alphaHold = vpMode.bankLimiter = true;
     vpFeature.pusher = false;
@@ -2061,7 +2063,8 @@ void sensorTaskFast()
 
   bankAngle = ahrs.roll;
   pitchAngle = ahrs.pitch;
-  heading = (int) (360 + ahrs.yaw*RADIAN) % 360;
+  headingGyro = (360 + (int) (ahrs.yaw*RADIAN)) % 360;
+  heading = (360 + headingGyro + (int) headingOffset) % 360;
   
   // Angular velocities
   
@@ -2086,6 +2089,10 @@ void sensorTaskFast()
   barometer.update();
   barometer.accumulate();
 
+  // Compass
+  
+  compass.accumulate();
+  
   // Simulator link overrides
   
   if(vpStatus.simulatorLink) {
@@ -2141,6 +2148,21 @@ void sensorTaskSlow()
   else
     altitude = (float) barometer.get_altitude();
 
+  // Compass
+
+  compass.read();
+  compass.learn_offsets();
+
+  Matrix3f dcm_matrix;
+  dcm_matrix.from_euler(0, 0, 0); // use roll = 0, pitch = 0 for this example
+  headingMag =
+    (360 + (int) (compass.calculate_heading(dcm_matrix)*RADIAN)) % 360;
+
+  const int headingDiff = (360 + headingMag-headingGyro + 180) % 360 - 180;
+
+  headingOffset += clamp((headingDiff - headingOffset)/8/(CONTROL_HZ/5),
+			 -0.5/(CONTROL_HZ/5), 0.5/(CONTROL_HZ/5));
+  
   // Weight on wheels switch not available for now
 
   vpStatus.weightOnWheels = (gearOutput == 0);
@@ -3071,9 +3093,11 @@ void gaugeTask()
 	consolePrint(bankAngle*RADIAN, 2);
 	consolePrint_P(PSTR(" pitch = "));
 	consolePrint(pitchAngle*RADIAN, 2);
-	consolePrint_P(PSTR(" heading = "));
+	consolePrint_P(PSTR(" heading(mag) = "));
 	consolePrint(heading);
-	consolePrint_P(PSTR(" alt = "));
+	consolePrint("(");
+	consolePrint(headingMag);
+	consolePrint_P(PSTR(") alt = "));
 	consolePrint(altitude);
 	consolePrint_P(PSTR(" ball = "));
 	consolePrint(ball.output(), 2);
@@ -3816,6 +3840,22 @@ void setup()
 
   consolePrintLn_P(PSTR("  done"));
   
+  consoleNote_P(PSTR("Initializing compass... "));
+  consoleFlush();
+
+  if (!compass.init()) {
+    consolePrintLn_P(PSTR("  FAILED."));
+    consoleFlush();
+    while (1) ;
+  }
+
+  consolePrint_P(PSTR("  done, "));
+  consolePrint(compass.get_count());
+  consolePrintLn_P(PSTR(" sensor(s) detected."));
+  
+  compass.set_and_save_offsets(0,0,0,0); // set offsets to account for surrounding interference
+  compass.set_declination(ToRad(0.0f));
+
   // LED output
 
   configureOutput(&RED_LED);
