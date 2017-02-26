@@ -213,7 +213,6 @@ Controller elevCtrl, aileCtrl, pushCtrl;
 float autoAlphaP, rudderMix;
 float accX, accY, accZ, accTotal, altitude,  bankAngle, pitchAngle, rollRate, pitchRate, targetPitchRate, yawRate, levelBank;
 uint16_t heading, headingMag;
-float headingOffset;
 NewI2C I2c = NewI2C();
 Damper ball(1.5*CONTROL_HZ), iasFilterSlow(3*CONTROL_HZ), iasFilter(2), accAvg(2*CONTROL_HZ), iasEntropyAcc(CONFIG_HZ), alphaEntropyAcc(CONFIG_HZ);
 AlphaBuffer pressureBuffer;
