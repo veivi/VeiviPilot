@@ -212,7 +212,7 @@ float elevTrim, effTrim, elevTrimSub, targetAlpha;
 Controller elevCtrl, aileCtrl, pushCtrl;
 float autoAlphaP, rudderMix;
 float accX, accY, accZ, accTotal, altitude,  bankAngle, pitchAngle, rollRate, pitchRate, targetPitchRate, yawRate, levelBank;
-uint16_t heading, headingGyro, headingMag;
+uint16_t heading, headingMag;
 float headingOffset;
 NewI2C I2c = NewI2C();
 Damper ball(1.5*CONTROL_HZ), iasFilterSlow(3*CONTROL_HZ), iasFilter(2), accAvg(2*CONTROL_HZ), iasEntropyAcc(CONFIG_HZ), alphaEntropyAcc(CONFIG_HZ);
@@ -2063,8 +2063,7 @@ void sensorTaskFast()
 
   bankAngle = ahrs.roll;
   pitchAngle = ahrs.pitch;
-  headingGyro = (360 + (int) (ahrs.yaw*RADIAN)) % 360;
-  heading = (360 + headingGyro + (int) headingOffset) % 360;
+  heading = (360 + (int) (ahrs.yaw*RADIAN)) % 360;
   
   // Angular velocities
   
@@ -2155,11 +2154,6 @@ void sensorTaskSlow()
 
   headingMag =
     (360 + (int) (compass.calculate_heading(ahrs.get_dcm_matrix())*RADIAN)) % 360;
-  const int headingDiff = (360 + headingMag-headingGyro + 180) % 360 - 180;
-
-  headingOffset += clamp((headingDiff - headingOffset)/8/(CONTROL_HZ/5),
-			 -0.5/(CONTROL_HZ/5), 0.5/(CONTROL_HZ/5));
-  
   // Weight on wheels switch not available for now
 
   vpStatus.weightOnWheels = (gearOutput == 0);
