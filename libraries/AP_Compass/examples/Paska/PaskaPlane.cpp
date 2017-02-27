@@ -33,6 +33,12 @@ extern "C" {
 //
 //
 
+// #define USE_COMPASS  1
+
+//
+//
+//
+
 const float stabilityElevExp_c = -1.5;
 const float stabilityAileExp1_c = -1.5;
 const float stabilityAileExp2_c = 0.5;
@@ -47,7 +53,9 @@ AP_Baro barometer;
 AP_InertialSensor ins;
 AP_GPS gps;
 AP_AHRS_DCM ahrs {ins,  barometer, gps};
+#ifdef USE_COMPASS
 static Compass compass;
+#endif
 
 //
 // HW timer declarations
@@ -2088,8 +2096,10 @@ void sensorTaskFast()
   barometer.accumulate();
 
   // Compass
-  
+
+#ifdef USE_COMPASS
   compass.accumulate();
+#endif
   
   // Simulator link overrides
   
@@ -2148,8 +2158,10 @@ void sensorTaskSlow()
 
   // Compass
 
+#ifdef USE_COMPASS
   compass.read();
-
+#endif
+  
   // Weight on wheels switch not available for now
 
   vpStatus.weightOnWheels = (gearOutput == 0);
@@ -3824,7 +3836,8 @@ void setup()
   ahrs.init();
 
   consolePrintLn_P(PSTR("  done"));
-  
+
+#ifdef USE_COMPASS
   consoleNote_P(PSTR("Initializing compass... "));
   consoleFlush();
 
@@ -3843,6 +3856,7 @@ void setup()
     consoleFlush();
     while (1) ;
   }
+#endif
 
   // LED output
 
