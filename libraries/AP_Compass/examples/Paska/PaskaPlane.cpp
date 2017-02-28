@@ -160,7 +160,7 @@ struct PWMOutput pwmOutput[] = {
 #define TRIM_HZ 10
 #define LED_HZ 3
 #define LED_TICK 100
-#define LOG_HZ_ALPHA CONTROL_HZ
+#define LOG_HZ_FAST CONTROL_HZ
 #define LOG_HZ_SLOW (CONTROL_HZ/3)
 #define LOG_HZ_SAVE 2
 #define HEARTBEAT_HZ 1
@@ -2165,13 +2165,14 @@ void sensorMonitorTask()
   }
 }
 
-void alphaLogTask()
+void fastLogTask()
 {
-  logAlpha();  
+  //  logAlpha();  
 }
 
 void slowLogTask()
 {
+  logAlpha();  
   logAttitude();
   logInput();
   logActuator();
@@ -3635,7 +3636,7 @@ void simulatorLinkTask()
 
 static void logStartCallback()
 {
-  alphaLogTask();
+  fastLogTask();
   slowLogTask();
 }
 
@@ -3680,8 +3681,8 @@ struct Task taskList[] = {
     HZ_TO_PERIOD(CONFIG_HZ) },
   { configurationTask,
     HZ_TO_PERIOD(CONFIG_HZ) },
-  { alphaLogTask,
-    HZ_TO_PERIOD(LOG_HZ_ALPHA) },
+  { fastLogTask,
+    HZ_TO_PERIOD(LOG_HZ_FAST) },
   { slowLogTask,
     HZ_TO_PERIOD(LOG_HZ_SLOW) },
   { logSaveTask,
