@@ -479,6 +479,13 @@ void logPosition(void)
   logGeneric(lc_alt, altitude);
 }
   
+float tabulateFnCoL();
+
+void logCoeffOfLift(void)
+{
+  logGeneric(lc_col, tabulateFnCoL());
+}
+  
 void logInput(void)
 {
   logGeneric(lc_ailestick, aileStick);
@@ -1045,8 +1052,8 @@ const prog_char_t *applyParamUpdate()
 
 float tabulateFnCoL()
 {
-  float liftWing = cos(alpha)*accZ; // We only want the wing contribution
-  return liftWing/dynPressure;
+  const float lift = cos(alpha)*accZ; // We only want the wing contribution
+  return lift/dynPressure;
 }
 
 float tabulateFnElev()
@@ -2215,6 +2222,7 @@ void slowLogTask()
   logActuator();
   logConfig();
   logPosition();
+  logCoeffOfLift();
 }
 
 void measurementTask()
