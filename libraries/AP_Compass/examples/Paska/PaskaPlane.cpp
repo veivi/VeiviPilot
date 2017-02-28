@@ -235,7 +235,6 @@ const int maxParams = 8;
 int beepDuration, gaugeCount, gaugeVariable[maxParams];
 I2CDevice alphaDevice(&I2c, 0, "alpha"), pitotDevice(&I2c, 0, "pitot");
 I2CDevice eepromDevice(&I2c, 0, "EEPROM"), displayDevice(&I2c, 0, "display");
-Tabulator tabulator;
 
 const int maxTests_c = 1;
 float autoTestIAS[maxTests_c], autoTestK[maxTests_c], autoTestT[maxTests_c], autoTestKxIAS[maxTests_c];
@@ -479,11 +478,14 @@ void logPosition(void)
   logGeneric(lc_alt, altitude);
 }
   
-float tabulateFnCoL();
-
+float empiricalCoL()
+{
+  const float lift = cos(alpha)*accZ; // We only want the wing contribution
+  return lift/dynPressure;
+}
 void logCoeffOfLift(void)
 {
-  logGeneric(lc_col, tabulateFnCoL());
+  logGeneric(lc_col, empiricalCoL());
 }
   
 void logInput(void)
@@ -1050,19 +1052,6 @@ const prog_char_t *applyParamUpdate()
   return NULL;
 }
 
-float tabulateFnCoL()
-{
-  const float lift = cos(alpha)*accZ; // We only want the wing contribution
-  return lift/dynPressure;
-}
-
-float tabulateFnElev()
-{
-  return elevOutput;
-}
-
-float (*tabulateFn)(void);
-
 char *parse(char *ptr)
 {
   while(*ptr && !isblank(*ptr))
@@ -1364,7 +1353,6 @@ void executeCommand(char *buf)
 	  param[0] = maxModels()-1;
 	setModel(param[0], true);
 	storeNVState();
-	tabulator.clear();
       } else { 
 	consoleNote_P(PSTR("Current model is "));
 	consolePrintLn(nvState.model); 
@@ -1493,12 +1481,6 @@ void executeCommand(char *buf)
       consolePrint(logBandWidth);
       consolePrintLn_P(PSTR(" bytes/sec"));
       
-      consoleNoteLn_P(PSTR("Tabulator report"));
-
-      if(numParams > 0)
-	tabulator.report(param[0]);
-      else
-	tabulator.report(0.01);
       break;
       
     case c_reset:
@@ -1507,20 +1489,6 @@ void executeCommand(char *buf)
       consoleNoteLn_P(PSTR("Warning flags reset"));
       break;
 
-    case c_tab_col:
-      if(numParams > 1) {
-	tabulator.setDomain(param[0]/RADIAN, param[1]/RADIAN);
-	tabulateFn = tabulateFnCoL;
-      }
-      break;
-	
-    case c_tab_elev:
-      if(numParams > 1) {
-	tabulator.setDomain(param[0]/RADIAN, param[1]/RADIAN);
-	tabulateFn = tabulateFnElev;
-      }
-      break;
-	
     default:
       consolePrint_P(PSTR("Sorry, command not implemented: \""));
       consolePrint(buf);
@@ -2139,19 +2107,6 @@ void sensorTaskFast()
   effAlpha = clamp(alpha, -RADIAN, RADIAN);
   iasFilter.input(iAS);
   iasFilterSlow.input(iAS);
-
-  //
-  // Tabulate empirical curves
-  //
- 
-  if(vpStatus.aloft && tabulateFn)
-    tabulator.datum(alpha, (*tabulateFn)());
-}
-
-void commitTask()
-{
-  if(vpStatus.aloft)
-    tabulator.commit();
 }
 
 void sensorTaskSlow()
@@ -2545,7 +2500,6 @@ void configurationTask()
     if(vpStatus.aloft && currentTime - lastHighIAS > 2e6) {
       consoleNoteLn_P(PSTR("Flight ENDED"));
       vpStatus.aloft = false;
-      tabulator.invalidate();
     }
     
     lastLowIAS = currentTime;
@@ -3744,8 +3698,6 @@ struct Task taskList[] = {
     HZ_TO_PERIOD(30) },
   { beepTask,
     HZ_TO_PERIOD(BEEP_HZ) },
-  { commitTask,
-    HZ_TO_PERIOD(1.0/10) },
   { NULL } };
 
 int scheduler()
@@ -3904,10 +3856,6 @@ void setup()
   cycleTimeMonitorReset();
   tocTestReset();
 
-  // Tabulator
-
-  tabulator.invalidate();
-      
   // Done
   
   consoleNote_P(PSTR("Initialized, "));
