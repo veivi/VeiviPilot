@@ -478,16 +478,6 @@ void logPosition(void)
   logGeneric(lc_alt, altitude);
 }
   
-float empiricalCoL()
-{
-  const float lift = cos(alpha)*accZ; // We only want the wing contribution
-  return lift/dynPressure;
-}
-void logCoeffOfLift(void)
-{
-  logGeneric(lc_col, empiricalCoL());
-}
-  
 void logInput(void)
 {
   logGeneric(lc_ailestick, aileStick);
@@ -2089,9 +2079,7 @@ void sensorTaskFast()
     heading = (int) (sensorData.heading + 0.5);
     accX = sensorData.accx*FOOT;
     accY = sensorData.accy*FOOT;
-
-    // Simulator accZ is erratic with weight on weels, disregard
-    accZ = vpStatus.simulatorLink ? G : -sensorData.accz*FOOT;
+    accZ = -sensorData.accz*FOOT;
 
     dynPressure = square(iAS) / 2;
     
@@ -2178,7 +2166,6 @@ void slowLogTask()
   logActuator();
   logConfig();
   logPosition();
-  logCoeffOfLift();
 }
 
 void measurementTask()
@@ -2713,12 +2700,10 @@ void configurationTask()
     if(!vpMode.slowFlight) {
       consoleNoteLn_P(PSTR("Slow flight mode ENABLED"));
       vpMode.slowFlight = vpMode.bankLimiter = true;
-      logMark();
     }
   } else if(vpMode.slowFlight) {
     consoleNoteLn_P(PSTR("Slow flight mode DISABLED"));
     vpMode.slowFlight = false;
-    logMark();
   }
 
   if(modeSelectorValue == 0) {
@@ -3141,7 +3126,7 @@ void gaugeTask()
 	consolePrint(alpha*RADIAN, 1);
 	consoleTab(15);
 	consolePrint_P(PSTR(" CoL(rel) = "));
-	consolePrint(2*accZ/square(iAS), 3);
+	consolePrint(2*cos(alpha)*accZ/square(iAS), 3);
 	break;
 	
       case 12:

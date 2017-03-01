@@ -26,6 +26,5 @@ struct LogChannel logChannels[] = {
    [lc_trim] = { lc_trim, "TRIM", -180, 180 },
    [lc_gain] = { lc_gain, "GAIN", 0, 50},
    [lc_test] = { lc_test, "TEST", 0, BYTE_MASK },
-   [lc_alt] = { lc_alt, "ALTI", -10, 300 },
-   [lc_col] = { lc_alt, "COFL", -1.5, 1.5 } };
+   [lc_alt] = { lc_alt, "ALTI", -10, 300 } };
 
