@@ -218,7 +218,7 @@ bool ailePilotInput, elevPilotInput, rudderPilotInput;
 uint32_t controlCycleEnded;
 float elevTrim, effTrim, elevTrimSub, targetAlpha;
 Controller elevCtrl, aileCtrl, pushCtrl;
-float autoAlphaP, rudderMix;
+float autoAlphaP, rudderMix, stallAlpha, shakerAlpha, pusherAlpha;
 float accX, accY, accZ, accTotal, altitude,  bankAngle, pitchAngle, rollRate, pitchRate, targetPitchRate, yawRate, levelBank;
 uint16_t heading;
 NewI2C I2c = NewI2C();
@@ -760,8 +760,8 @@ const float toc_margin_c = 0.03;
 
 bool toc_test_mode(bool reset)
 {
-  return !vpMode.test && vpMode.takeOff
-    && vpMode.wingLeveler && vpMode.bankLimiter && !vpMode.slowFlight;
+  return !vpMode.test && vpMode.wingLeveler
+    && vpMode.bankLimiter && !vpMode.slowFlight;
 }
 
 bool toc_test_trim(bool reset)
@@ -810,6 +810,9 @@ bool toc_test_alpha_range(bool reset)
     zeroAlpha = bigAlpha = false;
     lastNonZeroAlpha = lastSmallAlpha = currentTime;
     
+  } else if(vpStatus.simulatorLink) {
+    
+    zeroAlpha = bigAlpha = true;
   } else if(!zeroAlpha) {
     if(fabs(alpha) > 1.5/RADIAN) {
       lastNonZeroAlpha = currentTime;
@@ -840,7 +843,7 @@ bool toc_test_pitot(bool reset)
   
   if(reset)
     positiveIAS = false;
-  else if(vpStatus.positiveIAS)
+  else if(vpStatus.positiveIAS || vpStatus.simulatorLink)
     positiveIAS = true;
   
   return !pitotFailed() && iasEntropyAcc.output() > 50
@@ -2506,10 +2509,10 @@ void configurationTask()
   //
   
   if(vpMode.alphaFailSafe || vpMode.sensorFailSafe || vpMode.takeOff
-     || alpha < vpParam.alphaMax*1.05) {
+     || alpha < stallAlpha*1.05) {
     if(!vpStatus.stall)
       lastStall = currentTime;
-    else if(currentTime - lastStall > 1.0e6) {
+    else if(currentTime - lastStall > 0.5e6) {
       consoleNoteLn_P(PSTR("We've RECOVERED"));
       vpStatus.stall = false;
     }
@@ -2532,7 +2535,7 @@ void configurationTask()
 
   float turnRate = sqrt(square(rollRate) + square(pitchRate) + square(yawRate));
   
-  bool motionDetected = vpStatus.positiveIAS || turnRate > 5.0/RADIAN
+  bool motionDetected = vpStatus.positiveIAS || turnRate > 10.0/RADIAN
     || fabsf(accTotal - accAvg.output()) > 0.3;
   
   static uint32_t lastMotion;
@@ -2651,23 +2654,26 @@ void configurationTask()
     if(vpMode.alphaFailSafe || vpMode.sensorFailSafe) {
       failsafeDisable();
       
-    } else {
-      if(!vpStatus.positiveIAS && !vpMode.slowFlight) {
+    } else if(!vpStatus.positiveIAS) {
+	    
+      float savedTrim = elevTrim;
+      
+      elevTrim = vpParam.takeoffTrim;
+      vpStatus.silent = false;
+	
+      if(tocTestStatus(tocReportConsole)) {
+	consoleNoteLn_P(PSTR("T/o configuration is GOOD"));
+	goodBeep(1);
+	  
 	if(!vpMode.takeOff) {
 	  consoleNoteLn_P(PSTR("TakeOff mode ENABLED"));
 	  vpMode.takeOff = true;
-	  vpStatus.silent = false;
-	  elevTrim = vpParam.takeoffTrim;
 	}
-	
-	if(tocTestStatus(tocReportConsole)) {
-	  consoleNoteLn_P(PSTR("T/o configuration is GOOD"));
-	  goodBeep(1);
-	} else {
-	  consolePrintLn("");
-	  consoleNoteLn_P(PSTR("T/o configuration test FAILED"));
-	  badBeep(2);
-	}
+      } else {
+	elevTrim = savedTrim;
+	consolePrintLn("");
+	consoleNoteLn_P(PSTR("T/o configuration test FAILED"));
+	badBeep(2);
       }
     }
   } else if(LEVELBUTTON.depressed()) {
@@ -2687,9 +2693,7 @@ void configurationTask()
   // Logging control
   //
 
-  if(vpStatus.positiveIAS && !vpMode.loggingSuppressed)
-    logEnable();
-  else if(vpStatus.fullStop && logLen > logSize*0.90)
+  if(vpStatus.fullStop && logLen > logSize*0.90)
     logDisable();
 
   //
@@ -2777,7 +2781,7 @@ void configurationTask()
   // TakeOff mode disabled when airspeed detected (or fails)
 
   if(vpMode.takeOff
-     && (pitotFailed() || iasFilter.output() > 0.85*vpDerived.stallIAS)) {
+     && (pitotFailed() || iasFilter.output() > 2*vpDerived.stallIAS/3)) {
     consoleNoteLn_P(PSTR("TakeOff COMPLETED"));
     vpMode.takeOff = false;
     
@@ -2842,7 +2846,9 @@ void configurationTask()
   pushCtrl.setZieglerNicholsPID(p_Ku*scale, vpParam.p_Tu);
 
   autoAlphaP = vpParam.o_P;
-  //  maxAlpha = vpParam.alphaMax;
+  stallAlpha = vpParam.alphaMax;
+  shakerAlpha = vpDerived.shakerAlpha;
+  pusherAlpha = vpDerived.pusherAlpha;
   rudderMix = vpParam.r_Mix;
   levelBank = 0;
   
@@ -2930,7 +2936,7 @@ void configurationTask()
       // Pusher gain
 
       pushCtrl.setPID(testGain = testGainExpo(p_Ku_ref), 0, 0);
-      //      maxAlpha = 0.8*vpParam.alphaMax;
+      pusherAlpha = shakerAlpha = 0.8*vpParam.alphaMax;
       break;
 
     case 6:
@@ -2950,7 +2956,9 @@ void configurationTask()
     case 9:
       // Max alpha
 
-      //      maxAlpha = testGain = testGainLinear(20/RADIAN, 10/RADIAN);
+      vpFeature.stabilizeBank = vpMode.bankLimiter = vpFeature.keepLevel = true;
+      shakerAlpha = pusherAlpha = stallAlpha
+	= testGain = testGainLinear(20/RADIAN, 10/RADIAN);
       break;         
 
     case 10:
@@ -3325,7 +3333,7 @@ void controlTask()
   const float shakerLimit = (float) 2/3;
   const float effStick = vpMode.rxFailSafe ? shakerLimit : elevStick;
   const float stickStrength = fmaxf(effStick-shakerLimit, 0)/(1-shakerLimit);
-  const float effMaxAlpha = mixValue(stickStrength, vpDerived.shakerAlpha, vpDerived.pusherAlpha);
+  const float effMaxAlpha = mixValue(stickStrength, shakerAlpha, pusherAlpha);
     
   effTrim = vpFeature.alphaHold ? elevTrim + elevTrimSub : elevTrim;
 
@@ -3837,10 +3845,9 @@ void setup()
 
   accAvg.reset(G);
 
-  // T/o/c test
+  // Cycle time monitor
   
   cycleTimeMonitorReset();
-  tocTestReset();
 
   // Done
   

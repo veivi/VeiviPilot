@@ -2,22 +2,6 @@
 #include "Console.h"
 #include "NVState.h"
 #include <math.h>
-/*
-float coeffOfLift(float aoa)
-{
-  const float alphaCL0 = vpParam.alphaZeroLift,
-    ratio = (aoa - alphaCL0) / (vpParam.alphaMax - alphaCL0);
-
-  if(ratio < 1 - vpParam.col_Peak)
-    return ratio*(1 + vpParam.col_Peak*(PI/2 - 1));
-  else if(vpParam.col_Peak > 0) {
-    return (1 - vpParam.col_Peak)*(1 + vpParam.col_Peak*(PI/2 - 1))
-      + sin((ratio - (1 - vpParam.col_Peak))/vpParam.col_Peak*PI/2)
-      *(1 - (1 - vpParam.col_Peak)*(1 + vpParam.col_Peak*(PI/2 - 1)));
-  } else
-    return 1 - (ratio - 1);
-}
-*/
 
 float coeffOfLift(float aoa)
 {
