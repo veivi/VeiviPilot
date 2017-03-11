@@ -3403,7 +3403,7 @@ void controlTask()
     if(vpFeature.keepLevel)
       // Simple leveling for situations where we want to avoid I term wind-up
       
-      aileOutput = clamp(aileStick - bankAngle /* - rollRate/64 */, -1, 1);
+      aileOutput = clamp(aileStick - bankAngle - rollRate/32, -1, 1);
     
     aileCtrl.reset(aileOutput, 0);
     
@@ -3848,6 +3848,10 @@ void setup()
   // Cycle time monitor
   
   cycleTimeMonitorReset();
+
+  // Initial gear state
+  
+  gearOutput = 0;
 
   // Done
   
