@@ -43,8 +43,11 @@ void Controller::input(float err, float d) {
   prevErr = err;
   
   delta = d;
-  
-  I = clamp(I + Ki*err*delta, rangeMin - Kp*err, rangeMax - Kp*err);
+
+  if(Ki != 0.0)
+    I = clamp(I + Ki*err*delta, rangeMin - Kp*err, rangeMax - Kp*err);
+  else
+    I = 0.0;
 }
 
 float Controller::output(void) {

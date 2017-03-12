@@ -37,6 +37,7 @@ typedef enum {
 
   c_dump,
   c_max,
+  c_virtual,
   c_trim,
   c_stall,
   c_peak,

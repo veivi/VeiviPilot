@@ -746,7 +746,7 @@ typedef enum {
   toc_fdr,
   toc_ram,
   toc_load,
-  toc_ppm
+  toc_link
 } testCode_t;
 
 #define TOC_TEST_NAME_MAX 16
@@ -769,9 +769,10 @@ bool toc_test_trim(bool reset)
     return fabsf(elevTrim - vpParam.takeoffTrim) < toc_margin_c;
 }
   
-bool toc_test_ppm(bool reset)
+bool toc_test_link(bool reset)
 {
-  return currentTime - lastPPMWarn > 10e6;
+  return currentTime - lastPPMWarn > 10e6 &&
+    (!vpParam.virtualOnly || vpStatus.simulatorLink);
 }
 
 bool toc_test_ram(bool reset)
@@ -810,9 +811,6 @@ bool toc_test_alpha_range(bool reset)
     zeroAlpha = bigAlpha = false;
     lastNonZeroAlpha = lastSmallAlpha = currentTime;
     
-  } else if(vpStatus.simulatorLink) {
-    
-    zeroAlpha = bigAlpha = true;
   } else if(!zeroAlpha) {
     if(fabs(alpha) > 1.5/RADIAN) {
       lastNonZeroAlpha = currentTime;
@@ -829,7 +827,7 @@ bool toc_test_alpha_range(bool reset)
     }
   }
   
-  return bigAlpha && zeroAlpha;
+  return (bigAlpha && zeroAlpha) || vpStatus.simulatorLink;
 }
 
 bool toc_test_alpha(bool reset)
@@ -843,11 +841,12 @@ bool toc_test_pitot(bool reset)
   
   if(reset)
     positiveIAS = false;
-  else if(vpStatus.positiveIAS || vpStatus.simulatorLink)
+  else if(vpStatus.positiveIAS)
     positiveIAS = true;
   
-  return !pitotFailed() && iasEntropyAcc.output() > 50
-    && !vpStatus.pitotBlocked && positiveIAS && iAS < 5;
+  return (!pitotFailed() && iasEntropyAcc.output() > 50
+	  && !vpStatus.pitotBlocked && positiveIAS && iAS < 5)
+    || vpStatus.simulatorLink;
 }
 
 bool toc_test_attitude(bool reset)
@@ -967,7 +966,7 @@ const struct TakeoffTest tocTest[] PROGMEM =
     [toc_fdr] = { "FDR", toc_test_fdr },
     [toc_ram] = { "RAM", toc_test_ram },
     [toc_load] = { "LOAD", toc_test_load },
-    [toc_ppm] = { "PPM", toc_test_ppm }
+    [toc_link] = { "LINK", toc_test_link }
   };
 
 const int tocNumOfTests = sizeof(tocTest)/sizeof(struct TakeoffTest);
@@ -1883,7 +1882,8 @@ void tocReportDisplay(bool result, int i, const char *s)
 void displayTask()
 {
   static bool cleared = false;
-  
+  static int count = 0;
+    
   if(vpStatus.silent) {
     if(!cleared) {
       displayClear();
@@ -1895,8 +1895,12 @@ void displayTask()
     cleared = false;
   
   cursorMove(0,0);
+  count++;
+  
   print("Model: ");
+  setAttr(vpMode.takeOff && ((count>>2) & 1));
   print(vpParam.name);
+  setAttr(0);
   printNL();
 
   cursorMove(0,7);
@@ -1911,10 +1915,8 @@ void displayTask()
   cursorMove(0,7);
   print("T/O/C ");
 
-  static int count = 0;
-  
   if(tocStatusFailed) {
-    setAttr((++count/4) & 1);
+    setAttr((count>>2) & 1);
     print("WARNING");
   } else {
     print("GOOD   ");
@@ -2958,7 +2960,7 @@ void configurationTask()
 
       vpFeature.stabilizeBank = vpMode.bankLimiter = vpFeature.keepLevel = true;
       shakerAlpha = pusherAlpha = stallAlpha
-	= testGain = testGainLinear(20/RADIAN, 10/RADIAN);
+	= testGain = testGainLinear(18/RADIAN, 13/RADIAN);
       break;         
 
     case 10:

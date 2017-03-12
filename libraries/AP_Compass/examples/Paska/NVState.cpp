@@ -45,7 +45,10 @@ const struct ParamRecord paramDefaults = {
   .roll_C = 0.1,
   .cL_B = 0.6,
   .servoRate = 60/0.09,
-  .takeoffTrim = 0.25
+  .takeoffTrim = 0.25,
+  .weight = 0,
+  .thrust = 0,
+  .virtualOnly = true
 };
 
 const struct NVStateRecord stateDefaults = {

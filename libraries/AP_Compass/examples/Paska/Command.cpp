@@ -43,6 +43,7 @@ const struct Command commands[] PROGMEM = {
   { "climb", c_climb, e_angle, &vpParam.maxPitch },
   { "weight", c_weight, e_float, &vpParam.weight },
   { "thrust", c_thrust, e_float, &vpParam.thrust },
+  { "virtual", c_virtual, e_int8, &vpParam.virtualOnly },
   { "stall", c_stall },
   { "peak", c_peak },
   { "max", c_max },
