@@ -48,7 +48,7 @@ void Controller::input(float err, float d) {
 }
 
 void UnbiasedController::input(float err, float d) {
-  this->Controller::input(err, d);
+  Controller::input(err, d);
   
   if(Ki == 0.0)
     I = 0.0;
