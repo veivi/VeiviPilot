@@ -44,9 +44,13 @@ void Controller::input(float err, float d) {
   
   delta = d;
 
-  if(Ki != 0.0)
-    I = clamp(I + Ki*err*delta, rangeMin - Kp*err, rangeMax - Kp*err);
-  else
+  I = clamp(I + Ki*err*delta, rangeMin - Kp*err, rangeMax - Kp*err);
+}
+
+void UnbiasedController::input(float err, float d) {
+  this->Controller::input(err, d);
+  
+  if(Ki == 0.0)
     I = 0.0;
 }
 

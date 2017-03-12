@@ -217,7 +217,8 @@ float iAS, dynPressure, alpha, effAlpha, aileStick, elevStick, throttleStick, ru
 bool ailePilotInput, elevPilotInput, rudderPilotInput;
 uint32_t controlCycleEnded;
 float elevTrim, effTrim, elevTrimSub, targetAlpha;
-Controller elevCtrl, aileCtrl, pushCtrl;
+Controller elevCtrl, pushCtrl;
+UnbiasedController aileCtrl;
 float autoAlphaP, rudderMix, stallAlpha, shakerAlpha, pusherAlpha;
 float accX, accY, accZ, accTotal, altitude,  bankAngle, pitchAngle, rollRate, pitchRate, targetPitchRate, yawRate, levelBank;
 uint16_t heading;

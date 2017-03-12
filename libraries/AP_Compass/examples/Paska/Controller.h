@@ -13,9 +13,14 @@ public:
   void limit(float, float);
 
   float output(void);
-private:
+protected:
   float I, D, prevD, delta, prevErr, Kp, Ki, Kd;
   float rangeMin, rangeMax;
+};
+
+class UnbiasedController : public Controller {
+ public:
+  void input(float err, float d);
 };
 
 const float gainTweak_c = 0.80;
