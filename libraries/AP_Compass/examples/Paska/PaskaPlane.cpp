@@ -3849,7 +3849,7 @@ void setup()
 
   // Static controller settings
   
-  pushCtrl.limit(-0.3, 0.3);
+  pushCtrl.limit(-0.5, fmaxf(1 - elevFromAlpha(vpDerived.pusherAlpha), 0.0));
   flapRateLimiter.setRate(0.5);
   
   // Misc filters
