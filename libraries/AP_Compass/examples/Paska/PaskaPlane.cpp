@@ -795,7 +795,7 @@ bool toc_test_load(bool reset)
 
 bool toc_test_fdr(bool reset)
 {
-  return !eepromDevice.status() && logReady(false) && logLen < 0.20*logSize;
+  return !eepromDevice.status() && logReady(false);
 }
 
 bool toc_test_alpha_sensor(bool reset)
@@ -1885,6 +1885,8 @@ void displayTask()
   static bool cleared = false;
   static int count = 0;
     
+  count++;
+  
   if(vpStatus.silent) {
     if(!cleared) {
       displayClear();
@@ -1894,23 +1896,29 @@ void displayTask()
     return;    
   } else
     cleared = false;
+
+  // Model name
   
-  cursorMove(0,0);
-  count++;
-  
-  print("Model: ");
-  setAttr(vpMode.takeOff && ((count>>2) & 1));
+  cursorMove(0, 0);
   print(vpParam.name);
-  setAttr(0);
   printNL();
 
-  cursorMove(0,7);
+  // Status
   
   if(!vpStatus.armed) {
-    print(" DISARMED");
+    cursorMove(16-8, 0);
+    setAttr(true);
+    print("DISARMED");
     return;
+  } else if(vpMode.takeOff) {
+    cursorMove(16-7, 0);
+    setAttr((count>>2) & 1);
+    print("TAKEOFF");
+    setAttr(0);
   }
-  
+
+  // T/O/C test status
+
   tocTestStatus(tocReportDisplay);
 
   cursorMove(0,7);
@@ -3841,7 +3849,7 @@ void setup()
 
   // Static controller settings
   
-  pushCtrl.limit(-0.7, 0.7);
+  pushCtrl.limit(-0.3, 0.3);
   flapRateLimiter.setRate(0.5);
   
   // Misc filters

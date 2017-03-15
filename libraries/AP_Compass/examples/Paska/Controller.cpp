@@ -55,7 +55,7 @@ void UnbiasedController::input(float err, float d) {
 }
 
 float Controller::output(void) {
-  const float diffLimit = 0.5,
+  const float diffLimit = (rangeMax-rangeMin)/6,
     diffTerm = clamp(Kd*(D+prevD)/2/delta, -diffLimit, diffLimit);
   return clamp(Kp*prevErr + I + diffTerm, rangeMin, rangeMax);
 }
