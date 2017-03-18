@@ -778,7 +778,7 @@ bool toc_test_link(bool reset)
 
 bool toc_test_ram(bool reset)
 {
-  return hal.util->available_memory() > (1<<8);
+  return hal.util->available_memory() > (1<<9);
 }
 
 bool toc_test_timing(bool reset)
@@ -790,12 +790,12 @@ bool toc_test_timing(bool reset)
 
 bool toc_test_load(bool reset)
 {
-  return idleAvg > 0.15;
+  return idleAvg > 0.20;
 }
 
 bool toc_test_fdr(bool reset)
 {
-  return !eepromDevice.status() && logReady(false);
+  return !eepromDevice.status() && logReady(false) && logLen == 0;
 }
 
 bool toc_test_alpha_sensor(bool reset)
@@ -1160,10 +1160,12 @@ void executeCommand(char *buf)
     // Simple variable
     //
     
-    for(int i = 0; i < numParams && command.var[i]; i++) {
+    for(int i = 0; command.var[i]; i++) {
+      const char *txt = i < numParams ? paramText[i] : "";
+	
       switch(command.varType) {
       case e_string:
-	strncpy((char*) command.var[i], paramText[i], NAME_LEN-1);
+	strncpy((char*) command.var[i], txt, NAME_LEN-1);
 	break;
       
       case e_uint16:
@@ -2969,7 +2971,7 @@ void configurationTask()
 
       vpFeature.stabilizeBank = vpMode.bankLimiter = vpFeature.keepLevel = true;
       shakerAlpha = pusherAlpha = stallAlpha
-	= testGain = testGainLinear(18/RADIAN, 13/RADIAN);
+	= testGain = testGainLinear(20/RADIAN, 15/RADIAN);
       break;         
 
     case 10:

@@ -33,7 +33,7 @@ struct ParamRecord {
   float s_Ku_C, s_Tu;
   float r_Mix;
   float p_Ku_C, p_Tu;
-  float ff_A, ff_B;
+  float ff_A, ff_B, ff_C;
   float maxPitch;
   float cL_max;
   float roll_C;
@@ -47,6 +47,7 @@ struct ParamRecord {
 struct DerivedParams {
   float stallIAS, zeroLiftAlpha;
   float thresholdAlpha, shakerAlpha, pusherAlpha;
+  float apexAlpha, apexElev;
 };
 
 struct NVStateRecord {

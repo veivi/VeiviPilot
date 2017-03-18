@@ -39,7 +39,7 @@ const struct ParamRecord paramDefaults = {
   .s_Ku_C = 400, .s_Tu = 0.25, 
   .r_Mix = 0.1,
   .p_Ku_C = 100, .p_Tu = 1.0,
-  .ff_A = 0.0, .ff_B = 0.0,
+  .ff_A = 0.0, .ff_B = 0.0, .ff_C = 0.0,
   .maxPitch = 45/RADIAN,
   .cL_max= 0.25,
   .roll_C = 0.1,
@@ -201,12 +201,14 @@ void printParams()
   consolePrint(vpParam.i_Tu, 4);
   consolePrint_P(PSTR(" Outer P = "));
   consolePrintLn(vpParam.o_P, 4);
-  consoleNoteLn_P(PSTR("  Alpha feedforward A+Bx"));
+  consoleNoteLn_P(PSTR("  Alpha feedforward A+Bx+Cx^2"));
   consoleNote_P(PSTR("    "));
   consolePrint(vpParam.ff_A, 5);
   consolePrint_P(PSTR(" + "));
   consolePrint(vpParam.ff_B, 5);
-  consolePrint_P(PSTR(" x  (eff alpha range = "));
+  consolePrint_P(PSTR(" x + "));
+  consolePrint(vpParam.ff_C, 5);
+  consolePrint_P(PSTR(" x^2  (eff alpha range = "));
   consolePrint(alphaFromElev(-1.0)*RADIAN);
   consolePrint_P(PSTR(" ... "));
   consolePrint(alphaFromElev(1.0)*RADIAN);
@@ -375,12 +377,24 @@ void backupParams()
 
 float elevFromAlpha(float x)
 {
-  return vpParam.ff_A + vpParam.ff_B*x;
+  const float a = vpParam.ff_C, b = vpParam.ff_B, c = vpParam.ff_A;
+
+  if(c != 0.0 && x > vpDerived.apexAlpha)
+    return vpDerived.apexElev;
+  else
+    return a*square(x) + b*x + c;
 }
 
-float alphaFromElev(float x)
+float alphaFromElev(float y)
 {
-  return (x - vpParam.ff_A)/vpParam.ff_B;
+  const float a = vpParam.ff_C, b = vpParam.ff_B, c = vpParam.ff_A;
+  
+  if(c == 0.0)
+    return (y - c)/b;
+  else if(y > vpDerived.apexElev)
+    return vpParam.alphaMax;
+  else
+    return (-b+sqrt(square(b)-4*a*(c - y)))/(2*a);
 }
 
 void deriveParams()
@@ -403,5 +417,16 @@ void deriveParams()
     coeffOfLiftInverse(vpParam.cL_max/square(1 + thresholdMargin_c/2));
   vpDerived.pusherAlpha =
     coeffOfLiftInverse(vpParam.cL_max/square(1 + thresholdMargin_c/4));
+
+  //
+  // Feedforward apex
+  //
+
+  if(vpParam.ff_C != 0.0) {
+    vpDerived.apexAlpha = -vpParam.ff_B / (2*vpParam.ff_C);
+    vpDerived.apexElev = vpParam.ff_A + vpParam.ff_B*vpDerived.apexAlpha + vpParam.ff_C*square(vpDerived.apexAlpha);
+  } else {
+    vpDerived.apexAlpha = vpDerived.apexElev = 0.0;
+  }
 }
 
