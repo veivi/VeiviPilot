@@ -1059,27 +1059,27 @@ char *parse(char *ptr)
   return ptr;
 }
 
-void printCoeffElement(float v)
+void printCoeffElement(float y0, float y1, float x, float v)
 {
     consoleNote("");
-    consolePrint(v*RADIAN);
+    consolePrint(x);
     consoleTab(10);
 
-    const int col0 = 20, col1 = 78;
-    int x = col0 + (col1-col0) * coeffOfLift(v)/vpParam.cL_max;
+    const int col1 = 78, col0 = 10+(col1-10)*-y0/(y1-y0);
+    int y = col0 + (col1-col0) * v / y1;
 
-    if(x < col0) {
-      consoleTab(x);
+    if(y < col0) {
+      consoleTab(y);
       consolePrint("*");
       consoleTab(col0);
       consolePrint("|");
       consoleTab(col1);
       consolePrintLn("|");
-    } else if(x > col0) {
+    } else if(y > col0) {
       consoleTab(col0);
       consolePrint("|");
-      consoleTab(x);
-      if(x < col1) {
+      consoleTab(y);
+      if(y < col1) {
 	consolePrint("*");
 	consoleTab(col1);
 	consolePrintLn("|");
@@ -1377,10 +1377,20 @@ void executeCommand(char *buf)
       break;
 
     case c_curve:
+      consoleNoteLn_P(PSTR("Feed-forward curve"));
+  
+      for(float aR = -1; aR <= 1; aR += 0.07)
+	printCoeffElement(-1, 1, vpParam.alphaMax*aR*RADIAN, elevFromAlpha(vpParam.alphaMax*aR));
+
+      consoleNoteLn_P(PSTR("Inverse feed-forward curve"));
+  
+      for(float e = 1; e >= -1; e -= 0.07)
+	printCoeffElement(-vpParam.alphaMax/2, vpParam.alphaMax, e, alphaFromElev(e));
+
       consoleNoteLn_P(PSTR("CoL(norm) curve"));
   
       for(float aR = -0.2; aR <= 1.2; aR += 0.07)
-	printCoeffElement(vpParam.alphaMax*aR);
+	printCoeffElement(-0.2, 1, vpParam.alphaMax*aR*RADIAN, coeffOfLift(vpParam.alphaMax*aR)/vpParam.cL_max);
       break;
       
     case c_clear:

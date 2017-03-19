@@ -382,7 +382,7 @@ float elevFromAlpha(float x)
   if(c != 0.0 && x > vpDerived.apexAlpha)
     return vpDerived.apexElev;
   else
-    return a*square(x) + b*x + c;
+    return clamp(a*square(x) + b*x + c, -1, 1);
 }
 
 float alphaFromElev(float y)
@@ -394,7 +394,7 @@ float alphaFromElev(float y)
   else if(y > vpDerived.apexElev)
     return vpParam.alphaMax;
   else
-    return (-b+sqrt(square(b)-4*a*(c - y)))/(2*a);
+    return clamp((-b+sqrt(square(b)-4*a*(c - y)))/(2*a), -vpParam.alphaMax, vpParam.alphaMax);;
 }
 
 void deriveParams()
