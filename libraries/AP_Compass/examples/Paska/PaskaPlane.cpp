@@ -734,7 +734,6 @@ void cycleTimeMonitor(float value)
 
 typedef enum {
   toc_mode,
-  toc_trim,
   toc_alpha,
   toc_gyro,
   toc_attitude,
@@ -761,15 +760,10 @@ const float toc_margin_c = 0.03;
 
 bool toc_test_mode(bool reset)
 {
-  return !vpMode.test && vpMode.wingLeveler
-    && vpMode.bankLimiter && !vpMode.slowFlight;
+  return !vpMode.test && !vpMode.slowFlight
+    && vpMode.wingLeveler && vpMode.bankLimiter && vpMode.takeOff;
 }
 
-bool toc_test_trim(bool reset)
-{
-    return fabsf(elevTrim - vpParam.takeoffTrim) < toc_margin_c;
-}
-  
 bool toc_test_link(bool reset)
 {
   return currentTime - lastPPMWarn > 10e6 &&
@@ -954,7 +948,6 @@ bool toc_test_button(bool reset)
 const struct TakeoffTest tocTest[] PROGMEM =
   {
     [toc_mode] = { "MODE", toc_test_mode },
-    [toc_trim] = { "TRIM", toc_test_trim },
     [toc_alpha] = { "ALPHA", toc_test_alpha },
     [toc_gyro] = { "GYRO", toc_test_gyro },
     [toc_attitude] = { "ATTI", toc_test_attitude },
@@ -1387,7 +1380,7 @@ void executeCommand(char *buf)
       for(float e = 1; e >= -1; e -= 0.07)
 	printCoeffElement(-vpParam.alphaMax/2, vpParam.alphaMax, e, alphaFromElev(e));
 
-      consoleNoteLn_P(PSTR("CoL(norm) curve"));
+      consoleNoteLn_P(PSTR("Coeff of lift per Wing Load"));
   
       for(float aR = -0.2; aR <= 1.2; aR += 0.07)
 	printCoeffElement(-0.2, 1, vpParam.alphaMax*aR*RADIAN, coeffOfLift(vpParam.alphaMax*aR)/vpParam.cL_max);
@@ -2679,23 +2672,22 @@ void configurationTask()
       
     } else if(!vpStatus.positiveIAS) {
 	    
-      float savedTrim = elevTrim;
-      
-      elevTrim = vpParam.takeoffTrim;
       vpStatus.silent = false;
+
+      bool prevMode = vpMode.takeOff;
+      
+      if(!vpMode.takeOff) {
+	consoleNoteLn_P(PSTR("TakeOff mode ENABLED"));
+	vpMode.takeOff = true;
+      }
 	
       if(tocTestStatus(tocReportConsole)) {
 	consoleNoteLn_P(PSTR("T/o configuration is GOOD"));
 	goodBeep(1);
-	  
-	if(!vpMode.takeOff) {
-	  consoleNoteLn_P(PSTR("TakeOff mode ENABLED"));
-	  vpMode.takeOff = true;
-	}
       } else {
-	elevTrim = savedTrim;
 	consolePrintLn("");
 	consoleNoteLn_P(PSTR("T/o configuration test FAILED"));
+	vpMode.takeOff = prevMode;
 	badBeep(2);
       }
     }
@@ -2996,19 +2988,6 @@ void configurationTask()
     s_Ku_ref = s_Ku;
     i_Ku_ref = i_Ku;
     p_Ku_ref = p_Ku;
-  }
-
-  //
-  // Trim adjustment by mode
-  //
-
-  if(!vpFeature.alphaHold) {
-    if(vpStatus.aloft)
-      elevTrimSub =
-	elevFromAlpha(clamp(effAlpha, vpDerived.zeroLiftAlpha, vpParam.alphaMax))
-	- elevStick - elevTrim;
-    else
-      elevTrimSub = 0;
   }
 }
 
@@ -3517,12 +3496,27 @@ void trimTask()
     elevTrim += sign(elevStick) * trimRate / TRIM_HZ;
   }
   
-  const float trimMin = -0.50, trimMax = 0.80;
+  const float trimMin = -0.30, trimMax = 0.90;
   
-  if(!vpFeature.alphaHold)
+  if(vpMode.takeOff) {
+    // Takeoff mode enabled, trim is fixed
+    
+    if(vpMode.slowFlight)
+      elevTrim = elevFromAlpha(vpDerived.thresholdAlpha);
+    else
+      elevTrim = vpParam.takeoffTrim;
+      
+    elevTrimSub = 0;
+      
+  } else if(!vpFeature.alphaHold) {
+    
     elevTrim = clamp(elevTrim, trimMin, trimMax);
   
-  else
+    if(vpStatus.positiveIAS)
+      elevTrimSub = elevFromAlpha(effAlpha) - elevStick - elevTrim;
+    else
+      elevTrimSub = 0;
+  } else
     elevTrim = clamp(elevTrim,
 		     trimMin - elevTrimSub,
 		     elevFromAlpha(vpDerived.thresholdAlpha) - elevTrimSub);
