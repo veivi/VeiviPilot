@@ -216,7 +216,7 @@ float testGain = 0;
 float iAS, dynPressure, alpha, effAlpha, aileStick, elevStick, throttleStick, rudderStick, tuningKnob;
 bool ailePilotInput, elevPilotInput, rudderPilotInput;
 uint32_t controlCycleEnded;
-float elevTrim, effTrim, elevTrimSub, targetAlpha;
+float elevTrim, elevTrimSub, targetAlpha;
 Controller elevCtrl, pushCtrl;
 UnbiasedController aileCtrl;
 float autoAlphaP, rudderMix, stallAlpha, shakerAlpha, pusherAlpha;
@@ -463,7 +463,7 @@ void logConfig(void)
   logGeneric(lc_mode, modeSum);
   logGeneric(lc_target, targetAlpha*RADIAN);
   logGeneric(lc_target_pr, targetPitchRate*RADIAN);
-  logGeneric(lc_trim, effTrim*100);
+  logGeneric(lc_trim, elevTrim*100);
 
   if(vpMode.test) {
     logGeneric(lc_gain, testGain);
@@ -760,7 +760,7 @@ const float toc_margin_c = 0.03;
 
 bool toc_test_mode(bool reset)
 {
-  return !vpMode.test && !vpMode.slowFlight
+  return !vpMode.test
     && vpMode.wingLeveler && vpMode.bankLimiter && vpMode.takeOff;
 }
 
@@ -2005,7 +2005,7 @@ void receiverTask()
     vpFeature.pusher = false;
 
     trimRateLimiter.setRate(1.5/RADIAN);
-    elevTrim = elevFromAlpha(vpDerived.thresholdAlpha) - elevTrimSub;
+    elevTrim = elevFromAlpha(vpDerived.thresholdAlpha);
   } else
     trimRateLimiter.setRate(CIRCLE);
       
@@ -2718,11 +2718,22 @@ void configurationTask()
   if(modeSelectorValue == -1) {
     if(!vpMode.slowFlight) {
       consoleNoteLn_P(PSTR("Slow flight mode ENABLED"));
-      vpMode.slowFlight = vpMode.bankLimiter = true;
-    }
+      
+      // Adjust trim for the predictor error
+    
+      if(vpStatus.positiveIAS)
+	elevTrim += elevFromAlpha(effAlpha) - elevOutput;
+    }    
+
+    vpMode.slowFlight = vpMode.bankLimiter = true;
   } else if(vpMode.slowFlight) {
     consoleNoteLn_P(PSTR("Slow flight mode DISABLED"));
     vpMode.slowFlight = false;
+
+    // Adjust trim for the predictor error
+    
+    if(vpStatus.positiveIAS)
+      elevTrim -= elevFromAlpha(effAlpha) - elevOutput;
   }
 
   if(modeSelectorValue == 0) {
@@ -3337,9 +3348,7 @@ void controlTask()
   const float stickStrength = fmaxf(effStick-shakerLimit, 0)/(1-shakerLimit);
   const float effMaxAlpha = mixValue(stickStrength, shakerAlpha, pusherAlpha);
     
-  effTrim = vpFeature.alphaHold ? elevTrim + elevTrimSub : elevTrim;
-
-  elevOutput = effStick + effTrim;
+  elevOutput = effStick + elevTrim;
   
   targetAlpha = trimRateLimiter.input
     (clamp(alphaFromElev(elevOutput), -vpParam.alphaMax, effMaxAlpha),
@@ -3396,7 +3405,7 @@ void controlTask()
   if(vpMode.rxFailSafe)
     maxBank = 10/RADIAN;
   else if(vpFeature.alphaHold)
-    maxBank /= 1 + alphaFromElev(effTrim) / vpDerived.thresholdAlpha / 2;
+    maxBank /= 1 + alphaFromElev(elevTrim) / vpDerived.thresholdAlpha / 2;
   
   float targetRollRate = maxRollRate*aileStick;
 
@@ -3495,8 +3504,32 @@ void trimTask()
     const float trimRate = trimRateMin_c + fabsf(elevStick)*trimRateRange_c;
     elevTrim += sign(elevStick) * trimRate / TRIM_HZ;
   }
+
+  //
+  // Adjust for predictor error when moving in/out of slow flight
+  //
   
-  const float trimMin = -0.30, trimMax = 0.90;
+  static bool prevMode;
+
+  if(prevMode != vpFeature.alphaHold && vpStatus.positiveIAS) {
+
+    const float predictError =
+      clamp(elevFromAlpha(effAlpha) - elevOutput, -0.15, 0.15);
+      
+    if(vpFeature.alphaHold)
+      elevTrim += predictError;
+    else
+      elevTrim -= predictError;
+  }
+
+  prevMode = vpFeature.alphaHold;
+
+  //
+  // Trim limits
+  //
+  
+  const float trimMin = -0.30,
+    trimMax = vpFeature.alphaHold ? elevFromAlpha(vpDerived.thresholdAlpha) : 0.80;
   
   if(vpMode.takeOff) {
     // Takeoff mode enabled, trim is fixed
@@ -3506,20 +3539,9 @@ void trimTask()
     else
       elevTrim = vpParam.takeoffTrim;
       
-    elevTrimSub = 0;
-      
-  } else if(!vpFeature.alphaHold) {
+  } else
     
     elevTrim = clamp(elevTrim, trimMin, trimMax);
-  
-    if(vpStatus.positiveIAS)
-      elevTrimSub = elevFromAlpha(effAlpha) - elevStick - elevTrim;
-    else
-      elevTrimSub = 0;
-  } else
-    elevTrim = clamp(elevTrim,
-		     trimMin - elevTrimSub,
-		     elevFromAlpha(vpDerived.thresholdAlpha) - elevTrimSub);
 }
 
 void pingTestTask()
