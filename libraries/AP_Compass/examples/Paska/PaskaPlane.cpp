@@ -2716,24 +2716,12 @@ void configurationTask()
   //
 
   if(modeSelectorValue == -1) {
-    if(!vpMode.slowFlight) {
+    if(!vpMode.slowFlight)
       consoleNoteLn_P(PSTR("Slow flight mode ENABLED"));
-      
-      // Adjust trim for the predictor error
-    
-      if(vpStatus.positiveIAS)
-	elevTrim += elevFromAlpha(effAlpha) - elevOutput;
-    }    
-
     vpMode.slowFlight = vpMode.bankLimiter = true;
   } else if(vpMode.slowFlight) {
     consoleNoteLn_P(PSTR("Slow flight mode DISABLED"));
     vpMode.slowFlight = false;
-
-    // Adjust trim for the predictor error
-    
-    if(vpStatus.positiveIAS)
-      elevTrim -= elevFromAlpha(effAlpha) - elevOutput;
   }
 
   if(modeSelectorValue == 0) {
@@ -3514,12 +3502,12 @@ void trimTask()
   if(prevMode != vpFeature.alphaHold && vpStatus.positiveIAS) {
 
     const float predictError =
-      clamp(elevFromAlpha(effAlpha) - elevOutput, -0.15, 0.15);
+      clamp(elevOutput - elevFromAlpha(effAlpha), -0.2, 0.2);
       
     if(vpFeature.alphaHold)
-      elevTrim += predictError;
-    else
       elevTrim -= predictError;
+    else
+      elevTrim += predictError;
   }
 
   prevMode = vpFeature.alphaHold;
@@ -3527,9 +3515,6 @@ void trimTask()
   //
   // Trim limits
   //
-  
-  const float trimMin = -0.30,
-    trimMax = vpFeature.alphaHold ? elevFromAlpha(vpDerived.thresholdAlpha) : 0.80;
   
   if(vpMode.takeOff) {
     // Takeoff mode enabled, trim is fixed
@@ -3540,8 +3525,7 @@ void trimTask()
       elevTrim = vpParam.takeoffTrim;
       
   } else
-    
-    elevTrim = clamp(elevTrim, trimMin, trimMax);
+    elevTrim = clamp(elevTrim, -0.30, elevFromAlpha(vpDerived.thresholdAlpha));
 }
 
 void pingTestTask()
