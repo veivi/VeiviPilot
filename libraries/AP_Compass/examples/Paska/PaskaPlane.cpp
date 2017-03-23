@@ -3502,12 +3502,12 @@ void trimTask()
   if(prevMode != vpFeature.alphaHold && vpStatus.positiveIAS) {
 
     const float predictError =
-      clamp(elevOutput - elevFromAlpha(effAlpha), -0.2, 0.2);
+      clamp(elevFromAlpha(effAlpha) - elevOutput, -0.2, 0.2);
       
     if(vpFeature.alphaHold)
-      elevTrim -= predictError;
-    else
       elevTrim += predictError;
+    else
+      elevTrim -= predictError;
   }
 
   prevMode = vpFeature.alphaHold;
