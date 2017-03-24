@@ -213,7 +213,7 @@ float controlCycle = 10.0e-3;
 uint32_t idleMicros;
 float idleAvg, logBandWidth, ppmFreq, simInputFreq;
 float testGain = 0;
-float iAS, dynPressure, alpha, effAlpha, aileStick, elevStick, throttleStick, rudderStick, tuningKnob;
+float iAS, dynPressure, alpha, aileStick, elevStick, throttleStick, rudderStick, tuningKnob;
 bool ailePilotInput, elevPilotInput, rudderPilotInput;
 uint32_t controlCycleEnded;
 float elevTrim, elevTrimSub, targetAlpha;
@@ -2111,7 +2111,6 @@ void sensorTaskFast()
   // Derived values
   //
     
-  effAlpha = clamp(alpha, -RADIAN, RADIAN);
   iasFilter.input(iAS);
   iasFilterSlow.input(iAS);
 }
@@ -2484,7 +2483,7 @@ void configurationTask()
   // Do we have positive airspeed?
   //
 
-  static uint32_t lastNegativeIAS, lastHighIAS, lastLowIAS, lastStall;
+  static uint32_t lastNegativeIAS, lastStall;
 
   if(vpStatus.pitotBlocked || iasFilter.output() < vpDerived.stallIAS/2) {
     if(vpStatus.positiveIAS) {
@@ -2497,27 +2496,6 @@ void configurationTask()
   } else if(currentTime - lastNegativeIAS > 1e6 && !vpStatus.positiveIAS) {
     consoleNoteLn_P(PSTR("We have POSITIVE AIRSPEED"));
     vpStatus.positiveIAS = true;
-  }
-
-  //
-  // Are we airborne?
-  //
-  
-  if(vpStatus.pitotBlocked || iAS < vpDerived.stallIAS*0.85) {
-    if(vpStatus.aloft && currentTime - lastHighIAS > 2e6) {
-      consoleNoteLn_P(PSTR("Flight ENDED"));
-      vpStatus.aloft = false;
-    }
-    
-    lastLowIAS = currentTime;
-
-  } else {
-    lastHighIAS = currentTime;
-
-    if(currentTime - lastLowIAS > 5e6 && !vpStatus.aloft) {
-      consoleNoteLn_P(PSTR("We think we're ALOFT"));
-      vpStatus.aloft = true;
-    }
   }
 
   //
@@ -3344,7 +3322,7 @@ void controlTask()
 
   if(vpFeature.alphaHold)
     targetPitchRate = nominalPitchRate(bankAngle, targetAlpha)
-      + clamp(targetAlpha - effAlpha,
+      + clamp(targetAlpha - alpha,
 	      -30/RADIAN - pitchAngle,
 	      vpParam.maxPitch - pitchAngle)*autoAlphaP;
 
@@ -3369,15 +3347,15 @@ void controlTask()
   // Pusher
 
   if(vpFeature.alphaHold && !vpFeature.stabilizePitch) {
-    pushCtrl.input(targetAlpha - effAlpha, controlCycle);
+    pushCtrl.input(targetAlpha - alpha, controlCycle);
     elevOutput = elevOutputFeedForward + pushCtrl.output();
   } else if(vpFeature.pusher) {
-    pushCtrl.input(effMaxAlpha - effAlpha, controlCycle);
+    pushCtrl.input(effMaxAlpha - alpha, controlCycle);
     elevOutput = fminf(elevOutput,
 		       elevFromAlpha(effMaxAlpha) + pushCtrl.output());
   } else
     pushCtrl.reset(elevOutput - elevFromAlpha(effMaxAlpha),
-		   effMaxAlpha - effAlpha);
+		   effMaxAlpha - alpha);
   
   elevOutput = clamp(elevOutput, -1, 1);
 
@@ -3494,7 +3472,7 @@ void trimTask()
   }
 
   //
-  // Adjust for predictor error when moving in/out of slow flight
+  // Adjust for alpha-elev predictor error when moving in/out of slow flight
   //
   
   static bool prevMode;
@@ -3502,7 +3480,7 @@ void trimTask()
   if(prevMode != vpFeature.alphaHold && vpStatus.positiveIAS) {
 
     const float predictError =
-      clamp(elevFromAlpha(effAlpha) - elevOutput, -0.2, 0.2);
+      clamp(elevFromAlpha(alpha) - elevOutput, -0.2, 0.2);
       
     if(vpFeature.alphaHold)
       elevTrim += predictError;
