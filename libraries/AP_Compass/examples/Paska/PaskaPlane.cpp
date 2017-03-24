@@ -3503,7 +3503,7 @@ void trimTask()
       elevTrim = vpParam.takeoffTrim;
       
   } else
-    elevTrim = clamp(elevTrim, -0.30, elevFromAlpha(vpDerived.thresholdAlpha));
+    elevTrim = clamp(elevTrim, 0, elevFromAlpha(vpDerived.thresholdAlpha));
 }
 
 void pingTestTask()
