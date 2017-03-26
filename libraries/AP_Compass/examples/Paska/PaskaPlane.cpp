@@ -733,20 +733,20 @@ void cycleTimeMonitor(float value)
 //
 
 typedef enum {
-  toc_mode,
-  toc_alpha,
-  toc_gyro,
   toc_attitude,
+  toc_gyro,
+  toc_alpha,
+  toc_mode,
+  toc_link,
   toc_pitot,
-  toc_button,
-  toc_tuning,
-  toc_timing,
   toc_lstick,
   toc_rstick,
+  toc_timing,
+  toc_tuning,
+  toc_button,
   toc_fdr,
   toc_ram,
   toc_load,
-  toc_link
 } testCode_t;
 
 #define TOC_TEST_NAME_MAX 16
@@ -846,7 +846,7 @@ bool toc_test_pitot(bool reset)
 
 bool toc_test_attitude(bool reset)
 {
-  return fabsf(pitchAngle) < 15.0/RADIAN && fabsf(bankAngle) < 15.0/RADIAN;
+  return fabsf(pitchAngle) < 10.0/RADIAN && fabsf(bankAngle) < 5.0/RADIAN;
 }
 
 bool toc_test_gyro(bool reset)
@@ -947,20 +947,20 @@ bool toc_test_button(bool reset)
 
 const struct TakeoffTest tocTest[] PROGMEM =
   {
-    [toc_mode] = { "MODE", toc_test_mode },
-    [toc_alpha] = { "ALPHA", toc_test_alpha },
-    [toc_gyro] = { "GYRO", toc_test_gyro },
     [toc_attitude] = { "ATTI", toc_test_attitude },
+    [toc_gyro] = { "GYRO", toc_test_gyro },
+    [toc_alpha] = { "ALPHA", toc_test_alpha },
+    [toc_mode] = { "MODE", toc_test_mode },
+    [toc_link] = { "LINK", toc_test_link },
     [toc_pitot] = { "PITOT", toc_test_pitot },
-    [toc_button] = { "BUTN", toc_test_button },
-    [toc_tuning] = { "TUNE", toc_test_tuning },
-    [toc_timing] = { "TIMNG", toc_test_timing },
     [toc_lstick] = { "LSTK", toc_test_lstick },
     [toc_rstick] = { "RSTK", toc_test_rstick },
+    [toc_timing] = { "TIMNG", toc_test_timing },
+    [toc_tuning] = { "TUNE", toc_test_tuning },
+    [toc_button] = { "BUTN", toc_test_button },
     [toc_fdr] = { "FDR", toc_test_fdr },
     [toc_ram] = { "RAM", toc_test_ram },
-    [toc_load] = { "LOAD", toc_test_load },
-    [toc_link] = { "LINK", toc_test_link }
+    [toc_load] = { "LOAD", toc_test_load }
   };
 
 const int tocNumOfTests = sizeof(tocTest)/sizeof(struct TakeoffTest);
@@ -3364,7 +3364,8 @@ void controlTask()
   //
   
   aileOutput = aileStick;
-    
+
+  const float rollP = 2.5;
   const float maxRollRate = scaleByIAS(vpParam.roll_C, stabilityAileExp2_c);
   float maxBank = 45/RADIAN;
 
@@ -3390,18 +3391,16 @@ void controlTask()
       // Strong leveler enabled
         
       targetRollRate =
-	clamp((levelBank + aileStick*maxBank - bankAngle)*maxRollRate,
+	clamp((levelBank + aileStick*maxBank - bankAngle)*rollP,
 	      -maxRollRate, maxRollRate);
 
     else if(vpMode.bankLimiter) {
       // Bank limiter + weak leveling
 
-      targetRollRate -=
-	maxRollRate*clamp(bankAngle, -0.5/RADIAN, 0.5/RADIAN);
+      targetRollRate -= rollP*clamp(bankAngle, -0.5/RADIAN, 0.5/RADIAN);
       
-      targetRollRate = clamp(targetRollRate,
-			     (-maxBank - bankAngle)*maxRollRate,
-			     (maxBank - bankAngle)*maxRollRate);
+      targetRollRate =
+	clamp(targetRollRate, (-maxBank - bankAngle)*rollP, (maxBank - bankAngle)*rollP);
     }
       
     aileCtrl.input(targetRollRate - rollRate, controlCycle);
@@ -3412,10 +3411,9 @@ void controlTask()
     
   // Rudder
     
-  rudderOutput = steerOutput = rudderStick;
-
-  if(!vpStatus.weightOnWheels)
-    rudderOutput += aileRateLimiter.output()*rudderMix;
+  steerOutput = rudderStick;
+  
+  rudderOutput = rudderStick + aileRateLimiter.output()*rudderMix;
 
   // Flaps
   
