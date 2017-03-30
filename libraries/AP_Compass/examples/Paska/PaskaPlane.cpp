@@ -39,6 +39,8 @@ extern "C" {
 //
 //
 
+const float airDensity_c = 1.225;
+
 const float stabilityElevExp_c = -1.5;
 const float stabilityAileExp1_c = -1.5;
 const float stabilityAileExp2_c = 0.5;
@@ -2039,12 +2041,13 @@ void sensorTaskFast()
   
   alpha = alphaFilter.output();
   
-  // Airspeed
+  // Dynamic pressure, corrected for alpha (assuming zero setting angle)
   
   const float pascalsPerPSI_c = 6894.7573, range_c = 2*1.1;
   const float factor_c = pascalsPerPSI_c * range_c / (1L<<(8*sizeof(uint16_t)));
     
-  dynPressure = pressureBuffer.output() * factor_c;
+  dynPressure = pressureBuffer.output() * factor_c
+    / cos(clamp(alpha, -vpParam.alphaMax, vpParam.alphaMax));
   
   // Attitude
 
@@ -2100,10 +2103,10 @@ void sensorTaskFast()
     accY = sensorData.accy*FOOT;
     accZ = -sensorData.accz*FOOT;
 
-    dynPressure = square(iAS) / 2;
+    dynPressure = airDensity_c * square(iAS) / 2;
     
   } else if(dynPressure > 0)    
-    iAS = sqrtf(2*dynPressure);
+    iAS = sqrtf(2 * dynPressure / airDensity_c);
   else
     iAS = 0;
 
