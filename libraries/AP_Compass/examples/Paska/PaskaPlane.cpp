@@ -846,7 +846,7 @@ bool toc_test_pitot(bool reset)
 
 bool toc_test_attitude(bool reset)
 {
-  return fabsf(pitchAngle) < 10.0/RADIAN && fabsf(bankAngle) < 5.0/RADIAN;
+  return fabsf(pitchAngle) < 10.0/RADIAN && fabsf(bankAngle) < 2.5/RADIAN;
 }
 
 bool toc_test_gyro(bool reset)
@@ -2429,11 +2429,12 @@ void analyzerTask()
 //
 
 const int paramSteps = 20;
+const float testRange_c = 3;
 
 static float testGainExpoGeneric(float range, float param)
 {
   static float state;
-  return exp(log(4)*(2*quantize(param, &state, paramSteps)-1))*range;
+  return exp(log(testRange_c)*(2*quantize(param, &state, paramSteps)-1))*range;
 }
 
 float testGainExpo(float range)
@@ -2825,7 +2826,7 @@ void configurationTask()
   float scale = 1.0;
   
   if(vpMode.test && nvState.testNum == 0)
-    scale = testGainLinear(1.0/5, 1.0);
+    scale = testGainLinear(1.0/3, 1.5);
   
   // Default controller settings
 
