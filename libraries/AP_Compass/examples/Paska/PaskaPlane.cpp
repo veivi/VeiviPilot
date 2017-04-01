@@ -2105,7 +2105,7 @@ void sensorTaskFast()
 
     dynPressure = airDensity_c * square(iAS) / 2;
     
-  } else if(dynPressure > 0)    
+  } else if(dynPressure > 0)
     iAS = sqrtf(2 * dynPressure / airDensity_c);
   else
     iAS = 0;
@@ -2481,8 +2481,11 @@ static void failsafeDisable()
   }
 }
 
-void configurationTask()
+void statusTask()
 {
+  if(!vpStatus.armed)
+    return;
+  
   //
   // Do we have positive airspeed?
   //
@@ -2503,28 +2506,7 @@ void configurationTask()
   }
 
   //
-  // Stall detection
-  //
-  
-  if(vpMode.alphaFailSafe || vpMode.sensorFailSafe || vpMode.takeOff
-     || alpha < stallAlpha*1.05) {
-    if(!vpStatus.stall)
-      lastStall = currentTime;
-    else if(currentTime - lastStall > 0.5e6) {
-      consoleNoteLn_P(PSTR("We've RECOVERED"));
-      vpStatus.stall = false;
-    }
-  } else {
-    if(vpStatus.stall)
-      lastStall = currentTime;
-    else if(currentTime - lastStall > 0.5e6) {
-      consoleNoteLn_P(PSTR("We're STALLING"));
-      vpStatus.stall = true;
-    }
-  }
-
-  //
-  // Are we moving?
+  // Movement detection
   //
   
   accTotal = sqrtf(square(accX) + square(accY) + square(accZ));
@@ -2552,7 +2534,29 @@ void configurationTask()
   }
 
   //
-  // Configuration control
+  // Stall detection
+  //
+  
+  if(vpMode.alphaFailSafe || vpMode.sensorFailSafe || vpMode.takeOff
+     || alpha < stallAlpha*1.05) {
+    if(!vpStatus.stall)
+      lastStall = currentTime;
+    else if(currentTime - lastStall > 0.5e6) {
+      consoleNoteLn_P(PSTR("We've RECOVERED"));
+      vpStatus.stall = false;
+    }
+  } else {
+    if(vpStatus.stall)
+      lastStall = currentTime;
+    else if(currentTime - lastStall > 0.5e6) {
+      consoleNoteLn_P(PSTR("We're STALLING"));
+      vpStatus.stall = true;
+    }
+  }
+}
+  
+void configurationTask()
+{
   //
   // Being armed?
   //
@@ -3676,6 +3680,8 @@ struct Task taskList[] = {
   { sensorMonitorTask,
     HZ_TO_PERIOD(CONFIG_HZ) },
   { configurationTask,
+    HZ_TO_PERIOD(CONFIG_HZ) },
+  { statusTask,
     HZ_TO_PERIOD(CONFIG_HZ) },
   { fastLogTask,
     HZ_TO_PERIOD(LOG_HZ_FAST) },
