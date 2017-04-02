@@ -48,6 +48,8 @@ const struct ParamRecord paramDefaults = {
   .takeoffTrim = 0.25,
   .weight = 0,
   .thrust = 0,
+  .elevon = 0,
+  .veeTail = 0,
   .virtualOnly = true
 };
 

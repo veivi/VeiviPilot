@@ -44,6 +44,8 @@ const struct Command commands[] PROGMEM = {
   { "weight", c_weight, e_float, &vpParam.weight },
   { "thrust", c_thrust, e_float, &vpParam.thrust },
   { "virtual", c_virtual, e_int8, &vpParam.virtualOnly },
+  { "elevon", c_elevon, e_int8, &vpParam.elevon },
+  { "vtail", c_vtail, e_int8, &vpParam.veeTail },
   { "stall", c_stall },
   { "peak", c_peak },
   { "max", c_max },

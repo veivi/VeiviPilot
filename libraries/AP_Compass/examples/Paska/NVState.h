@@ -41,6 +41,7 @@ struct ParamRecord {
   float servoRate;
   float takeoffTrim;
   float weight, thrust;
+  bool elevon, veeTail;
   bool virtualOnly;
   };
 

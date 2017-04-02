@@ -3439,15 +3439,27 @@ void actuatorTask()
 {
   if(!vpStatus.armed)
     return;
+
+  if(vpParam.elevon) {
+    pwmOutputWrite(aileHandle, NEUTRAL
+		   + RANGE*clamp(vpParam.aileDefl*aileRateLimiter.output()
+				 - vpParam.elevDefl*elevOutput
+				 + vpParam.aileNeutral, -1, 1));
+
+    pwmOutputWrite(elevatorHandle, NEUTRAL
+		   + RANGE*clamp(vpParam.aileDefl*aileRateLimiter.output()
+				 + vpParam.elevDefl*elevOutput 
+				 + vpParam.elevNeutral, -1, 1));
+  } else {
+    pwmOutputWrite(aileHandle, NEUTRAL
+		   + RANGE*clamp(vpParam.aileDefl*aileRateLimiter.output()
+				 + vpParam.aileNeutral, -1, 1));
+
+    pwmOutputWrite(elevatorHandle, NEUTRAL
+		   + RANGE*clamp(vpParam.elevDefl*elevOutput 
+				 + vpParam.elevNeutral, -1, 1));
+  }
   
-  pwmOutputWrite(aileHandle, NEUTRAL
-		 + RANGE*clamp(vpParam.aileDefl*aileRateLimiter.output()
-			       + vpParam.aileNeutral, -1, 1));
-
-  pwmOutputWrite(elevatorHandle, NEUTRAL
-		 + RANGE*clamp(vpParam.elevDefl*elevOutput 
-			       + vpParam.elevNeutral, -1, 1));
-
   pwmOutputWrite(rudderHandle, NEUTRAL
 		 + RANGE*clamp(vpParam.rudderNeutral + 
 			       vpParam.rudderDefl*rudderOutput, -1, 1));                        
@@ -3461,7 +3473,7 @@ void actuatorTask()
 		 + RANGE*clamp(vpParam.flap2Neutral 
 			       - vpParam.flapStep*flapRateLimiter.output(), -1, 1));                              
 
-  pwmOutputWrite(gearHandle, NEUTRAL + RANGE*(gearOutput*2-1));
+  pwmOutputWrite(gearHandle, NEUTRAL - RANGE*(gearOutput*2-1)*0.6);
 
   pwmOutputWrite(brakeHandle, NEUTRAL
 		 + RANGE*clamp(vpParam.brakeDefl*brakeOutput 

@@ -34,6 +34,8 @@ typedef enum {
   c_gservo,
   c_weight,
   c_thrust,
+  c_elevon,
+  c_vtail,
 
   c_dump,
   c_max,
