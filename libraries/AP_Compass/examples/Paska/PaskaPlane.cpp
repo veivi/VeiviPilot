@@ -2432,12 +2432,12 @@ void analyzerTask()
 //
 
 const int paramSteps = 20;
-const float testRange_c = 3;
+const float testRange_c = 4;
 
 static float testGainExpoGeneric(float range, float param)
 {
   static float state;
-  return exp(log(testRange_c)*(2*quantize(param, &state, paramSteps)-1))*range;
+  return exp(log(testRange_c)*(1.3*quantize(param, &state, paramSteps)-0.3))*range;
 }
 
 float testGainExpo(float range)
@@ -2957,8 +2957,8 @@ void configurationTask()
       // Max alpha
 
       vpFeature.stabilizeBank = vpMode.bankLimiter = vpFeature.keepLevel = true;
-      shakerAlpha = pusherAlpha = stallAlpha
-	= testGain = testGainLinear(20/RADIAN, 15/RADIAN);
+      shakerAlpha = pusherAlpha = stallAlpha = testGain
+	= testGainLinear(vpParam.alphaMax+10/RADIAN, vpParam.alphaMax);
       break;         
 
     case 10:

@@ -8,7 +8,7 @@
 // Threshold speed margin (IAS)
 //
 
-const float thresholdMargin_c = 15/100.0;
+const float thresholdMargin_c = 20/100.0;
 
 #define NAME_LEN     8
 #define MAX_CH       8
