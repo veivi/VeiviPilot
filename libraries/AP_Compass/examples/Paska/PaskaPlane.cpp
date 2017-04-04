@@ -2800,10 +2800,9 @@ void configurationTask()
     // Default
 
     vpFeature.stabilizeBank
-      = !(vpStatus.stall || vpStatus.weightOnWheels || vpMode.takeOff);
+      = !(vpStatus.stall || (vpStatus.weightOnWheels && vpMode.wingLeveler) || vpMode.takeOff);
     vpFeature.keepLevel
-      = !vpStatus.stall
-      && (vpMode.wingLeveler || vpMode.takeOff || vpStatus.weightOnWheels);
+      = !vpStatus.stall && (vpMode.wingLeveler || vpMode.takeOff);
     vpFeature.pusher
       = !alphaFailed() && !vpMode.takeOff && !vpMode.slowFlight;
     vpFeature.stabilizePitch = vpFeature.alphaHold
