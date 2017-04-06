@@ -233,6 +233,12 @@ void printParams()
   consolePrint(vpParam.alphaMax*RADIAN);
   consolePrint_P(PSTR(", stall IAS = "));
   consolePrintLn(vpDerived.stallIAS);
+  consoleNote_P(PSTR("    Derived alpha(threshold, shake, push) = "));
+  consolePrint(vpDerived.thresholdAlpha*RADIAN);
+  consolePrint_P(PSTR(", "));
+  consolePrint(vpDerived.shakerAlpha*RADIAN);
+  consolePrint_P(PSTR(", "));
+  consolePrintLn(vpDerived.pusherAlpha*RADIAN);
   consoleNoteLn_P(PSTR("  Coeff of lift A + Bx"));
   consoleNote_P(PSTR("    "));
   consolePrint(vpParam.cL_A, 4);
