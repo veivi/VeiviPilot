@@ -23,7 +23,7 @@ float quantize(float value, float *state, int numSteps);
 float coeffOfLift(float aoa);
 float coeffOfLiftInverse(float col);
 float dynamicPressure(float ias);
-float dynamicPressureInverse(float pressure):
+float dynamicPressureInverse(float pressure);
 
 class RunningAvgFilter {
  public:
