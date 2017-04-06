@@ -413,7 +413,7 @@ void deriveParams()
 
   // Stall IAS
   
-  vpDerived.stallIAS = sqrt(2*G/vpParam.cL_max);
+  vpDerived.stallIAS = dynamicPressureInverse(G/vpParam.cL_max);
   
   //
   // Effective alpha limits
@@ -423,7 +423,7 @@ void deriveParams()
     coeffOfLiftInverse(vpParam.cL_max/square(1 + thresholdMargin_c));
   vpDerived.shakerAlpha =
     coeffOfLiftInverse(vpParam.cL_max/square(1 + thresholdMargin_c/2));
-  vpDerived.pusherAlpha = fmaxf(vpParam.alphaMax * 0.95,
+  vpDerived.pusherAlpha = fmaxf(vpParam.alphaMax/(1 + thresholdMargin_c/4),
     coeffOfLiftInverse(vpParam.cL_max/square(1 + thresholdMargin_c/4)));
 
   //
