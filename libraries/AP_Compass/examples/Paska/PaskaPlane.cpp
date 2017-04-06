@@ -39,8 +39,6 @@ extern "C" {
 //
 //
 
-const float airDensity_c = 1.225;
-
 const float stabilityElevExp_c = -1.5;
 const float stabilityAileExp1_c = -1.5;
 const float stabilityAileExp2_c = 0.5;
@@ -2103,10 +2101,10 @@ void sensorTaskFast()
     accY = sensorData.accy*FOOT;
     accZ = -sensorData.accz*FOOT;
 
-    dynPressure = airDensity_c * square(iAS) / 2;
+    dynPressure = dynamicPressure(iAS);
     
   } else if(dynPressure > 0)
-    iAS = sqrtf(2 * dynPressure / airDensity_c);
+    iAS = dynamicPressureInverse(dynPressure);
   else
     iAS = 0;
 
