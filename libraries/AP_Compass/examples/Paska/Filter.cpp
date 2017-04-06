@@ -3,6 +3,18 @@
 #include "NVState.h"
 #include <math.h>
 
+const float airDensity_c = 1.225;
+
+float dynamicPressure(float ias)
+{
+    return airDensity_c * square(ias) / 2;
+}
+
+float dynamicPressureInverse(float pressure)
+{
+    return sqrtf(2 * pressure / airDensity_c);
+}
+
 float coeffOfLift(float aoa)
 {
   const float i = (vpParam.cL_max - vpParam.cL_A)/vpParam.cL_B,
