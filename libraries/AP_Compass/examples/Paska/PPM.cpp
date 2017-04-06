@@ -1,6 +1,6 @@
 #include "PPM.h"
 #include "Interrupt.h"
-#include "Filter.h"
+#include "Math.h"
 #include <AP_HAL/AP_HAL.h>
 #include <avr/interrupt.h>
 
@@ -75,8 +75,8 @@ static void handlePPMInput(const uint16_t *pulse, int numCh)
 	 = pulse[i]/2;              
 
        if(calibrating) {
-	 inputRecords[i]->pulseMin = min(inputRecords[i]->pulseWidthLast, inputRecords[i]->pulseMin);
-	 inputRecords[i]->pulseMax = max(inputRecords[i]->pulseWidthLast, inputRecords[i]->pulseMax);
+	 inputRecords[i]->pulseMin = MIN(inputRecords[i]->pulseWidthLast, inputRecords[i]->pulseMin);
+	 inputRecords[i]->pulseMax = MAX(inputRecords[i]->pulseWidthLast, inputRecords[i]->pulseMax);
        }
     }
   }
@@ -114,7 +114,7 @@ extern "C" ISR(TIMER5_CAPT_vect)
 void ppmInputInit(struct RxInputRecord *inputs[], int num, const int32_t *min, const int32_t *center, const int32_t *max)
 {
   inputRecords = inputs;
-  numInputs = min(num, AVR_RC_INPUT_MAX_CHANNELS);
+  numInputs = MIN(num, AVR_RC_INPUT_MAX_CHANNELS);
   
   for(uint8_t i = 0; i < num; i++) {
     inputs[i]->pulseMin = min[i];

@@ -1,4 +1,5 @@
 #include "Controller.h"
+#include "Math.h"
 
 Controller::Controller() {
   rangeMin = -1;

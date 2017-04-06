@@ -7,6 +7,7 @@
 #include <avr/io.h>
 #include "Status.h"
 #include "Filter.h"
+#include "Math.h"
 #include "Console.h"
 #include "Controller.h"
 #include "NewI2C.h"

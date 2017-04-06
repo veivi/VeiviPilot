@@ -2,7 +2,7 @@
 #include <AP_HAL/AP_HAL.h>
 #include "Logging.h"
 #include "NVState.h"
-#include "Filter.h"
+#include "Math.h"
 
 extern "C" {
 #include "Datagram.h"
