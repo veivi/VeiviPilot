@@ -383,28 +383,6 @@ void backupParams()
   datagramTxEnd();  
 }
 
-float elevFromAlpha(float x)
-{
-  const float a = vpParam.ff_C, b = vpParam.ff_B, c = vpParam.ff_A;
-
-  if(c != 0.0 && x > vpDerived.apexAlpha)
-    return vpDerived.apexElev;
-  else
-    return clamp(a*square(x) + b*x + c, -1, 1);
-}
-
-float alphaFromElev(float y)
-{
-  const float a = vpParam.ff_C, b = vpParam.ff_B, c = vpParam.ff_A;
-  
-  if(c == 0.0)
-    return (y - c)/b;
-  else if(y > vpDerived.apexElev)
-    return vpParam.alphaMax;
-  else
-    return clamp((-b+sqrt(square(b)-4*a*(c - y)))/(2*a), -vpParam.alphaMax, vpParam.alphaMax);;
-}
-
 void deriveParams()
 {
   // Zero lift alpha
