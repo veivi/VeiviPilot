@@ -25,6 +25,8 @@ float coeffOfLift(float aoa);
 float coeffOfLiftInverse(float col);
 float dynamicPressure(float ias);
 float dynamicPressureInverse(float pressure);
+float elevPredict(float x);
+float elevPredictInverse(float x);
 
 #endif
 
