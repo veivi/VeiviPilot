@@ -1374,12 +1374,12 @@ void executeCommand(char *buf)
       consoleNoteLn_P(PSTR("Feed-forward curve"));
   
       for(float aR = -1; aR <= 1; aR += 0.07)
-	printCoeffElement(-1, 1, vpParam.alphaMax*aR*RADIAN, elevFromAlpha(vpParam.alphaMax*aR));
+	printCoeffElement(-1, 1, vpParam.alphaMax*aR*RADIAN, elevPredict(vpParam.alphaMax*aR));
 
       consoleNoteLn_P(PSTR("Inverse feed-forward curve"));
   
       for(float e = 1; e >= -1; e -= 0.07)
-	printCoeffElement(-vpParam.alphaMax/2, vpParam.alphaMax, e, alphaFromElev(e));
+	printCoeffElement(-vpParam.alphaMax/2, vpParam.alphaMax, e, elevPredictInverse(e));
 
       consoleNoteLn_P(PSTR("Coeff of lift per Wing Load"));
   
@@ -2006,7 +2006,7 @@ void receiverTask()
     vpFeature.pusher = false;
 
     trimRateLimiter.setRate(1.5/RADIAN);
-    elevTrim = elevFromAlpha(vpDerived.thresholdAlpha);
+    elevTrim = elevPredict(vpDerived.thresholdAlpha);
   } else
     trimRateLimiter.setRate(CIRCLE);
       
@@ -3323,7 +3323,7 @@ void controlTask()
   elevOutput = effStick + elevTrim;
   
   targetAlpha = trimRateLimiter.input
-    (clamp(alphaFromElev(elevOutput), -vpParam.alphaMax, effMaxAlpha),
+    (clamp(elevPredictInverse(elevOutput), -vpParam.alphaMax, effMaxAlpha),
      controlCycle);
 
   if(vpFeature.alphaHold)
@@ -3338,7 +3338,7 @@ void controlTask()
   else
     targetPitchRate = effStick*PI/2;
 
-  elevOutputFeedForward = elevFromAlpha(targetAlpha);
+  elevOutputFeedForward = elevPredict(targetAlpha);
 
   if(vpFeature.stabilizePitch) {
     elevCtrl.input(targetPitchRate - pitchRate, controlCycle);
@@ -3358,9 +3358,9 @@ void controlTask()
   } else if(vpFeature.pusher) {
     pushCtrl.input(effMaxAlpha - alpha, controlCycle);
     elevOutput = fminf(elevOutput,
-		       elevFromAlpha(effMaxAlpha) + pushCtrl.output());
+		       elevPredict(effMaxAlpha) + pushCtrl.output());
   } else
-    pushCtrl.reset(elevOutput - elevFromAlpha(effMaxAlpha),
+    pushCtrl.reset(elevOutput - elevPredict(effMaxAlpha),
 		   effMaxAlpha - alpha);
   
   elevOutput = clamp(elevOutput, -1, 1);
@@ -3378,7 +3378,7 @@ void controlTask()
   if(vpMode.rxFailSafe)
     maxBank = 10/RADIAN;
   else if(vpFeature.alphaHold)
-    maxBank /= 1 + alphaFromElev(elevTrim) / vpDerived.thresholdAlpha / 2;
+    maxBank /= 1 + elevPredictInverse(elevTrim) / vpDerived.thresholdAlpha / 2;
   
   float targetRollRate = maxRollRate*aileStick;
 
@@ -3496,7 +3496,7 @@ void trimTask()
   if(prevMode != vpFeature.alphaHold && vpStatus.positiveIAS) {
 
     const float predictError =
-      clamp(elevFromAlpha(alpha) - elevOutput, -0.2, 0.2);
+      clamp(elevPredict(alpha) - elevOutput, -0.2, 0.2);
       
     if(vpFeature.alphaHold)
       elevTrim += predictError;
@@ -3514,12 +3514,12 @@ void trimTask()
     // Takeoff mode enabled, trim is fixed
     
     if(vpMode.slowFlight)
-      elevTrim = elevFromAlpha(vpDerived.thresholdAlpha);
+      elevTrim = elevPredict(vpDerived.thresholdAlpha);
     else
       elevTrim = vpParam.takeoffTrim;
       
   } else
-    elevTrim = clamp(elevTrim, 0, elevFromAlpha(vpDerived.thresholdAlpha));
+    elevTrim = clamp(elevTrim, 0, elevPredict(vpDerived.thresholdAlpha));
 }
 
 void pingTestTask()
@@ -3857,7 +3857,7 @@ void setup()
 
   // Static controller settings
   
-  pushCtrl.limit(-0.5, fmaxf(1 - elevFromAlpha(vpDerived.pusherAlpha), 0.0));
+  pushCtrl.limit(-0.5, fmaxf(1 - elevPredict(vpDerived.pusherAlpha), 0.0));
   flapRateLimiter.setRate(0.5);
   
   // Misc filters

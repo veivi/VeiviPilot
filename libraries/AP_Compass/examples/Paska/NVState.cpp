@@ -211,9 +211,9 @@ void printParams()
   consolePrint_P(PSTR(" x + "));
   consolePrint(vpParam.ff_C, 5);
   consolePrint_P(PSTR(" x^2  (eff alpha range = "));
-  consolePrint(alphaFromElev(-1.0)*RADIAN);
+  consolePrint(elevPredictInverse(-1.0)*RADIAN);
   consolePrint_P(PSTR(" ... "));
-  consolePrint(alphaFromElev(1.0)*RADIAN);
+  consolePrint(elevPredictInverse(1.0)*RADIAN);
   consolePrintLn_P(PSTR(")"));
   consoleNoteLn_P(PSTR("  Pusher"));
   consoleNote_P(PSTR("    Ku*IAS^0.5 = "));
