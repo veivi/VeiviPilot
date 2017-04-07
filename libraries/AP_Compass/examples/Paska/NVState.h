@@ -78,7 +78,4 @@ int maxModels(void);
 void readData(uint8_t *data, int size);
 void storeData(const uint8_t *data, int size);
   
-float elevFromAlpha(float x);
-float alphaFromElev(float x);
-
 #endif
