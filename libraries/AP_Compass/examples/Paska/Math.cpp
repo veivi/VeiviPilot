@@ -7,7 +7,7 @@ float elevPredict(float x)
 {
   const float a = vpParam.ff_C, b = vpParam.ff_B, c = vpParam.ff_A;
 
-  if(c != 0.0 && x > vpDerived.apexAlpha)
+  if(a != 0.0 && x > vpDerived.apexAlpha)
     return vpDerived.apexElev;
   else
     return clamp(a*square(x) + b*x + c, -1, 1);
@@ -17,7 +17,7 @@ float elevPredictInverse(float y)
 {
   const float a = vpParam.ff_C, b = vpParam.ff_B, c = vpParam.ff_A;
   
-  if(c == 0.0)
+  if(a == 0.0)
     return (y - c)/b;
   else if(y > vpDerived.apexElev)
     return vpParam.alphaMax;
