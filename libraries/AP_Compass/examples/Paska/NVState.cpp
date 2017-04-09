@@ -400,8 +400,8 @@ void deriveParams()
   vpDerived.thresholdAlpha =
     coeffOfLiftInverse(vpParam.cL_max/square(1 + thresholdMargin_c));
   vpDerived.shakerAlpha =
-    coeffOfLiftInverse(vpParam.cL_max/square(1 + thresholdMargin_c/2));
-  vpDerived.pusherAlpha = vpParam.alphaMax/(1 + thresholdMargin_c/4);
+    coeffOfLiftInverse(vpParam.cL_max/square(1 + thresholdMargin_c/3));
+  vpDerived.pusherAlpha = vpParam.alphaMax/(1 + thresholdMargin_c/5);
 
   //
   // Feedforward apex

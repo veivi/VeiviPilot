@@ -2491,7 +2491,7 @@ void statusTask()
 
   static uint32_t lastNegativeIAS, lastStall;
 
-  if(vpStatus.pitotBlocked || iasFilter.output() < vpDerived.stallIAS/2) {
+  if(vpStatus.pitotBlocked || iasFilter.output() < vpDerived.stallIAS*2/3) {
     if(vpStatus.positiveIAS) {
       consoleNoteLn_P(PSTR("Positive airspeed LOST"));
       vpStatus.positiveIAS = false;
@@ -2515,7 +2515,7 @@ void statusTask()
   float turnRate = sqrt(square(rollRate) + square(pitchRate) + square(yawRate));
   
   bool motionDetected = vpStatus.positiveIAS || turnRate > 10.0/RADIAN
-    || fabsf(accTotal - accAvg.output()) > 0.3;
+    || fabsf(accTotal - accAvg.output()) > 0.5;
   
   static uint32_t lastMotion;
 
@@ -2692,10 +2692,12 @@ void configurationTask()
   //
   // Logging control
   //
-
+  
   if(vpStatus.fullStop && logLen > logSize*0.90)
     logDisable();
-
+  else if(vpStatus.positiveIAS && !vpMode.loggingSuppressed)
+    logEnable();
+    
   //
   // Direct mode selector input
   //
@@ -2786,9 +2788,6 @@ void configurationTask()
     
     if(!vpStatus.consoleLink)
       vpStatus.silent = true;
-    
-    if(!vpMode.loggingSuppressed)
-      logEnable();
   }
 
   //
