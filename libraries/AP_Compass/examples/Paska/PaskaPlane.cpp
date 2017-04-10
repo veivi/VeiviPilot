@@ -2499,7 +2499,7 @@ void statusTask()
     
     lastNegativeIAS = currentTime;
 
-  } else if(currentTime - lastNegativeIAS > 1e6 && !vpStatus.positiveIAS) {
+  } else if(currentTime - lastNegativeIAS > 0.5e6 && !vpStatus.positiveIAS) {
     consoleNoteLn_P(PSTR("We have POSITIVE AIRSPEED"));
     vpStatus.positiveIAS = true;
   }
@@ -2781,8 +2781,7 @@ void configurationTask()
 
   // TakeOff mode disabled when airspeed detected (or fails)
 
-  if(vpMode.takeOff
-     && (pitotFailed() || iasFilter.output() > 2*vpDerived.stallIAS/3)) {
+  if(vpMode.takeOff && (pitotFailed() || vpStatus.positiveIAS)) {
     consoleNoteLn_P(PSTR("TakeOff COMPLETED"));
     vpMode.takeOff = false;
     
