@@ -3684,12 +3684,9 @@ void simulatorLinkTask()
   if(vpStatus.simulatorLink && vpStatus.armed) {
     struct SimLinkControl control = { .aileron = aileRateLimiter.output(),
 				      .elevator = -elevOutput,
-				      .throttle = throttleStick,
+				      .throttle = throttleCtrl.output(),
 				      .rudder = rudderOutput };
 
-    if(vpMode.autoThrottle)
-      control.throttle = throttleCtrl.output();
-    
     datagramTxStart(DG_SIMLINK);
     datagramTxOut((const uint8_t*) &control, sizeof(control));
     datagramTxEnd();
