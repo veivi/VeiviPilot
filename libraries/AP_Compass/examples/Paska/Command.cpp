@@ -5,6 +5,7 @@
 const struct Command commands[] PROGMEM = {
   { "name", c_name, e_string, &vpParam.name },
   { "as5048b_ref", c_5048b_ref, e_uint16, &vpParam.alphaRef },
+  { "at_zn", c_at_zn, e_float, &vpParam.at_Ku, &vpParam.at_Tu },
   { "inner_pid_zn", c_inner_pid_zn,
     e_float, &vpParam.i_Ku_C, &vpParam.i_Tu },
   { "outer_p", c_outer_p, e_float, &vpParam.o_P },
@@ -46,6 +47,10 @@ const struct Command commands[] PROGMEM = {
   { "virtual", c_virtual, e_int8, &vpParam.virtualOnly },
   { "elevon", c_elevon, e_int8, &vpParam.elevon },
   { "vtail", c_vtail, e_int8, &vpParam.veeTail },
+  { "tservo", c_tservo, e_int8, &vpParam.servoThrottle },
+  { "margin", c_margin, e_percent, &vpParam.thresholdMargin },
+  { "slope", c_slope, e_angle, &vpParam.glideSlope },
+  { "offset", c_offset, e_angle, &vpParam.offset },
   { "stall", c_stall },
   { "peak", c_peak },
   { "max", c_max },

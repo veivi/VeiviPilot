@@ -33,12 +33,13 @@ const struct ParamRecord paramDefaults = {
   .rudderNeutral = 0, .rudderDefl = 45.0/90,
   .steerNeutral = 0, .steerDefl = 45.0/90,
   .brakeNeutral = 0, .brakeDefl = 45.0/90,
-  .servoAile = 0, .servoElev = 1, .servoRudder = 2, .servoFlap = -1, .servoFlap2 = -1, .servoGear = -1, .servoBrake = -1, .servoSteer = -1,
+  .servoAile = 0, .servoElev = 1, .servoRudder = 2, .servoFlap = -1, .servoFlap2 = -1, .servoGear = -1, .servoBrake = -1, .servoSteer = -1, .servoThrottle = -1,
   .cL_A = 0.05, .alphaMax = 12.0/RADIAN,
   .i_Ku_C = 100, .i_Tu = 0.25, .o_P = 0.3, 
   .s_Ku_C = 400, .s_Tu = 0.25, 
   .r_Mix = 0.1,
   .p_Ku_C = 100, .p_Tu = 1.0,
+  .at_Ku = 1, .at_Tu = 2.5,
   .ff_A = 0.0, .ff_B = 0.0, .ff_C = 0.0,
   .maxPitch = 45/RADIAN,
   .cL_max= 0.25,
@@ -48,6 +49,9 @@ const struct ParamRecord paramDefaults = {
   .takeoffTrim = 0.25,
   .weight = 0,
   .thrust = 0,
+  .thresholdMargin = 0.15,
+  .glideSlope = 3.0/RADIAN,
+  .offset = -0.4/RADIAN,
   .elevon = 0,
   .veeTail = 0,
   .virtualOnly = true
@@ -225,14 +229,23 @@ void printParams()
   consolePrint(vpParam.s_Ku_C, 4);
   consolePrint_P(PSTR(" Tu = "));
   consolePrintLn(vpParam.s_Tu, 4);
+  consoleNoteLn_P(PSTR("  Autothrottle"));
+  consoleNote_P(PSTR("    Ku = "));
+  consolePrint(vpParam.at_Ku, 4);
+  consolePrint_P(PSTR(" Tu = "));
+  consolePrintLn(vpParam.at_Tu, 4);
   consoleNote_P(PSTR("  Climb pitch(max) = "));
-  consolePrintLn(vpParam.maxPitch*RADIAN, 2);
+  consolePrint(vpParam.maxPitch*RADIAN, 2);
+  consolePrint_P(PSTR("  Glide slope = "));
+  consolePrintLn(vpParam.glideSlope*RADIAN, 2);
   consoleNote_P(PSTR("  Alpha range = "));
   consolePrint(vpDerived.zeroLiftAlpha*RADIAN);
   consolePrint_P(PSTR(" ... "));
   consolePrint(vpParam.alphaMax*RADIAN);
   consolePrint_P(PSTR(", stall IAS = "));
   consolePrintLn(vpDerived.stallIAS);
+  consoleNote_P(PSTR("  Threshold margin(%) = "));
+  consolePrintLn(vpParam.thresholdMargin*100);
   consoleNote_P(PSTR("    Derived alpha(threshold, shake, push) = "));
   consolePrint(vpDerived.thresholdAlpha*RADIAN);
   consolePrint_P(PSTR(", "));
@@ -398,10 +411,10 @@ void deriveParams()
   //
   
   vpDerived.thresholdAlpha =
-    coeffOfLiftInverse(vpParam.cL_max/square(1 + thresholdMargin_c));
+    coeffOfLiftInverse(vpParam.cL_max/square(1 + vpParam.thresholdMargin));
   vpDerived.shakerAlpha =
-    coeffOfLiftInverse(vpParam.cL_max/square(1 + thresholdMargin_c/3));
-  vpDerived.pusherAlpha = vpParam.alphaMax/(1 + thresholdMargin_c/5);
+    coeffOfLiftInverse(vpParam.cL_max/square(1 + vpParam.thresholdMargin/3));
+  vpDerived.pusherAlpha = vpParam.alphaMax/(1 + vpParam.thresholdMargin/5);
 
   //
   // Feedforward apex

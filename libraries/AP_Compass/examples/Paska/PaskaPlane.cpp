@@ -148,6 +148,8 @@ struct PWMOutput pwmOutput[] = {
   (vpParam.servoRudder < 0 ? NULL : &pwmOutput[vpParam.servoRudder])
 #define steerHandle \
   (vpParam.servoSteer < 0 ? NULL : &pwmOutput[vpParam.servoSteer])
+#define throttleHandle \
+  (vpParam.servoThrottle < 0 ? NULL : &pwmOutput[vpParam.servoThrottle])
 
 //
 // Periodic task stuff
@@ -183,6 +185,7 @@ struct ModeRecord {
   bool takeOff;
   bool wingLeveler;
   bool slowFlight;
+  bool autoThrottle;
   bool autoTest;
   bool loggingSuppressed;
 };
@@ -218,10 +221,10 @@ float iAS, dynPressure, alpha, aileStick, elevStick, throttleStick, rudderStick,
 bool ailePilotInput, elevPilotInput, rudderPilotInput;
 uint32_t controlCycleEnded;
 float elevTrim, elevTrimSub, targetAlpha;
-Controller elevCtrl, pushCtrl;
+Controller elevCtrl, pushCtrl, throttleCtrl;
 UnbiasedController aileCtrl;
 float autoAlphaP, rudderMix, stallAlpha, shakerAlpha, pusherAlpha;
-float accX, accY, accZ, accTotal, altitude,  bankAngle, pitchAngle, rollRate, pitchRate, targetPitchRate, yawRate, levelBank;
+float accX, accY, accZ, accTotal, altitude,  bankAngle, pitchAngle, rollRate, pitchRate, targetPitchRate, yawRate, levelBank, slope;
 uint16_t heading;
 NewI2C I2c = NewI2C();
 Damper ball(1.5*CONTROL_HZ), iasFilterSlow(3*CONTROL_HZ), iasFilter(2), accAvg(2*CONTROL_HZ), iasEntropyAcc(CONFIG_HZ), alphaEntropyAcc(CONFIG_HZ);
@@ -2115,6 +2118,7 @@ void sensorTaskFast()
     
   iasFilter.input(iAS);
   iasFilterSlow.input(iAS);
+  slope = alpha - vpParam.offset - pitchAngle;
 }
 
 void sensorTaskSlow()
@@ -2611,15 +2615,23 @@ void configurationTask()
     //
     
     consoleNoteLn_P(PSTR("Gear UP"));
+    
+    vpMode.autoThrottle = false;
     gearOutput = 1;
 
-  } else if(GEARBUTTON.depressed() && gearOutput) {
-    //
-    // CONTINUOUS: GEAR DOWN
-    //
+  } else if(GEARBUTTON.depressed()) {
+    if(gearOutput) {
+      //
+      // CONTINUOUS: GEAR DOWN
+      //
     
-    consoleNoteLn_P(PSTR("Gear DOWN"));
-    gearOutput = 0;
+      consoleNoteLn_P(PSTR("Gear DOWN"));
+      gearOutput = 0;
+      
+    } else if(vpMode.slowFlight && !vpMode.autoThrottle && throttleStick < 0.75) {
+      consoleNoteLn_P(PSTR("Autothrottle ENABLED"));
+      vpMode.autoThrottle = true;
+    }
   }
 
   //
@@ -2689,6 +2701,15 @@ void configurationTask()
     } 
   }
 
+  //
+  // Autothrottle disable
+  //
+
+  if(vpMode.autoThrottle && throttleStick > 0.75) {
+    consoleNoteLn_P(PSTR("Autothrottle DISABLED"));
+    vpMode.autoThrottle = false;
+  }
+  
   //
   // Logging control
   //
@@ -2840,6 +2861,7 @@ void configurationTask()
   aileCtrl.setZieglerNicholsPID(s_Ku*scale, vpParam.s_Tu);
   elevCtrl.setZieglerNicholsPID(i_Ku*scale, vpParam.i_Tu);
   pushCtrl.setZieglerNicholsPID(p_Ku*scale, vpParam.p_Tu);
+  throttleCtrl.setZieglerNicholsPI(vpParam.at_Ku, vpParam.at_Tu);
 
   autoAlphaP = vpParam.o_P;
   stallAlpha = vpParam.alphaMax;
@@ -3135,7 +3157,24 @@ void gaugeTask()
 	}
 
 	consolePrintLn("");
-	break;	
+	break;
+	
+     case 13:
+	consolePrint_P(PSTR(" alpha = "));
+	consolePrint(alpha*RADIAN, 1);
+	consoleTab(15);
+	consolePrint_P(PSTR(" IAS,K(m/s) = "));
+	consolePrint((int) (iAS/KNOT));
+	consolePrint_P(PSTR(" ("));
+	consolePrint(iAS, 1);
+	consolePrint_P(PSTR(")"));
+	consoleTab(40);
+	consolePrint_P(PSTR(" slope = "));
+	consolePrint(slope*RADIAN, 1);
+	consoleTab(55);
+	consolePrint_P(PSTR(" THR(auto) = "));
+	consolePrint(throttleCtrl.output(), 2);
+	break;
       }
     }
 
@@ -3429,6 +3468,15 @@ void controlTask()
     brakeOutput = 0;
   else
     brakeOutput = -elevStick;
+
+  // Autothrottle
+
+  throttleCtrl.limit(0, throttleStick);
+    
+  if(vpMode.autoThrottle)
+    throttleCtrl.input(slope - vpParam.glideSlope, controlCycle);
+  else
+    throttleCtrl.reset(throttleStick, 0);
 }
 
 void actuatorTask()
@@ -3474,6 +3522,9 @@ void actuatorTask()
   pwmOutputWrite(brakeHandle, NEUTRAL
 		 + RANGE*clamp(vpParam.brakeDefl*brakeOutput 
 			       + vpParam.brakeNeutral, -1, 1));
+  
+  pwmOutputWrite(throttleHandle,
+		 NEUTRAL + 0.66*RANGE*(2*throttleCtrl.output() - 1));
 }
 
 void trimTask()
@@ -3636,6 +3687,9 @@ void simulatorLinkTask()
 				      .throttle = throttleStick,
 				      .rudder = rudderOutput };
 
+    if(vpMode.autoThrottle)
+      control.throttle = throttleCtrl.output();
+    
     datagramTxStart(DG_SIMLINK);
     datagramTxOut((const uint8_t*) &control, sizeof(control));
     datagramTxEnd();

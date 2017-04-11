@@ -4,12 +4,6 @@
 #include <stdint.h>
 #include <AP_ProgMem/AP_ProgMem.h>
 
-//
-// Threshold speed margin (IAS)
-//
-
-const float thresholdMargin_c = 15/100.0;
-
 #define NAME_LEN     8
 #define MAX_CH       8
 
@@ -27,12 +21,13 @@ struct ParamRecord {
   float rudderNeutral, rudderDefl;
   float steerNeutral, steerDefl;
   float brakeNeutral, brakeDefl;
-  int8_t servoAile, servoElev, servoRudder, servoFlap, servoFlap2, servoGear, servoBrake, servoSteer;
+  int8_t servoAile, servoElev, servoRudder, servoFlap, servoFlap2, servoGear, servoBrake, servoSteer, servoThrottle;
   float cL_A, alphaMax;
   float i_Ku_C, i_Tu, o_P;
   float s_Ku_C, s_Tu;
   float r_Mix;
   float p_Ku_C, p_Tu;
+  float at_Ku, at_Tu;
   float ff_A, ff_B, ff_C;
   float maxPitch;
   float cL_max;
@@ -41,6 +36,9 @@ struct ParamRecord {
   float servoRate;
   float takeoffTrim;
   float weight, thrust;
+  float thresholdMargin;
+  float glideSlope;
+  float offset;
   bool elevon, veeTail;
   bool virtualOnly;
   };

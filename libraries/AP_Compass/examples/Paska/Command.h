@@ -36,6 +36,11 @@ typedef enum {
   c_thrust,
   c_elevon,
   c_vtail,
+  c_margin,
+  c_slope,
+  c_tservo,
+  c_at_zn,
+  c_offset,
 
   c_dump,
   c_max,
