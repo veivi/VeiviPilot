@@ -126,7 +126,7 @@ struct PWMOutput pwmOutput[] = {
 
 // const struct PinDescriptor piezo =  { PortE, 3 };
 
-#define PIEZO pwmOutput[4]
+// #define PIEZO pwmOutput[4]
 
 //
 // Function to servo output mapping
@@ -397,13 +397,13 @@ void delayMicros(int x)
 }
 
 void beepPrim(int hz, long millis)
-{
+{/*
   for(long i = 0; i < hz*millis/1000; i++) {
     setPinState(&PIEZO.pin, 1);
     delayMicros(1e6/hz/2);
     setPinState(&PIEZO.pin, 0);
     delayMicros(1e6/hz/2);
-  }
+    }*/
 }
 
 void beep(float dur, bool good)
@@ -3895,8 +3895,8 @@ void setup()
 
   // Piezo element
   
-  setPinState(&PIEZO.pin, 0);
-  configureOutput(&PIEZO.pin);
+  //  setPinState(&PIEZO.pin, 0);
+  //  configureOutput(&PIEZO.pin);
 
   // Alpha filter (sliding average over alphaWindow_c/seconds)
   
