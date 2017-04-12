@@ -2700,7 +2700,20 @@ void configurationTask()
       vpMode.wingLeveler = true;
     } 
   }
-
+    
+    //
+    // TRIM BUTTON
+    //
+    
+  if(TRIMBUTTON.singlePulse() && fabsf(rudderStick) > 0.9 && vpStatus.weightOnWheels && !vpStatus.positiveIAS) {
+    //
+    // SINGLE PULSE while taxiing: nose wheel trim
+    //
+      
+    vpParam.steerNeutral += sign(rudderStick)*0.005;
+    storeParams();
+  }
+    
   //
   // Autothrottle disable
   //
