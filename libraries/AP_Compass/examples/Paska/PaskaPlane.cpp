@@ -2967,7 +2967,6 @@ void configurationTask()
       // Pusher gain
 
       pushCtrl.setPID(testGain = testGainExpo(p_Ku_ref), 0, 0);
-      pusherAlpha = shakerAlpha = 0.8*vpParam.alphaMax;
       break;
 
     case 6:
@@ -2996,6 +2995,19 @@ void configurationTask()
       // Aileron to rudder mix
 
       rudderMix = testGain = testGainLinear(0.9, 0.0);
+      break;
+
+    case 11:
+      // Autothrottle gain (Z-N)
+      
+      throttleCtrl.setPID(testGain = testGainExpo(vpParam.at_Ku), 0, 0);
+      break;
+      
+    case 12:
+      // Autothrottle gain (empirical)
+      
+      throttleCtrl.setZieglerNicholsPI
+	(testGain = testGainExpo(vpParam.at_Ku), vpParam.at_Tu);
       break;
     }
   } else { 
@@ -3487,7 +3499,8 @@ void controlTask()
   throttleCtrl.limit(0, throttleStick);
     
   if(vpMode.autoThrottle)
-    throttleCtrl.input(slope - vpParam.glideSlope, controlCycle);
+    throttleCtrl.input(slope - vpParam.glideSlope*(1.5 - throttleStick) ,
+		       controlCycle);
   else
     throttleCtrl.reset(throttleStick, 0);
 }
