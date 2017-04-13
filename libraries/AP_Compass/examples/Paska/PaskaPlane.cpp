@@ -793,7 +793,7 @@ bool toc_test_load(bool reset)
 
 bool toc_test_fdr(bool reset)
 {
-  return !eepromDevice.status() && logReady(false) && logLen == 0;
+  return !eepromDevice.status() && logReady(false);
 }
 
 bool toc_test_alpha_sensor(bool reset)
@@ -2534,6 +2534,7 @@ void statusTask()
   } else if(currentTime - lastMotion > 5.0e6 && !vpStatus.fullStop) {
     consoleNoteLn_P(PSTR("We have FULLY STOPPED"));
     vpStatus.fullStop = true;
+    vpStatus.aloft = false;
   }
 
   //
@@ -2701,9 +2702,9 @@ void configurationTask()
     } 
   }
     
-    //
-    // TRIM BUTTON
-    //
+  //
+  // TRIM BUTTON
+  //
     
   if(TRIMBUTTON.singlePulse() && fabsf(rudderStick) > 0.9 && vpStatus.weightOnWheels && !vpStatus.positiveIAS) {
     //
@@ -2729,7 +2730,7 @@ void configurationTask()
   
   if(vpStatus.fullStop && logLen > logSize*0.90)
     logDisable();
-  else if(vpStatus.positiveIAS && !vpMode.loggingSuppressed)
+  else if(vpStatus.aloft && vpStatus.positiveIAS && !vpMode.loggingSuppressed)
     logEnable();
     
   //
@@ -2818,6 +2819,7 @@ void configurationTask()
   if(vpMode.takeOff && (pitotFailed() || vpStatus.positiveIAS)) {
     consoleNoteLn_P(PSTR("TakeOff COMPLETED"));
     vpMode.takeOff = false;
+    vpStatus.aloft = true;
     
     if(!vpStatus.consoleLink)
       vpStatus.silent = true;

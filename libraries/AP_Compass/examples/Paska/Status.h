@@ -15,6 +15,7 @@ struct StatusRecord {
   bool pitotBlocked;
   bool stall;
   bool weightOnWheels;
+  bool aloft;
 };
 
 extern struct StatusRecord vpStatus;
