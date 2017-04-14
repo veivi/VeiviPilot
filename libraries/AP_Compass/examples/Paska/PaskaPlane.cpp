@@ -240,6 +240,7 @@ const int maxParams = 8;
 int beepDuration, gaugeCount, gaugeVariable[maxParams];
 I2CDevice alphaDevice(&I2c, 0, "alpha"), pitotDevice(&I2c, 0, "pitot");
 I2CDevice eepromDevice(&I2c, 0, "EEPROM"), displayDevice(&I2c, 0, "display");
+bool paramsModified = false;
 
 const int maxTests_c = 1;
 float autoTestIAS[maxTests_c], autoTestK[maxTests_c], autoTestT[maxTests_c], autoTestKxIAS[maxTests_c];
@@ -1282,8 +1283,8 @@ void executeCommand(char *buf)
 	
     case c_store:
       consoleNoteLn_P(PSTR("Params & NV state stored"));
-      storeParams();
       storeNVState();
+      paramsModified = true;
       break;
 
     case c_defaults:
@@ -1308,7 +1309,7 @@ void executeCommand(char *buf)
 	for(int i = 0; i < maxModels(); i++) {
 	  if(setModel(i, false)) {
 	    updateDescription = applyParamUpdate();
-	    storeParams();
+	    paramsModified = true;
 	  }
 	}
 	
@@ -1507,6 +1508,11 @@ void executeCommand(char *buf)
 void cacheTask()
 {
   cacheFlush();
+  
+  if(paramsModified) {
+    storeParams();
+    paramsModified = false;
+  }
 }
 
 void alphaTask()
@@ -2703,19 +2709,6 @@ void configurationTask()
   }
     
   //
-  // TRIM BUTTON
-  //
-    
-  if(TRIMBUTTON.singlePulse() && fabsf(rudderStick) > 0.9 && vpStatus.weightOnWheels && !vpStatus.positiveIAS) {
-    //
-    // SINGLE PULSE while taxiing: nose wheel trim
-    //
-      
-    vpParam.steerNeutral += sign(rudderStick)*0.005;
-    storeParams();
-  }
-    
-  //
   // Autothrottle disable
   //
 
@@ -3557,11 +3550,32 @@ void actuatorTask()
 
 void trimTask()
 {
-  const float trimRateMin_c = 7.5/100, trimRateRange_c = 2*trimRateMin_c;
+  if(TRIMBUTTON.state()) {
+    //
+    // Trim rate
+    //
+    
+    const float trimRateMin_c = 7.5/100, trimRateRange_c = 2*trimRateMin_c;
+    const float elevTrimRate = trimRateMin_c + fabsf(elevStick)*trimRateRange_c,
+      steerTrimRate = trimRateMin_c + fabsf(rudderStick)*trimRateRange_c;
+    
+    //
+    // Nose wheel
+    //
+    
+    if(rudderPilotInput && vpStatus.weightOnWheels && !vpStatus.positiveIAS) {
+      vpParam.steerNeutral +=
+	sign(vpParam.steerDefl)*sign(rudderStick)*steerTrimRate/TRIM_HZ;
+      vpParam.steerNeutral = clamp(vpParam.steerNeutral, -1, 1);
+      paramsModified = true;
+    }
 
-  if(TRIMBUTTON.state() && elevPilotInput) {
-    const float trimRate = trimRateMin_c + fabsf(elevStick)*trimRateRange_c;
-    elevTrim += sign(elevStick) * trimRate / TRIM_HZ;
+    //
+    // Elevator
+    //
+  
+    if(elevPilotInput)
+      elevTrim += sign(elevStick) * elevTrimRate / TRIM_HZ;
   }
 
   //
