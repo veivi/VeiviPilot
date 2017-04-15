@@ -96,7 +96,7 @@ typedef enum {
   c_tab_elev,
   c_curve,
   c_climb,
-
+  c_gear,
   c_delete
 } token_t;
 

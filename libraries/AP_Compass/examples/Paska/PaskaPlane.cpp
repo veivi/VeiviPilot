@@ -1245,6 +1245,11 @@ void executeCommand(char *buf)
       consolePrintLn(nvState.testNum);
       break;
 
+    case c_gear:
+      if(numParams > 0)
+	gearOutput = param[0];
+      break;
+      
     case c_calibrate:
       consoleNoteLn_P(PSTR("Receiver calibration STARTED"));
       calibStart();
