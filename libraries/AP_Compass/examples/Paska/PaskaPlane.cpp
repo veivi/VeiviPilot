@@ -3589,18 +3589,18 @@ void trimTask()
   
   static bool prevMode;
 
-  if(prevMode != vpFeature.alphaHold && vpStatus.positiveIAS) {
+  if(prevMode != vpMode.slowFlight && vpStatus.positiveIAS) {
 
     const float predictError =
       clamp(elevPredict(alpha) - elevOutput, -0.2, 0.2);
       
-    if(vpFeature.alphaHold)
+    if(vpMode.slowFlight)
       elevTrim += predictError;
     else
       elevTrim -= predictError;
   }
 
-  prevMode = vpFeature.alphaHold;
+  prevMode = vpMode.slowFlight;
 
   //
   // Trim limits
