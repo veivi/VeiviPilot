@@ -1937,7 +1937,7 @@ void displayTask()
     setAttr(0);
   } else {
     char buffer[] = { 'T', 'E', 'S', 'T', ' ',
-		      '0' + nvState.testNum / 10,
+		      nvState.testNum < 10 ? ' ' : ('0' + nvState.testNum / 10),
 		      '0' + nvState.testNum % 10,
 		      '\0' };
     cursorMove(16-strlen(buffer), 0);
