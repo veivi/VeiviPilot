@@ -1935,6 +1935,14 @@ void displayTask()
     setAttr((count>>2) & 1);
     print("TAKEOFF");
     setAttr(0);
+  } else {
+    char buffer[] = { 'T', 'E', 'S', 'T', ' ',
+		      '0' + nvState.testNum / 10,
+		      '0' + nvState.testNum % 10,
+		      '\0' };
+    cursorMove(16-strlen(buffer), 0);
+    setAttr(false);
+    print(buffer);
   }
 
   // T/O/C test status
