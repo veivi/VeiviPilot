@@ -3589,7 +3589,7 @@ void trimTask()
   
   static bool prevMode;
 
-  if(prevMode != vpMode.slowFlight && vpStatus.positiveIAS) {
+  if(vpStatus.positiveIAS && prevMode != vpMode.slowFlight) {
 
     const float predictError =
       clamp(elevPredict(alpha) - elevOutput, -0.2, 0.2);
