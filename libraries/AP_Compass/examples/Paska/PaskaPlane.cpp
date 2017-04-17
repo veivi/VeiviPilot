@@ -2984,6 +2984,13 @@ void configurationTask()
       throttleCtrl.setZieglerNicholsPI
 	(testGain = testGainExpo(vpParam.at_Ku), vpParam.at_Tu);
       break;
+
+    case 13:
+      // Max roll rate
+
+      vpFeature.stabilizeBank = vpMode.bankLimiter
+	= vpFeature.keepLevel = false;
+      break;
     }
   } else { 
     // Track s_Ku until a test is activated
@@ -3408,8 +3415,6 @@ void controlTask()
   // Aileron
   //
   
-  aileOutput = aileStick;
-
   const float maxRollRate = scaleByIAS(vpParam.roll_C, stabilityAileExp2_c);
   float maxBank = 45/RADIAN;
   const float rollP = 2.5;
@@ -3420,13 +3425,15 @@ void controlTask()
     maxBank /= 1 + elevPredictInverse(elevTrim) / vpDerived.thresholdAlpha / 2;
   
   float targetRollRate = maxRollRate*aileStick;
-
+  
+  aileOutput = 0; // We accumulate individual contributions so start with 0
+  
   if(!vpFeature.stabilizeBank) {
 
     if(vpFeature.keepLevel)
       // Simple leveling for situations where we want to avoid I term wind-up
       
-      aileOutput = clamp(aileStick - bankAngle/2 - rollRate/32, -1, 1);
+      aileOutput -= bankAngle/2 + rollRate/32;
     
     aileCtrl.reset(0, 0);
     
@@ -3449,33 +3456,47 @@ void controlTask()
 	      (-maxBank - bankAngle)*rollP, (maxBank - bankAngle)*rollP);
     }
       
-    aileOutputFeedForward = ailePredict(targetRollRate);
-  
     aileCtrl.input(targetRollRate - rollRate, controlCycle);
-    aileOutput = aileOutputFeedForward + aileCtrl.output();
+
+    aileOutput += aileCtrl.output();
   }
 
-  aileRateLimiter.input(clamp(aileOutput, -1, 1), controlCycle);
-    
-  // Rudder
-    
-  steerOutput = rudderStick;
+  // Feedforward
   
+  aileOutputFeedForward = ailePredict(targetRollRate);
+  
+  aileOutput += aileOutputFeedForward;
+
+  // Rate limiter
+
+  aileRateLimiter.input(clamp(aileOutput, -1, 1), controlCycle);
+
+  //
+  // Rudder
+  //
+  
+  steerOutput = rudderStick;
   rudderOutput = rudderStick + aileRateLimiter.output()*rudderMix;
 
+  //
   // Flaps
+  //
   
   flapRateLimiter.input(flapOutput, controlCycle);
-    
+
+  //
   // Brake
+  //
     
   if(gearOutput == 1 || elevStick > 0)
     brakeOutput = 0;
   else
     brakeOutput = -elevStick;
 
+  //
   // Autothrottle
-
+  //
+  
   throttleCtrl.limit(0, throttleStick);
     
   if(vpMode.autoThrottle)
