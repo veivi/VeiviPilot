@@ -3461,13 +3461,13 @@ void controlTask()
     aileOutput += aileCtrl.output();
   }
 
-  // Feedforward
+  //   Feedforward
   
   aileOutputFeedForward = ailePredict(targetRollRate);
   
   aileOutput += aileOutputFeedForward;
 
-  // Rate limiter
+  //   Rate limiter
 
   aileRateLimiter.input(clamp(aileOutput, -1, 1), controlCycle);
 
