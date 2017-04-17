@@ -32,10 +32,6 @@ float ailePredict(float r)
   return clamp(r / scaleByIAS(vpParam.roll_C, stabilityAileExp2_c), -1, 1);
 }
 
-float ailePredictInverse(float x)
-{
-}
-
 float scaleByIAS(float k, float p)
 {
   float effIAS = fmaxf(iasFilter.output(), vpDerived.stallIAS);
