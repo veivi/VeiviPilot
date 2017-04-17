@@ -5,6 +5,8 @@
 #ifndef STATUS_H
 #define STATUS_H
 
+#include "NewI2C.h"
+
 struct StatusRecord {
   bool armed;
   bool consoleLink;
@@ -19,5 +21,13 @@ struct StatusRecord {
 };
 
 extern struct StatusRecord vpStatus;
+
+//
+//
+//
+extern I2CDevice alphaDevice, pitotDevice;
+
+bool pitotFailed();
+bool alphaFailed();
 
 #endif

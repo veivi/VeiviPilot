@@ -17,6 +17,7 @@ struct LogChannel logChannels[] = {
    [lc_thrstick] = { lc_thrstick, "THRO", 0, 1 },
    [lc_rudstick] = { lc_rudstick, "RSTK", -1, 1 },
    [lc_aileron] = { lc_aileron, "AILE", -1, 1 },
+   [lc_aileron_ff] = { lc_aileron_ff, "AIFF", -1, 1 },
    [lc_elevator] = { lc_elevator, "ELEV", -1, 1 },
    [lc_elevator_ff] = { lc_elevator_ff, "ELFF", -1, 1 },
    [lc_rudder] = { lc_rudder, "RUDR", -1, 1 },

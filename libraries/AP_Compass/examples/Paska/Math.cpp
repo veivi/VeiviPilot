@@ -1,7 +1,9 @@
 #include "Math.h"
 #include "NVState.h"
 #include "Console.h"
+#include "Status.h"
 #include <math.h>
+
 
 float elevPredict(float x)
 {
@@ -24,6 +26,27 @@ float elevPredictInverse(float y)
   else
     return clamp((-b+sqrt(square(b)-4*a*(c - y)))/(2*a), -vpParam.alphaMax, vpParam.alphaMax);;
 }
+
+float ailePredict(float r)
+{
+  return clamp(r / scaleByIAS(vpParam.roll_C, stabilityAileExp2_c), -1, 1);
+}
+
+float ailePredictInverse(float x)
+{
+}
+
+float scaleByIAS(float k, float p)
+{
+  float effIAS = fmaxf(iasFilter.output(), vpDerived.stallIAS);
+  
+  if(pitotFailed() || vpStatus.pitotBlocked)
+    // Failsafe value chosen to be ... on the safe side
+    effIAS = p > 0 ? vpDerived.stallIAS : vpDerived.stallIAS * 3/2;
+  
+  return k * powf(effIAS, p);
+}
+
 
 float dynamicPressure(float ias)
 {

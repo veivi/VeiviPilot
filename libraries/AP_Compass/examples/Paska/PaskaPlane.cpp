@@ -36,15 +36,6 @@ extern "C" {
 
 // #define USE_COMPASS  1
 
-//
-//
-//
-
-const float stabilityElevExp_c = -1.5;
-const float stabilityAileExp1_c = -1.5;
-const float stabilityAileExp2_c = 0.5;
-const float stabilityPusherExp_c = -0.5;
-
 const float alphaWindow_c = 1.0/30;
 
 const AP_HAL::HAL& hal = AP_HAL_BOARD_DRIVER;
@@ -233,7 +224,7 @@ RunningAvgFilter alphaFilter;
 uint32_t simTimeStamp;
 RateLimiter aileRateLimiter, flapRateLimiter, trimRateLimiter;
 uint8_t flapOutput, gearOutput;
-float elevOutput, elevOutputFeedForward, aileOutput = 0, brakeOutput = 0, rudderOutput = 0, steerOutput = 0;
+float elevOutput, elevOutputFeedForward, aileOutput = 0, aileOutputFeedForward, brakeOutput = 0, rudderOutput = 0, steerOutput = 0;
 uint16_t iasEntropy, alphaEntropy, sensorHash = 0xFFFF;
 bool beepGood;
 const int maxParams = 8;
@@ -427,20 +418,6 @@ void badBeep(float dur)
 }
 
 //
-//
-//
-
-bool pitotFailed()
-{
-  return !vpStatus.simulatorLink && pitotDevice.status();
-}
-
-bool alphaFailed()
-{
-  return !vpStatus.simulatorLink && alphaDevice.status();
-}
-
-//
 // Log interface
 //
 
@@ -495,6 +472,7 @@ void logInput(void)
 void logActuator(void)
 {
   logGeneric(lc_aileron, aileRateLimiter.output());
+  logGeneric(lc_aileron_ff, aileOutputFeedForward);
   logGeneric(lc_elevator, elevOutput);
   logGeneric(lc_elevator_ff, elevOutputFeedForward);
   logGeneric(lc_rudder, rudderOutput);
@@ -2484,17 +2462,6 @@ float s_Ku_ref, i_Ku_ref, p_Ku_ref;
 const float minAlpha = -2.0/RADIAN;
 const float origoAlpha = -5.0/RADIAN;
 
-static float scaleByIAS(float k, float p)
-{
-  float effIAS = fmaxf(iasFilter.output(), vpDerived.stallIAS);
-  
-  if(pitotFailed() || vpStatus.pitotBlocked)
-    // Failsafe value chosen to be ... on the safe side
-    effIAS = p > 0 ? vpDerived.stallIAS : vpDerived.stallIAS * 3/2;
-  
-  return k * powf(effIAS, p);
-}
-
 static void failsafeDisable()
 {
   if(vpMode.alphaFailSafe || vpMode.sensorFailSafe) {
@@ -3128,9 +3095,11 @@ void gaugeTask()
 	break;
 
       case 8:
-	consolePrint_P(PSTR(" aileOut = "));
+	consolePrint_P(PSTR(" aileOut(c) = "));
 	consolePrint(aileOutput);
-	consolePrint_P(PSTR(" elevOut = "));
+	consolePrint_P(PSTR(" ("));
+	consolePrint(aileCtrl.output());
+	consolePrint_P(PSTR(") elevOut = "));
 	consolePrint(elevOutput);
 	consolePrint_P(PSTR(" rudderOut = "));
 	consolePrint(rudderOutput);
@@ -3441,9 +3410,9 @@ void controlTask()
   
   aileOutput = aileStick;
 
-  const float rollP = 2.5;
   const float maxRollRate = scaleByIAS(vpParam.roll_C, stabilityAileExp2_c);
   float maxBank = 45/RADIAN;
+  const float rollP = 2.5;
 
   if(vpMode.rxFailSafe)
     maxBank = 10/RADIAN;
@@ -3457,9 +3426,9 @@ void controlTask()
     if(vpFeature.keepLevel)
       // Simple leveling for situations where we want to avoid I term wind-up
       
-      aileOutput = clamp(aileStick - bankAngle - rollRate/32, -1, 1);
+      aileOutput = clamp(aileStick - bankAngle/2 - rollRate/32, -1, 1);
     
-    aileCtrl.reset(aileOutput, 0);
+    aileCtrl.reset(0, 0);
     
   } else {
     
@@ -3473,14 +3442,17 @@ void controlTask()
     else if(vpMode.bankLimiter) {
       // Bank limiter + weak leveling
 
-      targetRollRate -= rollP*clamp(bankAngle, -0.5/RADIAN, 0.5/RADIAN);
+      targetRollRate -= rollP*clamp(bankAngle, -1/RADIAN, 1/RADIAN);
       
       targetRollRate =
-	clamp(targetRollRate, (-maxBank - bankAngle)*rollP, (maxBank - bankAngle)*rollP);
+	clamp(targetRollRate,
+	      (-maxBank - bankAngle)*rollP, (maxBank - bankAngle)*rollP);
     }
       
+    aileOutputFeedForward = ailePredict(targetRollRate);
+  
     aileCtrl.input(targetRollRate - rollRate, controlCycle);
-    aileOutput = aileCtrl.output();
+    aileOutput = aileOutputFeedForward + aileCtrl.output();
   }
 
   aileRateLimiter.input(clamp(aileOutput, -1, 1), controlCycle);
@@ -3960,7 +3932,8 @@ void setup()
   aileronDelay.setDelay(1);
 
   // Static controller settings
-  
+
+  aileCtrl.limit(-0.5, 0.5);
   pushCtrl.limit(-0.5, fmaxf(1 - elevPredict(vpDerived.pusherAlpha), 0.0));
   flapRateLimiter.setRate(0.5);
   
