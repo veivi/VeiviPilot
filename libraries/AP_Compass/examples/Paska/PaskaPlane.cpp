@@ -3415,7 +3415,6 @@ void controlTask()
   // Aileron
   //
   
-  const float maxRollRate = scaleByIAS(vpParam.roll_C, stabilityAileExp2_c);
   float maxBank = 45/RADIAN;
   const float rollP = 2.5;
 
@@ -3424,7 +3423,7 @@ void controlTask()
   else if(vpFeature.alphaHold)
     maxBank /= 1 + elevPredictInverse(elevTrim) / vpDerived.thresholdAlpha / 2;
   
-  float targetRollRate = maxRollRate*aileStick;
+  float targetRollRate = ailePredictInverse(aileStick);
   
   aileOutput = 0; // We accumulate individual contributions so start with 0
   
@@ -3441,14 +3440,10 @@ void controlTask()
     
     if(vpFeature.keepLevel)
       // Strong leveler enabled
-        
-      targetRollRate =
-	clamp((levelBank + aileStick*maxBank - bankAngle)*rollP,
-	      -maxRollRate, maxRollRate);
+      targetRollRate = rollP * (levelBank + aileStick*maxBank - bankAngle);
 
     else if(vpMode.bankLimiter) {
       // Bank limiter + weak leveling
-
       targetRollRate -= rollP*clamp(bankAngle, -1/RADIAN, 1/RADIAN);
       
       targetRollRate =
@@ -3463,9 +3458,7 @@ void controlTask()
 
   //   Feedforward
   
-  aileOutputFeedForward = ailePredict(targetRollRate);
-  
-  aileOutput += aileOutputFeedForward;
+  aileOutput += (aileOutputFeedForward = ailePredict(targetRollRate));
 
   //   Rate limiter
 
