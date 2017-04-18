@@ -27,12 +27,17 @@ float elevPredictInverse(float y)
     return clamp((-b+sqrt(square(b)-4*a*(c - y)))/(2*a), -vpParam.alphaMax, vpParam.alphaMax);;
 }
 
-float ailePredict(float r)
+float ailePredict(float rate)
 {
-  return clamp(r / scaleByIAS(vpParam.roll_C, stabilityAileExp2_c), -1, 1);
+  return clamp(rate / scaleByIAS(vpParam.roll_C, stabilityAileExp2_c), -1, 1);
 }
 
-float scaleByIAS(float k, float p)
+float ailePredictInverse(float pos)
+{
+  return pos * scaleByIAS(vpParam.roll_C, stabilityAileExp2_c);
+}
+
+float scaleByIAS(float k, float expo)
 {
   float effIAS = fmaxf(iasFilter.output(), vpDerived.stallIAS);
   
@@ -40,9 +45,8 @@ float scaleByIAS(float k, float p)
     // Failsafe value chosen to be ... on the safe side
     effIAS = p > 0 ? vpDerived.stallIAS : vpDerived.stallIAS * 3/2;
   
-  return k * powf(effIAS, p);
+  return k * powf(effIAS, expo);
 }
-
 
 float dynamicPressure(float ias)
 {
