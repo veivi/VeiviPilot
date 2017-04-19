@@ -3425,19 +3425,19 @@ void controlTask()
   
   float targetRollRate = ailePredictInverse(aileStick);
   
-  aileOutput = 0; // We accumulate individual contributions so start with 0
+  // We accumulate individual contributions so start with 0
+
+  aileOutput = 0; 
   
   if(!vpFeature.stabilizeBank) {
-
+    aileCtrl.reset(0, 0);
+    
     if(vpFeature.keepLevel)
       // Simple leveling for situations where we want to avoid I term wind-up
       
       aileOutput -= bankAngle/2 + rollRate/32;
     
-    aileCtrl.reset(0, 0);
-    
-  } else {
-    
+  } else {    
     if(vpFeature.keepLevel)
       // Strong leveler enabled
       targetRollRate = rollP * (levelBank + aileStick*maxBank - bankAngle);
@@ -3452,13 +3452,13 @@ void controlTask()
     }
       
     aileCtrl.input(targetRollRate - rollRate, controlCycle);
-
-    aileOutput += aileCtrl.output();
   }
 
-  //   Feedforward
+  //   Apply controller output + feedforward
   
-  aileOutput += (aileOutputFeedForward = ailePredict(targetRollRate));
+  aileOutputFeedForward = ailePredict(targetRollRate);
+  
+  aileOutput += aileOutputFeedForward + aileCtrl.output();
 
   //   Rate limiter
 
