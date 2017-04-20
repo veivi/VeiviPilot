@@ -2701,7 +2701,7 @@ void configurationTask()
   // Logging control
   //
   
-  if(vpStatus.fullStop && logLen > logSize*0.90)
+  if(vpStatus.fullStop)
     logDisable();
   else if(vpStatus.aloft && vpStatus.positiveIAS && !vpMode.loggingSuppressed)
     logEnable();
@@ -2713,7 +2713,7 @@ void configurationTask()
   if(modeSelectorValue == -1) {
     if(!vpMode.slowFlight)
       consoleNoteLn_P(PSTR("Slow flight mode ENABLED"));
-    vpMode.slowFlight = vpMode.bankLimiter = true;
+    vpMode.slowFlight = true;
   } else if(vpMode.slowFlight) {
     consoleNoteLn_P(PSTR("Slow flight mode DISABLED"));
     vpMode.slowFlight = false;
